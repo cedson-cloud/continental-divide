@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
+from .routes import router
 
 
 def create_app() -> FastAPI:
@@ -23,7 +24,7 @@ def create_app() -> FastAPI:
     def health() -> dict:
         return {"status": "ok", "model": settings.anthropic_model}
 
-    # Routes for intake, decision, and queries are added in step 4.
+    app.include_router(router)
     return app
 
 

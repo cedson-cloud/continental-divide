@@ -7,11 +7,24 @@ in step 4; the storage helpers they need are already in place.
 
 from __future__ import annotations
 
+from typing import Optional
+
 from pydantic import ValidationError
 
 from .models import Decision, EventDefinition
+from .publisher import Publisher, PublishResult
 from .rules import evaluate
 from .storage import Storage
+
+DECIDABLE_STATUSES = {Decision.pending_approval.value, Decision.flagged_duplicate.value}
+
+
+class RequestNotFound(Exception):
+    pass
+
+
+class InvalidTransition(Exception):
+    pass
 
 
 def ingest(raw_intake_text: str, candidate_definition: dict, storage: Storage) -> int:
@@ -79,3 +92,49 @@ def ingest(raw_intake_text: str, candidate_definition: dict, storage: Storage) -
         },
     )
     return request_id
+
+
+def decide(
+    request_id: int,
+    decision: str,
+    storage: Storage,
+    publisher: Publisher,
+    note: Optional[str] = None,
+) -> Optional[PublishResult]:
+    """Apply a human approve/reject decision and write the audit trail.
+
+    Only a request currently pending approval or flagged as a duplicate can be decided.
+    Approve publishes and moves to ``published``; reject moves to ``rejected``. Raises
+    :class:`RequestNotFound` or :class:`InvalidTransition` for the caller to map to HTTP.
+    """
+    request = storage.get_request(request_id)
+    if request is None:
+        raise RequestNotFound(f"request {request_id} not found")
+    if request["status"] not in DECIDABLE_STATUSES:
+        raise InvalidTransition(
+            f"request {request_id} is '{request['status']}' and cannot be decided"
+        )
+
+    storage.add_audit_entry(
+        request_id, "decision_received", {"decision": decision, "note": note}
+    )
+
+    if decision == "approve":
+        event = EventDefinition.model_validate(request["parsed_definition"])
+        result = publisher.publish(event)
+        storage.set_publish_result(request_id, result.model_dump())
+        storage.update_request_status(request_id, "published")
+        storage.add_audit_entry(
+            request_id,
+            "published",
+            {
+                "publisher": result.publisher,
+                "confluence_doc_id": result.confluence_doc["id"],
+                "jira_ticket_key": result.jira_ticket["key"],
+            },
+        )
+        return result
+
+    storage.update_request_status(request_id, Decision.rejected.value)
+    storage.add_audit_entry(request_id, "rejection_recorded", {"note": note})
+    return None

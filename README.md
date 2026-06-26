@@ -54,6 +54,15 @@ npm run dev
 
 Then open http://localhost:3000.
 
+## Build status
+
+- [x] 1. Project scaffold: FastAPI + Next.js, env, .gitignore, README
+- [x] 2. Schema, deterministic rules, and the sample tracking plan
+- [x] 3. SQLite storage with an append-only audit log
+- [x] 4. FastAPI routes + mock publisher (intake through publish over HTTP)
+- [ ] 5. Next.js UI for the single flow
+- [ ] 6. Run and deploy notes
+
 ## Clean room
 
 This is a clean-room rebuild. It carries no client code, data, names, or rules from any

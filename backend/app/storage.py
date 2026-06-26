@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS event_request (
     parsed_definition TEXT,
     category TEXT,
     status TEXT NOT NULL,
+    published_artifact TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -73,6 +74,10 @@ class Storage(ABC):
 
     @abstractmethod
     def update_request_status(self, request_id: int, status: str) -> None:
+        ...
+
+    @abstractmethod
+    def set_publish_result(self, request_id: int, artifact: dict) -> None:
         ...
 
     @abstractmethod
@@ -145,6 +150,14 @@ class SqliteStorage(Storage):
                 (status, request_id),
             )
 
+    def set_publish_result(self, request_id: int, artifact: dict) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE event_request "
+                "SET published_artifact = ?, updated_at = datetime('now') WHERE id = ?",
+                (json.dumps(artifact), request_id),
+            )
+
     def add_audit_entry(
         self, request_id: int, step: str, detail: Optional[dict] = None
     ) -> int:
@@ -168,6 +181,8 @@ class SqliteStorage(Storage):
         data: dict[str, Any] = dict(row)
         if data.get("parsed_definition"):
             data["parsed_definition"] = json.loads(data["parsed_definition"])
+        if data.get("published_artifact"):
+            data["published_artifact"] = json.loads(data["published_artifact"])
         return data
 
     @staticmethod
