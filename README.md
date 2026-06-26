@@ -1,87 +1,67 @@
 # Continental Divide
 
-A small demo that walks one analytics-event request through **intake → schema + rules
-validation → human approval → publish**, with a persistent, timestamped audit log shown
-in the UI.
+A request-and-governance tool for analytics event tracking. Anyone can ask for a new
+event to be tracked. Nothing gets published until it passes the rules and a human signs off.
 
-This is a clean-room rebuild from a public pattern. It contains no proprietary code, data,
-names, or rules — only generic dummy data and a sample tracking plan safe to publish.
+I built the first version of this pattern for a client and wanted a clean, open version
+I could share. Continental Divide takes a plain-language request for a new tracking event,
+turns it into a typed and validated definition, routes it for approval, and on approval
+publishes the documentation and opens a ticket. Every step is recorded.
+
+The name is the idea. A continental divide is the line that decides which way the water
+flows. This tool is the line a tracking request has to cross, and it decides what gets through.
 
 ## How it works
 
-1. **Intake** — submit a raw, natural-language request for a new event.
-2. **Structure** — a model returns a structured event definition as JSON, parsed against a
-   Pydantic v2 model. Parse failure → request is `rejected` with the validation errors recorded.
-3. **Rules** — deterministic checks: snake_case names, a PII property blocklist, category must
-   exist in the sample tracking plan, and duplicate-name detection (routes to approval with a flag).
-4. **Validate-by-example** — a sample payload is generated from the definition and re-validated
-   against the Pydantic model; the UI shows pass/fail. No code execution, no sandbox.
-5. **Approval** — a human approves or rejects from a queue.
-6. **Publish** — on approve, a `Publisher` (mock by default) renders a Confluence-style doc and
-   a Jira-style ticket in-app. Every transition writes to the audit log.
+1. **Intake:** someone submits a new event they want to track, in plain language.
+2. **Validate:** the request becomes a structured event definition. It conforms to the
+   schema or fails loudly, with the reasons shown. Deterministic rules then check naming,
+   block PII, and catch duplicates against the tracking plan.
+3. **Approve:** a clean request routes to a human for one-click approval or rejection.
+4. **Publish:** on approval, the tool publishes the event documentation and opens a
+   tracking ticket. Out of the box this uses a mock publisher, so the whole flow runs
+   with no external accounts.
+
+A timestamped audit log records every step, so you can see what was requested, what was
+decided, and why.
 
 ## Stack
 
-- **Backend:** Python + FastAPI, Pydantic v2, SQLite (single file), Anthropic Python SDK
-  (server-side only).
-- **Frontend:** Next.js (App Router) + React + TypeScript, one flow.
-- **Storage:** behind a thin interface; SQLite by default. Tables: `event_request`, `audit_log`.
-- **Publishing:** behind a `Publisher` interface; `MockPublisher` default. A real Atlassian
-  adapter is left as a documented stub (no OAuth).
+- Backend: Python + FastAPI, Pydantic v2 for typed, validated outputs
+- Frontend: Next.js + React (TypeScript)
+- Reasoning: Anthropic API, server-side only
+- Storage: SQLite for the audit log and request history
+- Publishing: pluggable. A mock publisher ships by default, with a documented stub for a
+  real Atlassian (Confluence and Jira) adapter
 
-## Layout
+## Running it locally
 
-```
-backend/    FastAPI app, Pydantic models, rules, storage, publisher, sample data
-frontend/   Next.js App Router UI
-```
-
-## Setup
-
-> Detailed run/deploy notes are filled in at step 6. The outline:
-
-### Backend
+You'll need Python and Node installed.
 
 ```bash
+# Backend
 cd backend
-python3 -m venv .venv && source .venv/bin/activate
+python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp ../.env.example ../.env      # then edit .env
-uvicorn app.main:app --reload   # http://localhost:8000
-```
+cp ../.env.example ../.env     # then add your ANTHROPIC_API_KEY
+uvicorn app.main:app --reload
 
-### Frontend
-
-```bash
+# Frontend (second terminal)
 cd frontend
 npm install
-cp .env.local.example .env.local
-npm run dev                     # http://localhost:3000
+npm run dev
 ```
 
-## Configuration
+Then open http://localhost:3000.
 
-Copy `.env.example` to `.env` and set values. Key variables:
+## Clean room
 
-| Variable | Purpose | Default |
-| --- | --- | --- |
-| `ANTHROPIC_API_KEY` | API key, **server-side only** | _(required)_ |
-| `ANTHROPIC_MODEL` | Reasoning model id | `claude-sonnet-4-6` |
-| `DATABASE_PATH` | SQLite file path | `backend/data/tracking_guardian.db` |
-| `MAX_INTAKE_CHARS` | Intake length cap | `2000` |
-| `RATE_LIMIT_MAX` / `RATE_LIMIT_WINDOW_SECONDS` | Rate limit on `POST /requests` | `10` / `60` |
+This is a clean-room rebuild. It carries no client code, data, names, or rules from any
+prior engagement. The sample tracking plan and example requests are generic and safe to
+publish. Secrets live in environment variables only and are never committed.
 
-## Security notes
+## About
 
-- The Anthropic key is read server-side only and is never sent to the browser bundle.
-- `.gitignore` excludes `.env` and the SQLite data directory. Never commit `.env`.
-- `POST /requests` hits a paid API: intake length is capped and the endpoint is rate-limited.
-
-## Build status
-
-- [x] 1. Repo scaffold (FastAPI + Next) + env + .gitignore + .env.example + README skeleton
-- [ ] 2. Pydantic models + sample tracking plan + deterministic rules
-- [ ] 3. Storage interface (SQLite) + tables + audit-logging helper
-- [ ] 4. FastAPI routes (intake/validate, decision/publish, queries) + MockPublisher
-- [ ] 5. Single-flow Next.js UI
-- [ ] 6. Run/deploy notes
+Continental Divide is a Bristlecone Echo asset. Bristlecone Echo helps organizations build
+better data foundations: cleaner tracking, clearer governance, and customer and operational
+insight they can act on. Roots before branches.
