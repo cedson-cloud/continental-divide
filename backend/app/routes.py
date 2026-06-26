@@ -17,6 +17,7 @@ from .pipeline import (
     InvalidTransition,
     RequestNotFound,
     decide,
+    ingest_raw_definition,
     interpret_intake,
 )
 from .publisher import get_publisher
@@ -31,6 +32,11 @@ _limiter = RateLimiter(_settings.rate_limit_max, _settings.rate_limit_window_sec
 
 class IntakeBody(BaseModel):
     raw_intake_text: str
+
+
+class RawIntakeBody(BaseModel):
+    definition: dict
+    raw_intake_text: Optional[str] = None
 
 
 class DecisionBody(BaseModel):
@@ -67,6 +73,23 @@ def create_request(body: IntakeBody, request: Request) -> IntakeResponse:
             detail=f"could not draft a definition (request {exc.request_id}): {exc}",
         )
 
+    return _intake_response(storage, request_id)
+
+
+@router.post("/requests/raw", response_model=IntakeResponse)
+def create_request_raw(body: RawIntakeBody) -> IntakeResponse:
+    raw_intake_text = (
+        body.raw_intake_text
+        or body.definition.get("description")
+        or body.definition.get("name")
+        or "raw definition"
+    )
+    storage = get_storage()
+    request_id = ingest_raw_definition(raw_intake_text, body.definition, storage)
+    return _intake_response(storage, request_id)
+
+
+def _intake_response(storage, request_id: int) -> IntakeResponse:
     saved = storage.get_request(request_id)
     log = storage.get_audit_log(request_id)
     rules_entry = next((e for e in log if e["step"] == "rules_evaluated"), None)

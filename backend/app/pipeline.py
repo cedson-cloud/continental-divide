@@ -153,6 +153,29 @@ def interpret_intake(
     return request_id
 
 
+def ingest_raw_definition(
+    raw_intake_text: str, candidate_definition: dict, storage: Storage
+) -> int:
+    """Route a pre-built definition that skips the model, for demos where a faithful
+    model would not author the violation under test (a malformed name, a duplicate).
+
+    The trail records ``definition_provided`` in place of ``model_interpreted``; the rest
+    of the pipeline is identical to :func:`interpret_intake`.
+    """
+    request_id = storage.create_request(raw_intake_text=raw_intake_text)
+    storage.add_audit_entry(
+        request_id, "intake_received", {"raw_intake_text": raw_intake_text}
+    )
+    storage.add_audit_entry(
+        request_id, "definition_provided", {"definition": candidate_definition}
+    )
+    parsed, parse_errors = _parse(candidate_definition)
+    if parsed is not None:
+        storage.set_parsed_definition(request_id, parsed.model_dump(), parsed.category)
+    _route(request_id, parsed, parse_errors, storage)
+    return request_id
+
+
 def ingest(raw_intake_text: str, candidate_definition: dict, storage: Storage) -> int:
     """Persist and route a request from a structured definition supplied directly.
 
