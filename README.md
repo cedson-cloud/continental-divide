@@ -60,8 +60,19 @@ Then open http://localhost:3000.
 - [x] 2. Schema, deterministic rules, and the sample tracking plan
 - [x] 3. SQLite storage with an append-only audit log
 - [x] 4. FastAPI routes + mock publisher (intake through publish over HTTP)
+- [x] 4.5. Natural-language intake (server-side model drafts the definition)
 - [ ] 5. Next.js UI for the single flow
 - [ ] 6. Run and deploy notes
+
+## Cost and safety
+
+Intake turns plain language into a structured definition with a server-side Anthropic
+call. That makes `POST /requests` a **cost surface**: a deployed, public intake endpoint
+spends API tokens on every request. The endpoint is rate-limited and intake length is
+capped (`RATE_LIMIT_MAX` / `RATE_LIMIT_WINDOW_SECONDS` / `MAX_INTAKE_CHARS`), but before
+exposing it publicly add authentication and tighter quotas. The `ANTHROPIC_API_KEY` is
+read server-side only and never reaches the browser or any response. The model only
+drafts — the schema, the deterministic rules, and a human approver still govern.
 
 ## Clean room
 

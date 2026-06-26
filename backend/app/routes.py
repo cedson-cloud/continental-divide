@@ -13,10 +13,11 @@ from pydantic import BaseModel, Field
 
 from .config import get_settings
 from .pipeline import (
+    IntakeModelError,
     InvalidTransition,
     RequestNotFound,
     decide,
-    ingest,
+    interpret_intake,
 )
 from .publisher import get_publisher
 from .rate_limit import RateLimiter
@@ -30,7 +31,6 @@ _limiter = RateLimiter(_settings.rate_limit_max, _settings.rate_limit_window_sec
 
 class IntakeBody(BaseModel):
     raw_intake_text: str
-    definition: dict
 
 
 class DecisionBody(BaseModel):
@@ -59,7 +59,13 @@ def create_request(body: IntakeBody, request: Request) -> IntakeResponse:
         )
 
     storage = get_storage()
-    request_id = ingest(body.raw_intake_text, body.definition, storage)
+    try:
+        request_id = interpret_intake(body.raw_intake_text, storage)
+    except IntakeModelError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"could not draft a definition (request {exc.request_id}): {exc}",
+        )
 
     saved = storage.get_request(request_id)
     log = storage.get_audit_log(request_id)

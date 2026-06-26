@@ -77,6 +77,12 @@ class Storage(ABC):
         ...
 
     @abstractmethod
+    def set_parsed_definition(
+        self, request_id: int, parsed_definition: dict, category: str
+    ) -> None:
+        ...
+
+    @abstractmethod
     def set_publish_result(self, request_id: int, artifact: dict) -> None:
         ...
 
@@ -148,6 +154,17 @@ class SqliteStorage(Storage):
                 "UPDATE event_request SET status = ?, updated_at = datetime('now') "
                 "WHERE id = ?",
                 (status, request_id),
+            )
+
+    def set_parsed_definition(
+        self, request_id: int, parsed_definition: dict, category: str
+    ) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE event_request "
+                "SET parsed_definition = ?, category = ?, updated_at = datetime('now') "
+                "WHERE id = ?",
+                (json.dumps(parsed_definition), category, request_id),
             )
 
     def set_publish_result(self, request_id: int, artifact: dict) -> None:
