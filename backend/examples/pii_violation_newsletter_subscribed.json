@@ -1,0 +1,8 @@
+{
+  "name": "Newsletter Subscribed",
+  "category": "Core Ordering",
+  "description": "PII violation: collects an email address.",
+  "properties": [
+    { "name": "email", "type": "string" }
+  ]
+}

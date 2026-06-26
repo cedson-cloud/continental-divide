@@ -1,0 +1,379 @@
+{
+  "spec": "Segment Ecommerce V2 (public spec)",
+  "naming_convention": "Object Action, Title Case (Segment Track spec)",
+  "notes": "Sample, generic tracking plan. Property names are snake_case. Collection events reference the shared 'product_item' shape via array properties to reduce repetition; single-product events carry the product fields inline as Segment flattens them onto the event.",
+  "product_item": {
+    "description": "Shared product shape reused by product and collection events.",
+    "properties": [
+      { "name": "product_id", "type": "string" },
+      { "name": "sku", "type": "string" },
+      { "name": "category", "type": "string" },
+      { "name": "name", "type": "string" },
+      { "name": "brand", "type": "string" },
+      { "name": "variant", "type": "string" },
+      { "name": "price", "type": "number" },
+      { "name": "quantity", "type": "integer" },
+      { "name": "coupon", "type": "string" },
+      { "name": "position", "type": "integer" },
+      { "name": "url", "type": "string" },
+      { "name": "image_url", "type": "string" }
+    ]
+  },
+  "categories": {
+    "Browsing": [
+      {
+        "name": "Products Searched",
+        "properties": [
+          { "name": "query", "type": "string" }
+        ]
+      },
+      {
+        "name": "Product List Viewed",
+        "properties": [
+          { "name": "list_id", "type": "string" },
+          { "name": "category", "type": "string" },
+          { "name": "products", "type": "array", "items": "product_item" }
+        ]
+      },
+      {
+        "name": "Product List Filtered",
+        "properties": [
+          { "name": "list_id", "type": "string" },
+          { "name": "category", "type": "string" },
+          { "name": "filters", "type": "array" },
+          { "name": "sorts", "type": "array" },
+          { "name": "products", "type": "array", "items": "product_item" }
+        ]
+      }
+    ],
+    "Promotions": [
+      {
+        "name": "Promotion Viewed",
+        "properties": [
+          { "name": "promotion_id", "type": "string" },
+          { "name": "creative", "type": "string" },
+          { "name": "name", "type": "string" },
+          { "name": "position", "type": "string" }
+        ]
+      },
+      {
+        "name": "Promotion Clicked",
+        "properties": [
+          { "name": "promotion_id", "type": "string" },
+          { "name": "creative", "type": "string" },
+          { "name": "name", "type": "string" },
+          { "name": "position", "type": "string" }
+        ]
+      }
+    ],
+    "Core Ordering": [
+      {
+        "name": "Product Clicked",
+        "properties": [
+          { "name": "product_id", "type": "string" },
+          { "name": "sku", "type": "string" },
+          { "name": "category", "type": "string" },
+          { "name": "name", "type": "string" },
+          { "name": "brand", "type": "string" },
+          { "name": "variant", "type": "string" },
+          { "name": "price", "type": "number" },
+          { "name": "quantity", "type": "integer" },
+          { "name": "coupon", "type": "string" },
+          { "name": "position", "type": "integer" },
+          { "name": "url", "type": "string" },
+          { "name": "image_url", "type": "string" }
+        ]
+      },
+      {
+        "name": "Product Viewed",
+        "properties": [
+          { "name": "product_id", "type": "string" },
+          { "name": "sku", "type": "string" },
+          { "name": "category", "type": "string" },
+          { "name": "name", "type": "string" },
+          { "name": "brand", "type": "string" },
+          { "name": "variant", "type": "string" },
+          { "name": "price", "type": "number" },
+          { "name": "quantity", "type": "integer" },
+          { "name": "coupon", "type": "string" },
+          { "name": "currency", "type": "string" },
+          { "name": "url", "type": "string" },
+          { "name": "image_url", "type": "string" }
+        ]
+      },
+      {
+        "name": "Product Added",
+        "properties": [
+          { "name": "cart_id", "type": "string" },
+          { "name": "product_id", "type": "string" },
+          { "name": "sku", "type": "string" },
+          { "name": "category", "type": "string" },
+          { "name": "name", "type": "string" },
+          { "name": "brand", "type": "string" },
+          { "name": "variant", "type": "string" },
+          { "name": "price", "type": "number" },
+          { "name": "quantity", "type": "integer" },
+          { "name": "coupon", "type": "string" },
+          { "name": "position", "type": "integer" },
+          { "name": "url", "type": "string" },
+          { "name": "image_url", "type": "string" }
+        ]
+      },
+      {
+        "name": "Product Removed",
+        "properties": [
+          { "name": "cart_id", "type": "string" },
+          { "name": "product_id", "type": "string" },
+          { "name": "sku", "type": "string" },
+          { "name": "category", "type": "string" },
+          { "name": "name", "type": "string" },
+          { "name": "brand", "type": "string" },
+          { "name": "variant", "type": "string" },
+          { "name": "price", "type": "number" },
+          { "name": "quantity", "type": "integer" },
+          { "name": "coupon", "type": "string" },
+          { "name": "position", "type": "integer" },
+          { "name": "url", "type": "string" },
+          { "name": "image_url", "type": "string" }
+        ]
+      },
+      {
+        "name": "Cart Viewed",
+        "properties": [
+          { "name": "cart_id", "type": "string" },
+          { "name": "products", "type": "array", "items": "product_item" }
+        ]
+      },
+      {
+        "name": "Checkout Started",
+        "properties": [
+          { "name": "order_id", "type": "string" },
+          { "name": "affiliation", "type": "string" },
+          { "name": "value", "type": "number" },
+          { "name": "revenue", "type": "number" },
+          { "name": "shipping", "type": "number" },
+          { "name": "tax", "type": "number" },
+          { "name": "discount", "type": "number" },
+          { "name": "coupon", "type": "string" },
+          { "name": "currency", "type": "string" },
+          { "name": "products", "type": "array", "items": "product_item" }
+        ]
+      },
+      {
+        "name": "Checkout Step Viewed",
+        "properties": [
+          { "name": "checkout_id", "type": "string" },
+          { "name": "step", "type": "integer" },
+          { "name": "shipping_method", "type": "string" },
+          { "name": "payment_method", "type": "string" }
+        ]
+      },
+      {
+        "name": "Checkout Step Completed",
+        "properties": [
+          { "name": "checkout_id", "type": "string" },
+          { "name": "step", "type": "integer" },
+          { "name": "shipping_method", "type": "string" },
+          { "name": "payment_method", "type": "string" }
+        ]
+      },
+      {
+        "name": "Payment Info Entered",
+        "properties": [
+          { "name": "checkout_id", "type": "string" },
+          { "name": "order_id", "type": "string" },
+          { "name": "step", "type": "integer" },
+          { "name": "shipping_method", "type": "string" },
+          { "name": "payment_method", "type": "string" }
+        ]
+      },
+      {
+        "name": "Order Updated",
+        "properties": [
+          { "name": "order_id", "type": "string" },
+          { "name": "affiliation", "type": "string" },
+          { "name": "value", "type": "number" },
+          { "name": "revenue", "type": "number" },
+          { "name": "shipping", "type": "number" },
+          { "name": "tax", "type": "number" },
+          { "name": "discount", "type": "number" },
+          { "name": "coupon", "type": "string" },
+          { "name": "currency", "type": "string" },
+          { "name": "products", "type": "array", "items": "product_item" }
+        ]
+      },
+      {
+        "name": "Order Completed",
+        "properties": [
+          { "name": "checkout_id", "type": "string" },
+          { "name": "order_id", "type": "string" },
+          { "name": "affiliation", "type": "string" },
+          { "name": "total", "type": "number" },
+          { "name": "revenue", "type": "number" },
+          { "name": "shipping", "type": "number" },
+          { "name": "tax", "type": "number" },
+          { "name": "discount", "type": "number" },
+          { "name": "coupon", "type": "string" },
+          { "name": "currency", "type": "string" },
+          { "name": "products", "type": "array", "items": "product_item" }
+        ]
+      },
+      {
+        "name": "Order Refunded",
+        "properties": [
+          { "name": "order_id", "type": "string" },
+          { "name": "total", "type": "number" },
+          { "name": "currency", "type": "string" },
+          { "name": "products", "type": "array", "items": "product_item" }
+        ]
+      },
+      {
+        "name": "Order Cancelled",
+        "properties": [
+          { "name": "order_id", "type": "string" },
+          { "name": "total", "type": "number" },
+          { "name": "currency", "type": "string" },
+          { "name": "products", "type": "array", "items": "product_item" }
+        ]
+      }
+    ],
+    "Coupons": [
+      {
+        "name": "Coupon Entered",
+        "properties": [
+          { "name": "order_id", "type": "string" },
+          { "name": "cart_id", "type": "string" },
+          { "name": "coupon_id", "type": "string" }
+        ]
+      },
+      {
+        "name": "Coupon Applied",
+        "properties": [
+          { "name": "order_id", "type": "string" },
+          { "name": "cart_id", "type": "string" },
+          { "name": "coupon_id", "type": "string" },
+          { "name": "coupon_name", "type": "string" },
+          { "name": "discount", "type": "number" }
+        ]
+      },
+      {
+        "name": "Coupon Denied",
+        "properties": [
+          { "name": "order_id", "type": "string" },
+          { "name": "cart_id", "type": "string" },
+          { "name": "coupon_id", "type": "string" },
+          { "name": "reason", "type": "string" }
+        ]
+      },
+      {
+        "name": "Coupon Removed",
+        "properties": [
+          { "name": "order_id", "type": "string" },
+          { "name": "cart_id", "type": "string" },
+          { "name": "coupon_id", "type": "string" },
+          { "name": "coupon_name", "type": "string" }
+        ]
+      }
+    ],
+    "Wishlisting": [
+      {
+        "name": "Product Added to Wishlist",
+        "properties": [
+          { "name": "wishlist_id", "type": "string" },
+          { "name": "wishlist_name", "type": "string" },
+          { "name": "product_id", "type": "string" },
+          { "name": "sku", "type": "string" },
+          { "name": "category", "type": "string" },
+          { "name": "name", "type": "string" },
+          { "name": "brand", "type": "string" },
+          { "name": "variant", "type": "string" },
+          { "name": "price", "type": "number" },
+          { "name": "quantity", "type": "integer" },
+          { "name": "coupon", "type": "string" },
+          { "name": "position", "type": "integer" },
+          { "name": "url", "type": "string" },
+          { "name": "image_url", "type": "string" }
+        ]
+      },
+      {
+        "name": "Product Removed from Wishlist",
+        "properties": [
+          { "name": "wishlist_id", "type": "string" },
+          { "name": "wishlist_name", "type": "string" },
+          { "name": "product_id", "type": "string" },
+          { "name": "sku", "type": "string" },
+          { "name": "category", "type": "string" },
+          { "name": "name", "type": "string" },
+          { "name": "brand", "type": "string" },
+          { "name": "variant", "type": "string" },
+          { "name": "price", "type": "number" },
+          { "name": "quantity", "type": "integer" },
+          { "name": "coupon", "type": "string" },
+          { "name": "position", "type": "integer" },
+          { "name": "url", "type": "string" },
+          { "name": "image_url", "type": "string" }
+        ]
+      },
+      {
+        "name": "Wishlist Product Added to Cart",
+        "properties": [
+          { "name": "wishlist_id", "type": "string" },
+          { "name": "wishlist_name", "type": "string" },
+          { "name": "cart_id", "type": "string" },
+          { "name": "product_id", "type": "string" },
+          { "name": "sku", "type": "string" },
+          { "name": "category", "type": "string" },
+          { "name": "name", "type": "string" },
+          { "name": "brand", "type": "string" },
+          { "name": "variant", "type": "string" },
+          { "name": "price", "type": "number" },
+          { "name": "quantity", "type": "integer" },
+          { "name": "coupon", "type": "string" },
+          { "name": "position", "type": "integer" },
+          { "name": "url", "type": "string" },
+          { "name": "image_url", "type": "string" }
+        ]
+      }
+    ],
+    "Sharing": [
+      {
+        "name": "Product Shared",
+        "properties": [
+          { "name": "share_via", "type": "string" },
+          { "name": "share_message", "type": "string" },
+          { "name": "recipient", "type": "string" },
+          { "name": "product_id", "type": "string" },
+          { "name": "sku", "type": "string" },
+          { "name": "category", "type": "string" },
+          { "name": "name", "type": "string" },
+          { "name": "brand", "type": "string" },
+          { "name": "variant", "type": "string" },
+          { "name": "price", "type": "number" },
+          { "name": "url", "type": "string" },
+          { "name": "image_url", "type": "string" }
+        ]
+      },
+      {
+        "name": "Cart Shared",
+        "properties": [
+          { "name": "share_via", "type": "string" },
+          { "name": "share_message", "type": "string" },
+          { "name": "recipient", "type": "string" },
+          { "name": "cart_id", "type": "string" },
+          { "name": "products", "type": "array", "items": "product_item" }
+        ]
+      }
+    ],
+    "Reviewing": [
+      {
+        "name": "Product Reviewed",
+        "properties": [
+          { "name": "product_id", "type": "string" },
+          { "name": "review_id", "type": "string" },
+          { "name": "review_body", "type": "string" },
+          { "name": "rating", "type": "number" }
+        ]
+      }
+    ]
+  }
+}

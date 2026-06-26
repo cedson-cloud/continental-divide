@@ -1,0 +1,10 @@
+{
+  "name": "Order Completed",
+  "category": "Core Ordering",
+  "description": "Duplicate: an event with this name already exists in the plan.",
+  "properties": [
+    { "name": "order_id", "type": "string" },
+    { "name": "total", "type": "number" },
+    { "name": "currency", "type": "string" }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "name": "Cart Cleared",
+  "category": "Core Ordering",
+  "description": "Fired when a shopper empties their cart in one action.",
+  "properties": [
+    { "name": "cart_id", "type": "string", "required": true }
+  ]
+}
