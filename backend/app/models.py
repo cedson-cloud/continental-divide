@@ -50,9 +50,10 @@ class Decision(str, Enum):
     flagged_duplicate = "flagged_duplicate"
 
 
-class RuleViolation(BaseModel):
+class RuleCheck(BaseModel):
     rule: str
-    message: str
+    passed: bool
+    detail: str
 
 
 class Evaluation(BaseModel):
@@ -60,5 +61,5 @@ class Evaluation(BaseModel):
 
     decision: Decision
     routed_to_approval: bool
-    violations: List[RuleViolation] = Field(default_factory=list)
+    checks: List[RuleCheck] = Field(default_factory=list)
     flags: List[str] = Field(default_factory=list)

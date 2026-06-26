@@ -1,4 +1,7 @@
-"""Step 2 demo: parse each example request and run it through the deterministic rules.
+"""Step 3 demo: run each example request through the persisted intake flow.
+
+Resets the demo database, ingests every example (parse -> rules -> route, persisting a
+request row and its audit trail), then prints each request and its full audit log.
 
 Usage (from backend/, with deps installed):
     python run_examples.py
@@ -9,33 +12,29 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from app.models import EventDefinition
-from app.rules import evaluate
+from app.pipeline import ingest
+from app.storage import reset_storage
 
 EXAMPLES_DIR = Path(__file__).parent / "examples"
 
 
 def main() -> None:
-    for path in sorted(EXAMPLES_DIR.glob("*.json")):
-        raw = json.loads(path.read_text())
-        print(f"\n=== {path.name} ===")
-        try:
-            event = EventDefinition.model_validate(raw)
-        except Exception as exc:  # parse failure is itself a rejection
-            print(f"  name: {raw.get('name')!r}")
-            print(f"  decision: rejected (schema parse failed)")
-            print(f"  errors: {exc}")
-            continue
+    storage = reset_storage()
 
-        result = evaluate(event)
-        print(f"  name: {event.name!r}  category: {event.category!r}")
-        print(f"  properties: {[p.name for p in event.properties]}")
-        print(f"  decision: {result.decision.value}")
-        print(f"  routed_to_approval: {result.routed_to_approval}")
-        for v in result.violations:
-            print(f"  violation [{v.rule}]: {v.message}")
-        for f in result.flags:
-            print(f"  flag: {f}")
+    for path in sorted(EXAMPLES_DIR.glob("*.json")):
+        candidate = json.loads(path.read_text())
+        raw_intake_text = candidate.get("description") or f"Request for {candidate.get('name')}"
+        request_id = ingest(raw_intake_text, candidate, storage)
+
+        request = storage.get_request(request_id)
+        print(f"\n=== {path.name} ===")
+        print(f"  request id: {request['id']}")
+        print(f"  name: {candidate.get('name')!r}  category: {request['category']!r}")
+        print(f"  status: {request['status']}")
+        print("  audit log:")
+        for entry in storage.get_audit_log(request_id):
+            print(f"    [{entry['created_at']}] {entry['step']}")
+            print(f"        {json.dumps(entry['detail'])}")
 
 
 if __name__ == "__main__":

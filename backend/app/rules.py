@@ -12,7 +12,7 @@ import re
 from functools import lru_cache
 from pathlib import Path
 
-from .models import Decision, Evaluation, EventDefinition, RuleViolation
+from .models import Decision, Evaluation, EventDefinition, RuleCheck
 
 _PLAN_PATH = Path(__file__).with_name("sample_tracking_plan.json")
 
@@ -47,12 +47,12 @@ def load_plan() -> dict:
 
 
 @lru_cache
-def _categories() -> frozenset[str]:
+def known_categories() -> frozenset:
     return frozenset(load_plan()["categories"].keys())
 
 
 @lru_cache
-def _known_event_names() -> frozenset[str]:
+def known_event_names() -> frozenset:
     plan = load_plan()
     return frozenset(
         event["name"]
@@ -134,50 +134,76 @@ def pii_hit(property_name: str) -> str | None:
 def evaluate(event: EventDefinition) -> Evaluation:
     """Run all deterministic rules over a parsed definition and return a decision.
 
-    Hard violations (naming, PII, unknown category) reject. A clean definition whose
-    name already exists in the plan is flagged as a duplicate and routed to approval.
-    A clean, novel definition is routed to approval as ``pending_approval``.
+    Returns a structured per-rule report. A failure on any hard rule (naming, category,
+    property naming, PII) rejects. A clean definition whose name already exists in the
+    plan is flagged as a duplicate and routed to approval. A clean, novel definition is
+    routed to approval as ``pending_approval``.
     """
-    violations: list[RuleViolation] = []
+    checks = []
 
     name_err = event_name_error(event.name)
-    if name_err:
-        violations.append(RuleViolation(rule="event_naming", message=name_err))
-
-    if event.category not in _categories():
-        violations.append(
-            RuleViolation(
-                rule="category",
-                message=(
-                    f"category '{event.category}' is not in the tracking plan "
-                    f"({', '.join(sorted(_categories()))})"
-                ),
-            )
+    checks.append(
+        RuleCheck(
+            rule="event_naming",
+            passed=name_err is None,
+            detail=name_err or "valid Object Action, Title Case name",
         )
+    )
 
-    for prop in event.properties:
-        prop_err = property_name_error(prop.name)
-        if prop_err:
-            violations.append(RuleViolation(rule="property_naming", message=prop_err))
-        hit = pii_hit(prop.name)
-        if hit:
-            violations.append(
-                RuleViolation(
-                    rule="pii",
-                    message=f"property '{prop.name}' matches PII token '{hit}'",
-                )
-            )
+    category_ok = event.category in known_categories()
+    checks.append(
+        RuleCheck(
+            rule="category",
+            passed=category_ok,
+            detail=(
+                "category is in the tracking plan"
+                if category_ok
+                else f"category '{event.category}' is not in the tracking plan"
+            ),
+        )
+    )
 
-    if violations:
+    bad_props = [p.name for p in event.properties if property_name_error(p.name)]
+    checks.append(
+        RuleCheck(
+            rule="property_naming",
+            passed=not bad_props,
+            detail=(
+                "all property names are snake_case"
+                if not bad_props
+                else f"not snake_case: {', '.join(bad_props)}"
+            ),
+        )
+    )
+
+    pii_hits = [
+        f"{p.name} -> {pii_hit(p.name)}" for p in event.properties if pii_hit(p.name)
+    ]
+    checks.append(
+        RuleCheck(
+            rule="pii",
+            passed=not pii_hits,
+            detail=(
+                "no PII tokens in property names"
+                if not pii_hits
+                else f"PII tokens matched: {'; '.join(pii_hits)}"
+            ),
+        )
+    )
+
+    if any(not c.passed for c in checks):
         return Evaluation(
-            decision=Decision.rejected, routed_to_approval=False, violations=violations
+            decision=Decision.rejected, routed_to_approval=False, checks=checks
         )
 
-    if event.name in _known_event_names():
+    if event.name in known_event_names():
         return Evaluation(
             decision=Decision.flagged_duplicate,
             routed_to_approval=True,
+            checks=checks,
             flags=[f"'{event.name}' already exists in the tracking plan"],
         )
 
-    return Evaluation(decision=Decision.pending_approval, routed_to_approval=True)
+    return Evaluation(
+        decision=Decision.pending_approval, routed_to_approval=True, checks=checks
+    )
