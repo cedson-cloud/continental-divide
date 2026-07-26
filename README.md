@@ -127,15 +127,14 @@ a datastore for the audit log and request history.
   `ANTHROPIC_MODEL`, `DATABASE_PATH`, `MAX_INTAKE_CHARS`, `RATE_LIMIT_MAX`,
   `RATE_LIMIT_WINDOW_SECONDS`. Frontend: `NEXT_PUBLIC_API_BASE` (the backend's URL).
 
-## Build status
+## Status
 
-- [x] 1. Project scaffold: FastAPI + Next.js, env, .gitignore, README
-- [x] 2. Schema, deterministic rules, and the sample tracking plan
-- [x] 3. SQLite storage with an append-only audit log
-- [x] 4. FastAPI routes + mock publisher (intake through publish over HTTP)
-- [x] 4.5. Natural-language intake (server-side model drafts the definition)
-- [x] 5. Next.js UI for the single flow
-- [x] 6. Run and deploy notes
+The full flow works end to end: plain-language intake, model drafting, deterministic
+rules, human approval with PII acknowledgment, mock publishing, and a one-way push of
+pending requests to a Notion approval board — all recorded in the append-only audit log.
+A pytest suite covers the rules, the pipeline, the HTTP flow, and the Notion mapping,
+and CI runs the suite plus a frontend type-check and build on every push. Not deployed
+anywhere yet; see the deploy notes above.
 
 ## Clean room
 
