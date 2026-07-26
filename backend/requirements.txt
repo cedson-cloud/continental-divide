@@ -5,3 +5,7 @@ pydantic-settings>=2.2
 anthropic>=0.40
 notion-client>=2.0
 python-dotenv>=1.0
+
+# Tests. httpx is required by FastAPI's TestClient.
+pytest>=8.0
+httpx>=0.27

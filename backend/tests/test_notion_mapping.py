@@ -1,5 +1,5 @@
 """Unit tests for the Notion approval-board mapping. The client is mocked, so the suite
-never touches the network. Run from backend/: python -m unittest test_notion_mapping
+never touches the network. Run from backend/: pytest
 """
 
 import unittest

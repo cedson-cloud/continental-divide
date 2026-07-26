@@ -29,8 +29,6 @@ continental-divide/
     tests/            pytest suite
     requirements.txt
     run_examples.py
-    verify_step4.py
-    verify_step4_5.py
     .env              secrets, gitignored (never committed)
   frontend/           Next.js app
   .env.example        template for backend/.env

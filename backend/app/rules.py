@@ -37,7 +37,8 @@ _PII_BLOCKLIST = [
     "ip_address",
 ]
 
-_TITLE_WORD = re.compile(r"^[A-Z][a-z0-9]*$")
+# A Title Case word: capitalized ("Cart") or an all-caps acronym ("SKU").
+_TITLE_WORD = re.compile(r"^[A-Z](?:[a-z0-9]*|[A-Z0-9]+)$")
 _SNAKE_CASE = re.compile(r"^[a-z0-9]+(_[a-z0-9]+)*$")
 
 
@@ -73,7 +74,8 @@ def event_name_error(name: str) -> str | None:
 
     Valid: two or more Title-Case words, single-spaced, with the action verb (the word
     before a ``to``/``from`` connector, or the final word otherwise) in past tense.
-    Connectors are lowercase. Underscores, camelCase, and all-lowercase are rejected.
+    All-caps acronyms ("SKU Added") count as Title Case words. Connectors are lowercase.
+    Underscores, camelCase, and all-lowercase are rejected.
     """
     if name != name.strip() or "  " in name:
         return "name must be single-spaced with no leading/trailing whitespace"
