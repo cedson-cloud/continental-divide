@@ -9,6 +9,10 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-sonnet-4-6"
 
+    # Server-side only. When unset, the Notion approval-board push is skipped.
+    notion_token: str = ""
+    notion_approval_db_id: str = ""
+
     database_path: str = "backend/data/tracking_guardian.db"
 
     max_intake_chars: int = 2000

@@ -62,6 +62,8 @@ export type RequestDetail = {
   parsed_definition: EventDefinition | null;
   category: string | null;
   status: string;
+  pii_flagged: boolean;
+  pii_details: string | null;
   published_artifact: PublishArtifact | null;
   created_at: string;
   updated_at: string;
@@ -95,10 +97,20 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
-export function submitIntake(raw_intake_text: string): Promise<IntakeResult> {
+export type IntakeMeta = {
+  submitter_name?: string;
+  submitter_team?: string;
+  call_type?: string;
+  side?: string;
+};
+
+export function submitIntake(
+  raw_intake_text: string,
+  meta: IntakeMeta = {},
+): Promise<IntakeResult> {
   return request("/requests", {
     method: "POST",
-    body: JSON.stringify({ raw_intake_text }),
+    body: JSON.stringify({ raw_intake_text, ...meta }),
   });
 }
 
@@ -123,11 +135,16 @@ export function getRequest(id: number): Promise<RequestDetail> {
 export function decideRequest(
   id: number,
   decision: "approve" | "reject",
-  note?: string,
+  opts: { note?: string; approver_name?: string; pii_acknowledged?: boolean } = {},
 ): Promise<{ id: number; status: string; published_artifact: PublishArtifact | null }> {
   return request(`/requests/${id}/decision`, {
     method: "POST",
-    body: JSON.stringify({ decision, note: note || null }),
+    body: JSON.stringify({
+      decision,
+      note: opts.note || null,
+      approver_name: opts.approver_name || null,
+      pii_acknowledged: opts.pii_acknowledged ?? false,
+    }),
   });
 }
 

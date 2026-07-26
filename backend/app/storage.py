@@ -26,6 +26,12 @@ CREATE TABLE IF NOT EXISTS event_request (
     parsed_definition TEXT,
     category TEXT,
     status TEXT NOT NULL,
+    pii_flagged INTEGER NOT NULL DEFAULT 0,
+    pii_details TEXT,
+    submitter_name TEXT,
+    submitter_team TEXT,
+    call_type TEXT,
+    side TEXT,
     published_artifact TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -61,6 +67,10 @@ class Storage(ABC):
         parsed_definition: Optional[dict] = None,
         category: Optional[str] = None,
         status: str = "pending_approval",
+        submitter_name: Optional[str] = None,
+        submitter_team: Optional[str] = None,
+        call_type: Optional[str] = None,
+        side: Optional[str] = None,
     ) -> int:
         ...
 
@@ -79,6 +89,12 @@ class Storage(ABC):
     @abstractmethod
     def set_parsed_definition(
         self, request_id: int, parsed_definition: dict, category: str
+    ) -> None:
+        ...
+
+    @abstractmethod
+    def set_pii_flags(
+        self, request_id: int, pii_flagged: bool, pii_details: str
     ) -> None:
         ...
 
@@ -119,17 +135,26 @@ class SqliteStorage(Storage):
         parsed_definition: Optional[dict] = None,
         category: Optional[str] = None,
         status: str = "pending_approval",
+        submitter_name: Optional[str] = None,
+        submitter_team: Optional[str] = None,
+        call_type: Optional[str] = None,
+        side: Optional[str] = None,
     ) -> int:
         with self._connect() as conn:
             cursor = conn.execute(
                 "INSERT INTO event_request "
-                "(raw_intake_text, parsed_definition, category, status) "
-                "VALUES (?, ?, ?, ?)",
+                "(raw_intake_text, parsed_definition, category, status, "
+                "submitter_name, submitter_team, call_type, side) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     raw_intake_text,
                     json.dumps(parsed_definition) if parsed_definition else None,
                     category,
                     status,
+                    submitter_name,
+                    submitter_team,
+                    call_type,
+                    side,
                 ),
             )
             return int(cursor.lastrowid)
@@ -167,6 +192,17 @@ class SqliteStorage(Storage):
                 (json.dumps(parsed_definition), category, request_id),
             )
 
+    def set_pii_flags(
+        self, request_id: int, pii_flagged: bool, pii_details: str
+    ) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE event_request "
+                "SET pii_flagged = ?, pii_details = ?, updated_at = datetime('now') "
+                "WHERE id = ?",
+                (1 if pii_flagged else 0, pii_details, request_id),
+            )
+
     def set_publish_result(self, request_id: int, artifact: dict) -> None:
         with self._connect() as conn:
             conn.execute(
@@ -196,6 +232,7 @@ class SqliteStorage(Storage):
     @staticmethod
     def _request_row(row: sqlite3.Row) -> dict:
         data: dict[str, Any] = dict(row)
+        data["pii_flagged"] = bool(data.get("pii_flagged"))
         if data.get("parsed_definition"):
             data["parsed_definition"] = json.loads(data["parsed_definition"])
         if data.get("published_artifact"):

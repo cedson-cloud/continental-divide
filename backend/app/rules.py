@@ -134,10 +134,11 @@ def pii_hit(property_name: str) -> str | None:
 def evaluate(event: EventDefinition) -> Evaluation:
     """Run all deterministic rules over a parsed definition and return a decision.
 
-    Returns a structured per-rule report. A failure on any hard rule (naming, category,
-    property naming, PII) rejects. A clean definition whose name already exists in the
-    plan is flagged as a duplicate and routed to approval. A clean, novel definition is
-    routed to approval as ``pending_approval``.
+    Returns a structured per-rule report. A failure on a hard rule (naming, category,
+    property naming) rejects. PII is a non-blocking flag: a flagged definition still
+    routes to approval, where a human must acknowledge the PII before approving. A clean
+    definition whose name already exists in the plan is flagged as a duplicate and routed
+    to approval. A clean, novel definition is routed to approval as ``pending_approval``.
     """
     checks = []
 
@@ -179,31 +180,39 @@ def evaluate(event: EventDefinition) -> Evaluation:
     pii_hits = [
         f"{p.name} -> {pii_hit(p.name)}" for p in event.properties if pii_hit(p.name)
     ]
+    pii_flagged = bool(pii_hits)
+    pii_details = "; ".join(pii_hits)
     checks.append(
         RuleCheck(
             rule="pii",
-            passed=not pii_hits,
+            passed=not pii_flagged,
             detail=(
                 "no PII tokens in property names"
-                if not pii_hits
-                else f"PII tokens matched: {'; '.join(pii_hits)}"
+                if not pii_flagged
+                else f"flagged (acknowledgment required to approve): {pii_details}"
             ),
         )
     )
 
-    if any(not c.passed for c in checks):
-        return Evaluation(
-            decision=Decision.rejected, routed_to_approval=False, checks=checks
-        )
-
-    if event.name in known_event_names():
-        return Evaluation(
-            decision=Decision.flagged_duplicate,
-            routed_to_approval=True,
-            checks=checks,
-            flags=[f"'{event.name}' already exists in the tracking plan"],
-        )
+    # PII does not reject; only the naming, category, and property-naming rules do.
+    hard_failed = any(not c.passed for c in checks if c.rule != "pii")
+    flags = (
+        [f"'{event.name}' already exists in the tracking plan"]
+        if not hard_failed and event.name in known_event_names()
+        else []
+    )
+    if hard_failed:
+        decision, routed = Decision.rejected, False
+    elif flags:
+        decision, routed = Decision.flagged_duplicate, True
+    else:
+        decision, routed = Decision.pending_approval, True
 
     return Evaluation(
-        decision=Decision.pending_approval, routed_to_approval=True, checks=checks
+        decision=decision,
+        routed_to_approval=routed,
+        checks=checks,
+        flags=flags,
+        pii_flagged=pii_flagged,
+        pii_details=pii_details,
     )

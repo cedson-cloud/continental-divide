@@ -30,6 +30,8 @@ export default function RequestDetailPage({ params }: { params: { id: string } }
   const [detail, setDetail] = useState<RequestDetail | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [note, setNote] = useState("");
+  const [approverName, setApproverName] = useState("");
+  const [piiAcknowledged, setPiiAcknowledged] = useState(false);
   const [deciding, setDeciding] = useState(false);
   const [decisionError, setDecisionError] = useState<string | null>(null);
 
@@ -50,8 +52,13 @@ export default function RequestDetailPage({ params }: { params: { id: string } }
     setDeciding(true);
     setDecisionError(null);
     try {
-      await decideRequest(id, decision, note);
+      await decideRequest(id, decision, {
+        note,
+        approver_name: approverName,
+        pii_acknowledged: piiAcknowledged,
+      });
       setNote("");
+      setPiiAcknowledged(false);
       load();
     } catch (err) {
       setDecisionError(friendlyError(err));
@@ -117,16 +124,38 @@ export default function RequestDetailPage({ params }: { params: { id: string } }
           <div className="panel-title">Decision</div>
           <input
             type="text"
+            placeholder="Approver name"
+            value={approverName}
+            onChange={(e) => setApproverName(e.target.value)}
+            disabled={deciding}
+          />
+          <input
+            type="text"
+            className="mt-12"
             placeholder="Note (optional)"
             value={note}
             onChange={(e) => setNote(e.target.value)}
             disabled={deciding}
           />
+          {detail.pii_flagged && (
+            <label className="row mt-12" style={{ gap: 8, fontSize: 14 }}>
+              <input
+                type="checkbox"
+                checked={piiAcknowledged}
+                onChange={(e) => setPiiAcknowledged(e.target.checked)}
+                disabled={deciding}
+              />
+              <span>
+                PII acknowledged
+                {detail.pii_details ? ` — ${detail.pii_details}` : ""}
+              </span>
+            </label>
+          )}
           <div className="row mt-12">
             <button
               className="btn btn-approve"
               onClick={() => decide("approve")}
-              disabled={deciding}
+              disabled={deciding || (detail.pii_flagged && !piiAcknowledged)}
             >
               {deciding ? "Working…" : "Approve & publish"}
             </button>

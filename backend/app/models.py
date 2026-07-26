@@ -63,3 +63,7 @@ class Evaluation(BaseModel):
     routed_to_approval: bool
     checks: List[RuleCheck] = Field(default_factory=list)
     flags: List[str] = Field(default_factory=list)
+    # PII is a non-blocking flag: a flagged event still submits and routes to approval,
+    # but a human must acknowledge the PII before it can be approved.
+    pii_flagged: bool = False
+    pii_details: str = ""

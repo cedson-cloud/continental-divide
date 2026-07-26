@@ -3,4 +3,5 @@ uvicorn[standard]>=0.27
 pydantic>=2.6
 pydantic-settings>=2.2
 anthropic>=0.40
+notion-client>=2.0
 python-dotenv>=1.0

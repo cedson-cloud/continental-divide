@@ -19,6 +19,7 @@ from pydantic import ValidationError
 
 from .interpreter import Interpretation, InterpreterError, interpret
 from .models import Decision, EventDefinition
+from .notion_publisher import push_request
 from .publisher import Publisher, PublishResult
 from .rules import evaluate
 from .storage import Storage
@@ -31,6 +32,10 @@ class RequestNotFound(Exception):
 
 
 class InvalidTransition(Exception):
+    pass
+
+
+class PiiAcknowledgmentRequired(Exception):
     pass
 
 
@@ -80,12 +85,15 @@ def _route(
     )
 
     evaluation = evaluate(parsed)
+    storage.set_pii_flags(request_id, evaluation.pii_flagged, evaluation.pii_details)
     storage.add_audit_entry(
         request_id,
         "rules_evaluated",
         {
             "checks": [c.model_dump() for c in evaluation.checks],
             "flags": evaluation.flags,
+            "pii_flagged": evaluation.pii_flagged,
+            "pii_details": evaluation.pii_details,
         },
     )
 
@@ -101,10 +109,33 @@ def _route(
     )
 
 
+def _push_if_pending(request_id: int, storage: Storage) -> None:
+    """Push a request to the Notion approval board if it landed at ``pending_approval``.
+
+    Store-first and one-way: the local event is already persisted and is kept regardless.
+    No token configured -> skip silently. A real push error (token set) is recorded as
+    ``notion_push_failed`` and does not affect the local request.
+    """
+    request = storage.get_request(request_id)
+    if request["status"] != Decision.pending_approval.value:
+        return
+    try:
+        url = push_request(request)
+    except Exception as exc:
+        storage.add_audit_entry(request_id, "notion_push_failed", {"error": str(exc)})
+        return
+    if url is not None:
+        storage.add_audit_entry(request_id, "notion_pushed", {"url": url})
+
+
 def interpret_intake(
     raw_intake_text: str,
     storage: Storage,
     interpret_fn: Callable[[str], Interpretation] = interpret,
+    submitter_name: Optional[str] = None,
+    submitter_team: Optional[str] = None,
+    call_type: Optional[str] = None,
+    side: Optional[str] = None,
 ) -> int:
     """Draft a definition from natural-language text, then run the existing flow.
 
@@ -112,9 +143,23 @@ def interpret_intake(
     model failure still leaves an auditable record. Returns the request id; raises
     :class:`IntakeModelError` if the model service is unreachable.
     """
-    request_id = storage.create_request(raw_intake_text=raw_intake_text)
+    request_id = storage.create_request(
+        raw_intake_text=raw_intake_text,
+        submitter_name=submitter_name,
+        submitter_team=submitter_team,
+        call_type=call_type,
+        side=side,
+    )
     storage.add_audit_entry(
-        request_id, "intake_received", {"raw_intake_text": raw_intake_text}
+        request_id,
+        "intake_received",
+        {
+            "raw_intake_text": raw_intake_text,
+            "submitter_name": submitter_name,
+            "submitter_team": submitter_team,
+            "call_type": call_type,
+            "side": side,
+        },
     )
 
     try:
@@ -150,11 +195,18 @@ def interpret_intake(
     if parsed is not None:
         storage.set_parsed_definition(request_id, parsed.model_dump(), parsed.category)
     _route(request_id, parsed, parse_errors, storage)
+    _push_if_pending(request_id, storage)
     return request_id
 
 
 def ingest_raw_definition(
-    raw_intake_text: str, candidate_definition: dict, storage: Storage
+    raw_intake_text: str,
+    candidate_definition: dict,
+    storage: Storage,
+    submitter_name: Optional[str] = None,
+    submitter_team: Optional[str] = None,
+    call_type: Optional[str] = None,
+    side: Optional[str] = None,
 ) -> int:
     """Route a pre-built definition that skips the model, for demos where a faithful
     model would not author the violation under test (a malformed name, a duplicate).
@@ -162,9 +214,23 @@ def ingest_raw_definition(
     The trail records ``definition_provided`` in place of ``model_interpreted``; the rest
     of the pipeline is identical to :func:`interpret_intake`.
     """
-    request_id = storage.create_request(raw_intake_text=raw_intake_text)
+    request_id = storage.create_request(
+        raw_intake_text=raw_intake_text,
+        submitter_name=submitter_name,
+        submitter_team=submitter_team,
+        call_type=call_type,
+        side=side,
+    )
     storage.add_audit_entry(
-        request_id, "intake_received", {"raw_intake_text": raw_intake_text}
+        request_id,
+        "intake_received",
+        {
+            "raw_intake_text": raw_intake_text,
+            "submitter_name": submitter_name,
+            "submitter_team": submitter_team,
+            "call_type": call_type,
+            "side": side,
+        },
     )
     storage.add_audit_entry(
         request_id, "definition_provided", {"definition": candidate_definition}
@@ -173,6 +239,7 @@ def ingest_raw_definition(
     if parsed is not None:
         storage.set_parsed_definition(request_id, parsed.model_dump(), parsed.category)
     _route(request_id, parsed, parse_errors, storage)
+    _push_if_pending(request_id, storage)
     return request_id
 
 
@@ -201,12 +268,16 @@ def decide(
     storage: Storage,
     publisher: Publisher,
     note: Optional[str] = None,
+    approver_name: Optional[str] = None,
+    pii_acknowledged: bool = False,
 ) -> Optional[PublishResult]:
     """Apply a human approve/reject decision and write the audit trail.
 
     Only a request currently pending approval or flagged as a duplicate can be decided.
-    Approve publishes and moves to ``published``; reject moves to ``rejected``. Raises
-    :class:`RequestNotFound` or :class:`InvalidTransition` for the caller to map to HTTP.
+    Approving a PII-flagged request requires ``pii_acknowledged``. Approve publishes and
+    moves to ``published``; reject moves to ``rejected``. Raises :class:`RequestNotFound`,
+    :class:`InvalidTransition`, or :class:`PiiAcknowledgmentRequired` for the caller to
+    map to HTTP.
     """
     request = storage.get_request(request_id)
     if request is None:
@@ -215,12 +286,29 @@ def decide(
         raise InvalidTransition(
             f"request {request_id} is '{request['status']}' and cannot be decided"
         )
+    if decision == "approve" and request["pii_flagged"] and not pii_acknowledged:
+        raise PiiAcknowledgmentRequired(
+            f"request {request_id} is PII-flagged ({request['pii_details']}); "
+            "acknowledgment is required to approve"
+        )
 
     storage.add_audit_entry(
-        request_id, "decision_received", {"decision": decision, "note": note}
+        request_id,
+        "decision_received",
+        {"decision": decision, "approver": approver_name, "note": note},
     )
 
     if decision == "approve":
+        if request["pii_flagged"]:
+            storage.add_audit_entry(
+                request_id,
+                "pii_acknowledged",
+                {
+                    "message": f"PII acknowledged by {approver_name or 'unknown'}",
+                    "pii_details": request["pii_details"],
+                },
+            )
+        storage.update_request_status(request_id, "approved")
         event = EventDefinition.model_validate(request["parsed_definition"])
         result = publisher.publish(event)
         storage.set_publish_result(request_id, result.model_dump())
@@ -237,5 +325,7 @@ def decide(
         return result
 
     storage.update_request_status(request_id, Decision.rejected.value)
-    storage.add_audit_entry(request_id, "rejection_recorded", {"note": note})
+    storage.add_audit_entry(
+        request_id, "rejection_recorded", {"approver": approver_name, "note": note}
+    )
     return None

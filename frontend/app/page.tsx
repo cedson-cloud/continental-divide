@@ -23,6 +23,10 @@ function findEntry(log: AuditEntry[], step: string): AuditEntry | undefined {
 
 export default function IntakePage() {
   const [text, setText] = useState("");
+  const [submitterName, setSubmitterName] = useState("");
+  const [submitterTeam, setSubmitterTeam] = useState("");
+  const [callType, setCallType] = useState("track");
+  const [side, setSide] = useState("Client");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<RequestDetail | null>(null);
@@ -57,11 +61,72 @@ export default function IntakePage() {
           onChange={(e) => setText(e.target.value)}
           placeholder="e.g. track when a shopper empties their entire cart"
         />
+
+        <div className="fields mt-12">
+          <label className="field">
+            <span className="field-label">Submitter</span>
+            <input
+              type="text"
+              placeholder="Your name"
+              value={submitterName}
+              onChange={(e) => setSubmitterName(e.target.value)}
+              disabled={submitting}
+            />
+          </label>
+          <label className="field">
+            <span className="field-label">Team *</span>
+            <select
+              value={submitterTeam}
+              onChange={(e) => setSubmitterTeam(e.target.value)}
+              disabled={submitting}
+            >
+              <option value="">Select…</option>
+              <option value="Product">Product</option>
+              <option value="Marketing">Marketing</option>
+              <option value="Data">Data</option>
+              <option value="Engineering">Engineering</option>
+            </select>
+          </label>
+          <label className="field">
+            <span className="field-label">Call type</span>
+            <select
+              value={callType}
+              onChange={(e) => setCallType(e.target.value)}
+              disabled={submitting}
+            >
+              <option value="track">track</option>
+              <option value="identify">identify</option>
+              <option value="page">page</option>
+              <option value="screen">screen</option>
+            </select>
+          </label>
+          <label className="field">
+            <span className="field-label">Side</span>
+            <select
+              value={side}
+              onChange={(e) => setSide(e.target.value)}
+              disabled={submitting}
+            >
+              <option value="Client">Client</option>
+              <option value="Server">Server</option>
+            </select>
+          </label>
+        </div>
+
         <div className="row spread mt-12">
           <button
             className="btn btn-primary"
-            onClick={() => run(() => submitIntake(text))}
-            disabled={submitting || text.trim().length === 0}
+            onClick={() =>
+              run(() =>
+                submitIntake(text, {
+                  submitter_name: submitterName,
+                  submitter_team: submitterTeam,
+                  call_type: callType,
+                  side,
+                }),
+              )
+            }
+            disabled={submitting || text.trim().length === 0 || submitterTeam === ""}
           >
             {submitting ? "Drafting…" : "Submit request"}
           </button>

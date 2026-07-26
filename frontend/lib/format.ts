@@ -22,6 +22,7 @@ const STEP_LABELS: Record<string, string> = {
   rules_evaluated: "Rules evaluated",
   routed: "Routed",
   decision_received: "Decision received",
+  pii_acknowledged: "PII acknowledged",
   published: "Published",
   rejection_recorded: "Rejection recorded",
 };

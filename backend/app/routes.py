@@ -15,6 +15,7 @@ from .config import get_settings
 from .pipeline import (
     IntakeModelError,
     InvalidTransition,
+    PiiAcknowledgmentRequired,
     RequestNotFound,
     decide,
     ingest_raw_definition,
@@ -30,18 +31,33 @@ _settings = get_settings()
 _limiter = RateLimiter(_settings.rate_limit_max, _settings.rate_limit_window_seconds)
 
 
+SubmitterTeam = Literal["Product", "Marketing", "Data", "Engineering"]
+CallType = Literal["track", "identify", "page", "screen"]
+Side = Literal["Client", "Server"]
+
+
 class IntakeBody(BaseModel):
     raw_intake_text: str
+    submitter_name: Optional[str] = None
+    submitter_team: Optional[SubmitterTeam] = None
+    call_type: CallType = "track"
+    side: Side = "Client"
 
 
 class RawIntakeBody(BaseModel):
     definition: dict
     raw_intake_text: Optional[str] = None
+    submitter_name: Optional[str] = None
+    submitter_team: Optional[SubmitterTeam] = None
+    call_type: CallType = "track"
+    side: Side = "Client"
 
 
 class DecisionBody(BaseModel):
     decision: Literal["approve", "reject"]
     note: Optional[str] = None
+    approver_name: Optional[str] = None
+    pii_acknowledged: bool = False
 
 
 class IntakeResponse(BaseModel):
@@ -66,7 +82,14 @@ def create_request(body: IntakeBody, request: Request) -> IntakeResponse:
 
     storage = get_storage()
     try:
-        request_id = interpret_intake(body.raw_intake_text, storage)
+        request_id = interpret_intake(
+            body.raw_intake_text,
+            storage,
+            submitter_name=body.submitter_name,
+            submitter_team=body.submitter_team,
+            call_type=body.call_type,
+            side=body.side,
+        )
     except IntakeModelError as exc:
         raise HTTPException(
             status_code=502,
@@ -85,7 +108,15 @@ def create_request_raw(body: RawIntakeBody) -> IntakeResponse:
         or "raw definition"
     )
     storage = get_storage()
-    request_id = ingest_raw_definition(raw_intake_text, body.definition, storage)
+    request_id = ingest_raw_definition(
+        raw_intake_text,
+        body.definition,
+        storage,
+        submitter_name=body.submitter_name,
+        submitter_team=body.submitter_team,
+        call_type=body.call_type,
+        side=body.side,
+    )
     return _intake_response(storage, request_id)
 
 
@@ -134,12 +165,20 @@ def decide_request(request_id: int, body: DecisionBody) -> dict:
     storage = get_storage()
     try:
         result = decide(
-            request_id, body.decision, storage, get_publisher(), note=body.note
+            request_id,
+            body.decision,
+            storage,
+            get_publisher(),
+            note=body.note,
+            approver_name=body.approver_name,
+            pii_acknowledged=body.pii_acknowledged,
         )
     except RequestNotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     except InvalidTransition as exc:
         raise HTTPException(status_code=409, detail=str(exc))
+    except PiiAcknowledgmentRequired as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
     saved = storage.get_request(request_id)
     return {
