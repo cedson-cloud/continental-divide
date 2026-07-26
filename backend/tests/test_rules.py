@@ -30,6 +30,10 @@ def _event(name="Cart Cleared", category="Core Ordering", properties=("cart_id",
         "SKU Added",              # all-caps acronym as the object
         "URL Clicked",
         "Coupon QR Scanned",      # acronym mid-name
+        "Newsletter Signed Up",   # phrasal verb: particle shifts the verb left
+        "User Opted In",
+        "Cart Checked Out",
+        "Wishlist Product Checked Out to Cart",  # particle before a connector
     ],
 )
 def test_valid_event_names(name):
@@ -54,6 +58,9 @@ def test_valid_event_names(name):
         ("Cart Clear", "past tense"),
         ("Product Add to Wishlist", "past tense"),  # verb sits before the connector
         ("Product SKU", "past tense"),              # acronym can't stand in for the verb
+        ("Newsletter Up", "past tense"),            # particle with no verb before it
+        ("Newsletter Sign Up", "past tense"),
+        ("Newsletter Signed up", "Title Case"),     # particles must be Title Case
     ],
 )
 def test_invalid_event_names(name, fragment):

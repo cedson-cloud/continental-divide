@@ -19,6 +19,10 @@ _PLAN_PATH = Path(__file__).with_name("sample_tracking_plan.json")
 # Lowercase connectors allowed inside an event name, e.g. "Product Added to Wishlist".
 _CONNECTORS = {"to", "from"}
 
+# Title Case particles that end a phrasal verb, e.g. "Newsletter Signed Up". Unlike
+# connectors they are ordinary Title Case words; they only shift where the verb is.
+_PARTICLES = {"Up", "In", "Out", "On", "Off", "Down"}
+
 # Past-tense verbs that don't end in "ed". Kept small and pragmatic; extend as the
 # tracking plan grows rather than reaching for a stemmer.
 _IRREGULAR_PAST = {
@@ -74,6 +78,7 @@ def event_name_error(name: str) -> str | None:
 
     Valid: two or more Title-Case words, single-spaced, with the action verb (the word
     before a ``to``/``from`` connector, or the final word otherwise) in past tense.
+    A phrasal-verb particle ("Newsletter Signed Up") shifts the verb one word left.
     All-caps acronyms ("SKU Added") count as Title Case words. Connectors are lowercase.
     Underscores, camelCase, and all-lowercase are rejected.
     """
@@ -99,6 +104,9 @@ def event_name_error(name: str) -> str | None:
     # The action verb sits just before the first connector, or is the final word.
     connector_positions = [i for i, w in enumerate(words) if w in _CONNECTORS]
     verb_index = connector_positions[0] - 1 if connector_positions else len(words) - 1
+    # A trailing particle shifts the verb one word left: "Newsletter Signed Up".
+    if words[verb_index] in _PARTICLES and verb_index > 0:
+        verb_index -= 1
     verb = words[verb_index]
     if not _is_past_tense(verb):
         return f"action verb '{verb}' must be past tense"
