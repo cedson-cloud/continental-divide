@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     notion_token: str = ""
     notion_approval_db_id: str = ""
 
-    database_path: str = "backend/data/tracking_guardian.db"
+    database_path: str = "backend/data/continental_divide.db"
 
     max_intake_chars: int = 2000
     rate_limit_max: int = 10
