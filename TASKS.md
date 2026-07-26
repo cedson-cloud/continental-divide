@@ -12,6 +12,11 @@ Working roadmap for the build. Keep this clean: it travels with the repo, and th
 
 ## Next
 
+- [ ] **Publish failure handling.** On the approve path, a publisher error should record a `publish_failed` audit entry instead of stranding the request at `approved`.
+- [ ] **Concurrent-decision guard.** Add a compare-and-swap on status so a request can't be decided twice concurrently.
+- [ ] **Harden `POST /requests/raw`.** Apply the rate limit and a size cap, as the model-backed intake route already does.
+- [ ] **Tracking-plan vetting agent.** Rebuild it as an in-repo `.claude/agents/` definition.
+
 ## Before this repo goes public
 
 - [x] Review the full git history of this repo, not just the current tree, for anything that shouldn't ship: credentials, tokens, key files, client references.
