@@ -2,7 +2,9 @@
 # Everything except the naming convention is inherited from the Segment template.
 version: 1
 name: posthog-snake-case
-source: https://posthog.com/docs/data/events
+# snake_case is idiomatic PostHog, not a published spec — the SDK docs
+# demonstrate it, they don't mandate it.
+source: https://posthog.com/docs/libraries/python
 extends: segment-ecommerce.yaml
 
 event_naming:

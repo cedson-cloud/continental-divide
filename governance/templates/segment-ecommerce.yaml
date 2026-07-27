@@ -3,7 +3,7 @@
 # intake pipeline enforces; it is the baseline other profiles extend.
 version: 1
 name: segment-ecommerce
-source: https://segment.com/docs/protocols/tracking-plan/best-practices/
+source: https://www.twilio.com/docs/segment/protocols/tracking-plan/best-practices
 
 event_naming:
   convention: title_case_object_action
