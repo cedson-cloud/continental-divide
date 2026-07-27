@@ -142,14 +142,15 @@ def _vet_event(event: dict, index: int, profile: GovernanceProfile) -> dict:
             }
         )
 
+    prop_convention = profile.property_naming.convention
     checks.append(
         {
             "rule": "property_naming",
             "passed": not bad_props,
             "detail": (
-                "all property names are snake_case"
+                f"all property names are {prop_convention}"
                 if not bad_props
-                else f"not snake_case: {', '.join(bad_props)}"
+                else f"not {prop_convention}: {', '.join(bad_props)}"
             ),
         }
     )
@@ -249,10 +250,17 @@ def vet_plan(plan: dict, profile: GovernanceProfile = DEFAULT_PROFILE) -> dict:
         else:
             report["verdict"] = "pass"
 
+    verdicts = Counter(r["verdict"] for r in reports)
     return {
         "source": plan.get("source"),
         "profile": profile.name,
         "rules_source": _RULES_SOURCE,
+        "summary": {
+            "events": len(reports),
+            "pass": verdicts["pass"],
+            "flag": verdicts["flag"],
+            "fail": verdicts["fail"],
+        },
         "events": reports,
         "plan_checks": {
             "exact_duplicates": exact_duplicates,

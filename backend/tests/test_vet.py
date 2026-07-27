@@ -2,7 +2,15 @@
 duplicate detection, category notes, and defensive handling of foreign property
 types."""
 
+import json
+from pathlib import Path
+
+from app.governance import load_profile
 from app.vet import vet_plan
+
+_REPO_ROOT = Path(__file__).parents[2]
+_SAMPLE_PLAN_PATH = _REPO_ROOT / "backend" / "examples" / "vet_sample_plan.json"
+_TEMPLATES_DIR = _REPO_ROOT / "governance" / "templates"
 
 
 def _event(name, category="Growth", properties=("cart_id",)):
@@ -164,6 +172,31 @@ def test_similarity_does_not_chain_across_a_cluster():
         ["aaaaaaaaaa", "aaaaaaaaab"],
         ["aaaaaaaabb", "aaaaaaabbb"],
     ]
+
+
+def test_summary_counts_match_the_assigned_verdicts():
+    result = _vet(
+        _event("Cart Cleared"),                                # pass
+        _event("add_to_cart"),                                 # fail: naming
+        _event("Newsletter Subscribed", properties=("email",)),  # flag: PII
+        _event("Order Completed"),                             # flag: duplicate
+        _event("Order Completed"),                             # flag: duplicate
+    )
+    summary = result["summary"]
+    verdicts = [r["verdict"] for r in result["events"]]
+    assert summary["events"] == len(verdicts)
+    assert summary["pass"] == verdicts.count("pass")
+    assert summary["flag"] == verdicts.count("flag")
+    assert summary["fail"] == verdicts.count("fail")
+    assert summary["pass"] + summary["flag"] + summary["fail"] == summary["events"]
+
+
+def test_sample_plan_counts_are_pinned_under_both_templates():
+    plan = json.loads(_SAMPLE_PLAN_PATH.read_text())
+    segment = vet_plan(plan, load_profile(_TEMPLATES_DIR / "segment-ecommerce.yaml"))
+    posthog = vet_plan(plan, load_profile(_TEMPLATES_DIR / "posthog-snake-case.yaml"))
+    assert segment["summary"] == {"events": 15, "pass": 7, "flag": 3, "fail": 5}
+    assert posthog["summary"] == {"events": 15, "pass": 0, "flag": 1, "fail": 14}
 
 
 def test_empty_plan():

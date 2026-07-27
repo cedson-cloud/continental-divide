@@ -1,0 +1,85 @@
+{
+  "source": "sample-vendor-export",
+  "events": [
+    {
+      "name": "Product Added",
+      "category": "Browsing",
+      "properties": [
+        { "name": "product_id", "type": "string" },
+        { "name": "price", "type": "number" }
+      ]
+    },
+    {
+      "name": "Product Removed",
+      "category": "Browsing",
+      "properties": [{ "name": "product_id", "type": "string" }]
+    },
+    {
+      "name": "Order Completed",
+      "category": "Ordering",
+      "properties": [
+        { "name": "order_id", "type": "string" },
+        { "name": "total", "type": "number" }
+      ]
+    },
+    {
+      "name": "Order Completed",
+      "category": "Ordering",
+      "properties": [{ "name": "order_id", "type": "string" }]
+    },
+    {
+      "name": "addToCart",
+      "category": "Browsing",
+      "properties": [{ "name": "productId", "type": "string" }]
+    },
+    {
+      "name": "checkout started",
+      "category": "Ordering",
+      "properties": [{ "name": "cart_id", "type": "string" }]
+    },
+    {
+      "name": "user_signed_up",
+      "category": "Accounts",
+      "properties": [{ "name": "plan", "type": "string" }]
+    },
+    {
+      "name": "userSignedUp",
+      "category": "Accounts",
+      "properties": []
+    },
+    {
+      "name": "Signup Completed",
+      "category": "Accounts",
+      "properties": [{ "name": "referrer", "type": "string" }]
+    },
+    {
+      "name": "Registration Finished",
+      "category": "Accounts",
+      "properties": []
+    },
+    {
+      "name": "Account Created",
+      "category": "Accounts",
+      "properties": [{ "name": "account_id", "type": "string" }]
+    },
+    {
+      "name": "Newsletter Subscribed",
+      "category": "Marketing",
+      "properties": [{ "name": "email", "type": "string" }]
+    },
+    {
+      "category": "Ordering",
+      "properties": [{ "name": "order_id", "type": "string" }]
+    },
+    {
+      "name": "Coupon Applied",
+      "category": 3,
+      "properties": [{ "name": "coupon_code", "type": "string" }]
+    },
+    {
+      "name": "Order Shipped",
+      "category": "Ordering",
+      "properties": [{ "name": "shipped_at", "type": "datetime" }]
+    }
+  ]
+}
