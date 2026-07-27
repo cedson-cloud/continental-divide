@@ -23,6 +23,7 @@ Working roadmap for the build. Keep this clean: it travels with the repo, and th
 - [ ] **"Not sure" on client vs. server.** Route the question to the approver rather than forcing a guess at intake.
 - [ ] **A `why` on every event request.** Purpose, business value, and where it fires. Segment's own tracking-plan guidance asks for this, and it is what makes the catalog useful to someone who did not submit the event.
 - [ ] **Support identify, page, and screen calls.** EventDefinition is track-shaped and rules.py enforces a track event-naming convention; traits and page calls need their own shapes and their own rules. The intake UI was narrowed to track rather than advertise support that does not exist.
+- [ ] **`interpreter.py` ignores the active profile.** Its system prompt takes categories from `known_categories()` (the sample plan, not the profile) and hardcodes "Object Action, Title Case" in prose. Under a snake_case profile the model is told to draft names the rules then reject. `/requests/raw` bypasses the model, which is why the profile-switch test passes. The natural-language path does not yet enforce the active profile.
 
 ## Later
 

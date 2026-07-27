@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 
 from app.governance import DEFAULT_PROFILE
+from app.rules import known_categories
 
 CLEAN_EXAMPLE = Path(__file__).parents[1] / "examples" / "clean_cart_cleared.json"
 TEMPLATES_DIR = Path(__file__).parents[2] / "governance" / "templates"
@@ -34,11 +35,13 @@ def test_governance_profile_endpoint_shape(client):
         "pii",
         "categories",
         "destinations",
+        "examples",
     }
     assert data["name"] == "segment-ecommerce"
     assert data["event_naming"]["convention"] == "title_case_object_action"
     assert data["property_naming"]["convention"] == "snake_case"
     assert "email" in data["pii"]["blocklist"]
+    assert set(data["categories"]) == {"values", "source"}
     assert data["destinations"] == [
         "warehouse",
         "product_analytics",
@@ -48,6 +51,48 @@ def test_governance_profile_endpoint_shape(client):
     ]
     # Profile contents only: no file paths, no extends chain.
     assert "extends" not in data
+
+
+def test_categories_fall_back_to_the_sample_plan(client):
+    # The segment template declares no categories, so the sample plan supplies them.
+    data = client.get("/governance/profile").json()
+    assert data["categories"]["source"] == "sample_plan"
+    assert data["categories"]["values"] == sorted(known_categories())
+
+
+def test_declared_categories_come_from_the_profile(client, monkeypatch, tmp_path):
+    profile = tmp_path / "with-categories.yaml"
+    profile.write_text(
+        f"extends: {TEMPLATES_DIR / 'segment-ecommerce.yaml'}\n"
+        "categories: [Checkout, Browsing]\n"
+    )
+    monkeypatch.setattr("app.governance._ACTIVE_PROFILE_PATH", profile)
+
+    data = client.get("/governance/profile").json()
+    assert data["categories"] == {
+        "values": ["Browsing", "Checkout"],
+        "source": "profile",
+    }
+
+
+def test_example_verdicts_flip_with_the_active_profile(client, monkeypatch):
+    def examples_for(template):
+        monkeypatch.setattr(
+            "app.governance._ACTIVE_PROFILE_PATH", TEMPLATES_DIR / template
+        )
+        data = client.get("/governance/profile").json()
+        return {e["name"]: e for e in data["examples"]}
+
+    for template, passing, failing in (
+        ("segment-ecommerce.yaml", "Cart Cleared", "cart_cleared"),
+        ("posthog-snake-case.yaml", "cart_cleared", "Cart Cleared"),
+    ):
+        examples = examples_for(template)
+        assert examples[passing]["passes"] is True
+        assert examples[failing]["passes"] is False
+        # A reason exists exactly when the name fails.
+        for example in examples.values():
+            assert (example["reason"] is None) == example["passes"]
 
 
 def test_valid_destinations_are_accepted_and_stored(client):
@@ -141,3 +186,33 @@ def test_business_value_is_required(client):
         client.post("/requests/raw", json=_raw_body(business_value="")).status_code
         == 422
     )
+
+
+def test_category_check_detail_wording_is_pinned(client, monkeypatch, tmp_path):
+    """These strings land in the append-only audit log and render on the request
+    detail page, so their wording is a contract, not an implementation detail.
+    Both branches of the profile/sample-plan mapping are pinned."""
+
+    def category_detail():
+        request_id = client.post("/requests/raw", json=_raw_body()).json()["id"]
+        detail = client.get(f"/requests/{request_id}").json()
+        entry = next(e for e in detail["audit_log"] if e["step"] == "rules_evaluated")
+        return next(c for c in entry["detail"]["checks"] if c["rule"] == "category")
+
+    # The active profile declares no categories, so the sample plan supplies them.
+    assert category_detail()["detail"] == "category is in the tracking plan"
+
+    # A profile that declares them names the profile instead. CLEAN_EXAMPLE's
+    # category is not in this list, so this also pins the failure wording.
+    profile = tmp_path / "with-categories.yaml"
+    profile.write_text(
+        f"extends: {TEMPLATES_DIR / 'segment-ecommerce.yaml'}\n"
+        "categories: [Checkout, Browsing]\n"
+    )
+    monkeypatch.setattr("app.governance._ACTIVE_PROFILE_PATH", profile)
+    check = category_detail()
+    assert check["passed"] is False
+    assert check["detail"] == (
+        "category 'Core Ordering' is not in the governance profile"
+    )
+    

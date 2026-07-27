@@ -12,7 +12,12 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from .config import get_settings
-from .governance import GovernanceError, GovernanceProfile, load_active_profile
+from .governance import (
+    EXAMPLE_EVENT_NAMES,
+    GovernanceError,
+    GovernanceProfile,
+    load_active_profile,
+)
 from .pipeline import (
     IntakeModelError,
     InvalidTransition,
@@ -24,6 +29,7 @@ from .pipeline import (
 )
 from .publisher import get_publisher
 from .rate_limit import RateLimiter
+from .rules import effective_categories, event_name_error
 from .storage import get_storage
 
 router = APIRouter()
@@ -118,14 +124,27 @@ def _validate_destinations(destinations: list[str], profile: GovernanceProfile) 
 def governance_profile() -> dict:
     """The loaded active profile — contents only, never the file path."""
     profile = _active_profile()
+    naming = profile.event_naming
+    examples = []
+    for name in EXAMPLE_EVENT_NAMES:
+        reason = event_name_error(
+            name,
+            convention=naming.convention,
+            connectors=naming.connectors,
+            particles=naming.particles,
+            irregular_past=naming.irregular_past,
+        )
+        examples.append({"name": name, "passes": reason is None, "reason": reason})
+    values, source = effective_categories(profile)
     return {
         "name": profile.name,
         "source": profile.source,
-        "event_naming": profile.event_naming.model_dump(),
+        "event_naming": naming.model_dump(),
         "property_naming": profile.property_naming.model_dump(),
         "pii": profile.pii.model_dump(),
-        "categories": profile.categories,
+        "categories": {"values": sorted(values), "source": source},
         "destinations": profile.destinations,
+        "examples": examples,
     }
 
 

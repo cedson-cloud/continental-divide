@@ -65,6 +65,15 @@ def known_categories() -> frozenset:
     return frozenset(load_plan()["categories"].keys())
 
 
+def effective_categories(profile: "GovernanceProfile") -> tuple[frozenset[str], str]:
+    """The categories a definition is actually checked against, and where they
+    came from: "profile" or "sample_plan". A profile that declares categories
+    constrains to them; an empty list falls back to the sample tracking plan."""
+    if profile.categories:
+        return frozenset(profile.categories), "profile"
+    return known_categories(), "sample_plan"
+
+
 @lru_cache
 def known_event_names() -> frozenset:
     plan = load_plan()
@@ -242,12 +251,11 @@ def evaluate(
         )
     )
 
-    # A profile with categories constrains to them; an empty list falls back to
-    # the sample plan, preserving the pre-profile behavior.
-    if profile.categories:
-        allowed_categories, category_source = set(profile.categories), "the governance profile"
-    else:
-        allowed_categories, category_source = known_categories(), "the tracking plan"
+    allowed_categories, category_source_key = effective_categories(profile)
+    category_source = (
+        "the governance profile" if category_source_key == "profile"
+        else "the tracking plan"
+    )
     category_ok = event.category in allowed_categories
     checks.append(
         RuleCheck(

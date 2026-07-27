@@ -75,6 +75,12 @@ export type RequestDetail = {
   audit_log: AuditEntry[];
 };
 
+export type GovernanceExample = {
+  name: string;
+  passes: boolean;
+  reason: string | null;
+};
+
 export type GovernanceProfileInfo = {
   name: string;
   source: string | null;
@@ -86,8 +92,9 @@ export type GovernanceProfileInfo = {
   };
   property_naming: { convention: string };
   pii: { mode: string; blocklist: string[] };
-  categories: string[];
+  categories: { values: string[]; source: "profile" | "sample_plan" };
   destinations: string[];
+  examples: GovernanceExample[];
 };
 
 export class ApiError extends Error {

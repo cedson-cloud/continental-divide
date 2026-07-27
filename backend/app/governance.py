@@ -82,6 +82,22 @@ DEFAULT_PROFILE = GovernanceProfile(
 )
 
 
+# Fixed, illustrative names rendered on /admin. The same list runs under whatever
+# convention is active, so the verdicts flip when the profile changes. These are
+# not events in any plan.
+EXAMPLE_EVENT_NAMES = [
+    "Cart Cleared",
+    "cart_cleared",
+    "Product Added to Wishlist",
+    "product_added_to_wishlist",
+    "Newsletter Signed Up",
+    "SKU Added",
+    "Add to Cart",   # was "Add To Cart" — now fails on TENSE under Title Case
+    "add_to_cart",   # new — fails on TENSE under snake_case
+    "checkout",      # was "Checkout" — fails on word/token count under BOTH
+]
+
+
 def _read_yaml(path: Path) -> dict:
     try:
         text = path.read_text()
