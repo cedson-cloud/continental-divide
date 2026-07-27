@@ -17,6 +17,7 @@ from typing import Callable, Optional, Tuple
 
 from pydantic import ValidationError
 
+from .governance import GovernanceProfile, load_active_profile
 from .interpreter import Interpretation, InterpreterError, interpret
 from .models import Decision, EventDefinition
 from .notion_publisher import push_request
@@ -60,10 +61,12 @@ def _route(
     parsed: Optional[EventDefinition],
     parse_errors: Optional[list],
     storage: Storage,
+    profile: Optional[GovernanceProfile] = None,
 ) -> None:
     """Write the schema -> rules -> routed tail of the audit trail and set the final
     status. The request row and the entries that precede ``schema_parsed`` are written
-    by the caller."""
+    by the caller. ``profile`` is the governance profile to evaluate under; ``None``
+    resolves to the active profile so offline callers enforce the same rules."""
     if parsed is None:
         storage.add_audit_entry(request_id, "schema_rejected", {"errors": parse_errors})
         storage.update_request_status(request_id, Decision.rejected.value)
@@ -84,12 +87,15 @@ def _route(
         },
     )
 
-    evaluation = evaluate(parsed)
+    if profile is None:
+        profile = load_active_profile()
+    evaluation = evaluate(parsed, profile)
     storage.set_pii_flags(request_id, evaluation.pii_flagged, evaluation.pii_details)
     storage.add_audit_entry(
         request_id,
         "rules_evaluated",
         {
+            "profile": profile.name,
             "checks": [c.model_dump() for c in evaluation.checks],
             "flags": evaluation.flags,
             "pii_flagged": evaluation.pii_flagged,
@@ -141,6 +147,7 @@ def interpret_intake(
     request_kind: Optional[str] = None,
     existing_event: Optional[str] = None,
     destinations: Optional[list] = None,
+    profile: Optional[GovernanceProfile] = None,
 ) -> int:
     """Draft a definition from natural-language text, then run the existing flow.
 
@@ -209,7 +216,7 @@ def interpret_intake(
     parsed, parse_errors = _parse(result.proposed_definition)
     if parsed is not None:
         storage.set_parsed_definition(request_id, parsed.model_dump(), parsed.category)
-    _route(request_id, parsed, parse_errors, storage)
+    _route(request_id, parsed, parse_errors, storage, profile)
     _push_if_pending(request_id, storage)
     return request_id
 
@@ -227,6 +234,7 @@ def ingest_raw_definition(
     request_kind: Optional[str] = None,
     existing_event: Optional[str] = None,
     destinations: Optional[list] = None,
+    profile: Optional[GovernanceProfile] = None,
 ) -> int:
     """Route a pre-built definition that skips the model, for demos where a faithful
     model would not author the violation under test (a malformed name, a duplicate).
@@ -268,7 +276,7 @@ def ingest_raw_definition(
     parsed, parse_errors = _parse(candidate_definition)
     if parsed is not None:
         storage.set_parsed_definition(request_id, parsed.model_dump(), parsed.category)
-    _route(request_id, parsed, parse_errors, storage)
+    _route(request_id, parsed, parse_errors, storage, profile)
     _push_if_pending(request_id, storage)
     return request_id
 

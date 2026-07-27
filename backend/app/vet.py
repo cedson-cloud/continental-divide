@@ -29,12 +29,15 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-from .governance import DEFAULT_PROFILE, GovernanceError, GovernanceProfile, load_profile
+from .governance import (
+    DEFAULT_PROFILE,
+    GovernanceError,
+    GovernanceProfile,
+    load_active_profile,
+    load_profile,
+)
 from .models import PropertyType
 from .rules import event_name_error, pii_hit, property_name_error
-
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-_ACTIVE_PROFILE_PATH = _REPO_ROOT / "governance" / "active.yaml"
 
 _KNOWN_PROPERTY_TYPES = frozenset(t.value for t in PropertyType)
 
@@ -279,10 +282,11 @@ def main(argv: list[str]) -> int:
     try:
         if args.profile:
             profile, origin = load_profile(args.profile), args.profile
-        elif _ACTIVE_PROFILE_PATH.exists():
-            profile, origin = load_profile(_ACTIVE_PROFILE_PATH), str(_ACTIVE_PROFILE_PATH)
         else:
-            profile, origin = DEFAULT_PROFILE, "built-in default"
+            profile = load_active_profile()
+            origin = (
+                "built-in default" if profile is DEFAULT_PROFILE else "active profile"
+            )
     except GovernanceError as exc:
         print(str(exc), file=sys.stderr)
         return 2

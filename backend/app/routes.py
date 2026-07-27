@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from .config import get_settings
-from .governance import GovernanceError, load_active_profile
+from .governance import GovernanceError, GovernanceProfile, load_active_profile
 from .pipeline import (
     IntakeModelError,
     InvalidTransition,
@@ -85,10 +85,22 @@ class IntakeResponse(BaseModel):
     flags: list = Field(default_factory=list)
 
 
-def _validate_destinations(destinations: list[str]) -> None:
-    """Reject destinations outside the active profile's list. An empty profile list
-    means no constraint, matching how categories behave."""
-    allowed = load_active_profile().destinations
+def _active_profile() -> GovernanceProfile:
+    """Load the enforced profile, mapping a bad profile file to a clean 500. The
+    message deliberately names no file path and nothing from settings."""
+    try:
+        return load_active_profile()
+    except GovernanceError:
+        raise HTTPException(
+            status_code=500,
+            detail="the active governance profile could not be loaded",
+        )
+
+
+def _validate_destinations(destinations: list[str], profile: GovernanceProfile) -> None:
+    """Reject destinations outside the profile's list. An empty profile list means
+    no constraint, matching how categories behave."""
+    allowed = profile.destinations
     if not allowed or not destinations:
         return
     unknown = sorted(set(destinations) - set(allowed))
@@ -105,10 +117,7 @@ def _validate_destinations(destinations: list[str]) -> None:
 @router.get("/governance/profile")
 def governance_profile() -> dict:
     """The loaded active profile — contents only, never the file path."""
-    try:
-        profile = load_active_profile()
-    except GovernanceError:
-        raise HTTPException(status_code=500, detail="governance profile failed to load")
+    profile = _active_profile()
     return {
         "name": profile.name,
         "source": profile.source,
@@ -132,7 +141,8 @@ def create_request(body: IntakeBody, request: Request) -> IntakeResponse:
             detail=f"raw_intake_text exceeds MAX_INTAKE_CHARS ({_settings.max_intake_chars})",
         )
 
-    _validate_destinations(body.destinations)
+    profile = _active_profile()
+    _validate_destinations(body.destinations, profile)
     storage = get_storage()
     try:
         request_id = interpret_intake(
@@ -147,6 +157,7 @@ def create_request(body: IntakeBody, request: Request) -> IntakeResponse:
             request_kind=body.request_kind,
             existing_event=body.existing_event,
             destinations=body.destinations,
+            profile=profile,
         )
     except IntakeModelError as exc:
         raise HTTPException(
@@ -165,7 +176,8 @@ def create_request_raw(body: RawIntakeBody) -> IntakeResponse:
         or body.definition.get("name")
         or "raw definition"
     )
-    _validate_destinations(body.destinations)
+    profile = _active_profile()
+    _validate_destinations(body.destinations, profile)
     storage = get_storage()
     request_id = ingest_raw_definition(
         raw_intake_text,
@@ -180,6 +192,7 @@ def create_request_raw(body: RawIntakeBody) -> IntakeResponse:
         request_kind=body.request_kind,
         existing_event=body.existing_event,
         destinations=body.destinations,
+        profile=profile,
     )
     return _intake_response(storage, request_id)
 

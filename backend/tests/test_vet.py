@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from app.governance import load_profile
-from app.vet import vet_plan
+from app.vet import main, vet_plan
 
 _REPO_ROOT = Path(__file__).parents[2]
 _SAMPLE_PLAN_PATH = _REPO_ROOT / "backend" / "examples" / "vet_sample_plan.json"
@@ -197,6 +197,24 @@ def test_sample_plan_counts_are_pinned_under_both_templates():
     posthog = vet_plan(plan, load_profile(_TEMPLATES_DIR / "posthog-snake-case.yaml"))
     assert segment["summary"] == {"events": 15, "pass": 7, "flag": 3, "fail": 5}
     assert posthog["summary"] == {"events": 15, "pass": 0, "flag": 1, "fail": 14}
+
+
+def test_cli_resolves_the_active_profile(tmp_path, capsys):
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(json.dumps({"source": "t", "events": []}))
+    assert main([str(plan_path)]) == 0
+    captured = capsys.readouterr()
+    # The repo's active.yaml resolves to the Segment template via the shared helper.
+    assert "governance profile: segment-ecommerce (active profile)" in captured.err
+    assert json.loads(captured.out)["profile"] == "segment-ecommerce"
+
+
+def test_cli_exits_2_on_a_bad_profile(tmp_path, capsys):
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(json.dumps({"source": "t", "events": []}))
+    missing = tmp_path / "missing.yaml"
+    assert main([str(plan_path), "--profile", str(missing)]) == 2
+    assert "not found" in capsys.readouterr().err
 
 
 def test_empty_plan():

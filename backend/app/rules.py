@@ -16,8 +16,12 @@ import re
 from collections.abc import Collection
 from functools import lru_cache
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .models import Decision, Evaluation, EventDefinition, RuleCheck
+
+if TYPE_CHECKING:
+    from .governance import GovernanceProfile
 
 _PLAN_PATH = Path(__file__).with_name("sample_tracking_plan.json")
 
@@ -199,7 +203,9 @@ def pii_hit(
 
 # --- evaluation ------------------------------------------------------------------
 
-def evaluate(event: EventDefinition) -> Evaluation:
+def evaluate(
+    event: EventDefinition, profile: "GovernanceProfile | None" = None
+) -> Evaluation:
     """Run all deterministic rules over a parsed definition and return a decision.
 
     Returns a structured per-rule report. A failure on a hard rule (naming, category,
@@ -207,46 +213,77 @@ def evaluate(event: EventDefinition) -> Evaluation:
     routes to approval, where a human must acknowledge the PII before approving. A clean
     definition whose name already exists in the plan is flagged as a duplicate and routed
     to approval. A clean, novel definition is routed to approval as ``pending_approval``.
+
+    ``profile`` configures the rules; ``None`` resolves to ``DEFAULT_PROFILE``, which
+    reproduces the constants above. (The default is ``None`` rather than the profile
+    object itself because ``governance`` imports this module's constants — importing
+    it back at module level would be circular.)
     """
+    from .governance import DEFAULT_PROFILE
+
+    if profile is None:
+        profile = DEFAULT_PROFILE
+
     checks = []
 
-    name_err = event_name_error(event.name)
+    naming = profile.event_naming
+    name_err = event_name_error(
+        event.name,
+        convention=naming.convention,
+        connectors=naming.connectors,
+        particles=naming.particles,
+        irregular_past=naming.irregular_past,
+    )
     checks.append(
         RuleCheck(
             rule="event_naming",
             passed=name_err is None,
-            detail=name_err or "valid Object Action, Title Case name",
+            detail=name_err or f"valid name under {naming.convention}",
         )
     )
 
-    category_ok = event.category in known_categories()
+    # A profile with categories constrains to them; an empty list falls back to
+    # the sample plan, preserving the pre-profile behavior.
+    if profile.categories:
+        allowed_categories, category_source = set(profile.categories), "the governance profile"
+    else:
+        allowed_categories, category_source = known_categories(), "the tracking plan"
+    category_ok = event.category in allowed_categories
     checks.append(
         RuleCheck(
             rule="category",
             passed=category_ok,
             detail=(
-                "category is in the tracking plan"
+                f"category is in {category_source}"
                 if category_ok
-                else f"category '{event.category}' is not in the tracking plan"
+                else f"category '{event.category}' is not in {category_source}"
             ),
         )
     )
 
-    bad_props = [p.name for p in event.properties if property_name_error(p.name)]
+    prop_convention = profile.property_naming.convention
+    bad_props = [
+        p.name
+        for p in event.properties
+        if property_name_error(p.name, convention=prop_convention)
+    ]
     checks.append(
         RuleCheck(
             rule="property_naming",
             passed=not bad_props,
             detail=(
-                "all property names are snake_case"
+                f"all property names are {prop_convention}"
                 if not bad_props
-                else f"not snake_case: {', '.join(bad_props)}"
+                else f"not {prop_convention}: {', '.join(bad_props)}"
             ),
         )
     )
 
+    blocklist = profile.pii.blocklist
     pii_hits = [
-        f"{p.name} -> {pii_hit(p.name)}" for p in event.properties if pii_hit(p.name)
+        f"{p.name} -> {pii_hit(p.name, blocklist=blocklist)}"
+        for p in event.properties
+        if pii_hit(p.name, blocklist=blocklist)
     ]
     pii_flagged = bool(pii_hits)
     pii_details = "; ".join(pii_hits)
