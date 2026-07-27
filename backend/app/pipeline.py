@@ -137,7 +137,7 @@ def _push_if_pending(request_id: int, storage: Storage) -> None:
 def interpret_intake(
     raw_intake_text: str,
     storage: Storage,
-    interpret_fn: Callable[[str], Interpretation] = interpret,
+    interpret_fn: Callable[..., Interpretation] = interpret,
     submitter_name: Optional[str] = None,
     submitter_team: Optional[str] = None,
     call_type: Optional[str] = None,
@@ -184,8 +184,19 @@ def interpret_intake(
         },
     )
 
+    # Resolve once so the profile that drafts and the profile that evaluates are
+    # the same object, not two independent reads of a file that can change.
+    if profile is None:
+        profile = load_active_profile()
+
     try:
-        result = interpret_fn(raw_intake_text)
+        result = interpret_fn(
+            raw_intake_text,
+            profile=profile,
+            business_value=business_value,
+            request_kind=request_kind,
+            existing_event=existing_event,
+        )
     except InterpreterError as exc:
         storage.add_audit_entry(
             request_id, "model_error", {"model": exc.model, "reason": str(exc)}
@@ -203,6 +214,7 @@ def interpret_intake(
         "model_interpreted",
         {
             "model": result.model,
+            "profile": profile.name,
             "proposed_definition": result.proposed_definition,
             **({} if result.proposed_definition is not None
                else {"raw_response": result.raw_response, "parse_error": result.parse_error}),
@@ -210,7 +222,13 @@ def interpret_intake(
     )
 
     if result.proposed_definition is None:
-        _route(request_id, None, [{"source": "model_output", "msg": result.parse_error}], storage)
+        _route(
+            request_id,
+            None,
+            [{"source": "model_output", "msg": result.parse_error}],
+            storage,
+            profile,
+        )
         return request_id
 
     parsed, parse_errors = _parse(result.proposed_definition)

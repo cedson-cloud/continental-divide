@@ -7,17 +7,20 @@ code exercised here is identical to the HTTP route's.
 """
 
 import json
+from pathlib import Path
 
 import pytest
 
+from app.governance import load_profile
 from app.interpreter import Interpretation
 from app.pipeline import PiiAcknowledgmentRequired, decide, interpret_intake
 from app.publisher import get_publisher
 
 MODEL = "claude-sonnet-4-6"
+TEMPLATES = Path(__file__).resolve().parents[2] / "governance" / "templates"
 
 
-def stub_cart(_raw: str) -> Interpretation:
+def stub_cart(_raw: str, **_) -> Interpretation:
     definition = {
         "name": "Cart Cleared",
         "category": "Core Ordering",
@@ -27,7 +30,7 @@ def stub_cart(_raw: str) -> Interpretation:
     return Interpretation(MODEL, definition, json.dumps(definition), None)
 
 
-def stub_newsletter(_raw: str) -> Interpretation:
+def stub_newsletter(_raw: str, **_) -> Interpretation:
     definition = {
         "name": "Newsletter Subscribed",
         "category": "Core Ordering",
@@ -95,3 +98,17 @@ def test_pii_intake_is_flagged_and_gated_on_acknowledgment(storage):
     request = storage.get_request(rid)
     assert request["status"] == "published"
     assert "pii_acknowledged" in _steps(storage, rid)
+
+
+def test_drafting_and_evaluation_record_the_same_profile(storage):
+    profile = load_profile(TEMPLATES / "segment-ecommerce.yaml")
+    rid = interpret_intake(
+        "track when a shopper empties their entire cart",
+        storage,
+        interpret_fn=stub_cart,
+        profile=profile,
+    )
+
+    entries = {entry["step"]: entry["detail"] for entry in storage.get_audit_log(rid)}
+    assert entries["model_interpreted"]["profile"] == "segment-ecommerce"
+    assert entries["model_interpreted"]["profile"] == entries["rules_evaluated"]["profile"]

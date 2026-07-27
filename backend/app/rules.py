@@ -86,6 +86,28 @@ def known_event_names() -> frozenset:
 
 # --- naming convention -----------------------------------------------------------
 
+# One-sentence descriptions of the name shape only, for prompt assembly. Connector
+# words, particles, and irregular verbs come from the governance profile and are
+# injected separately — never bake specific words in here.
+_CONVENTION_DESCRIPTIONS: dict[str, str] = {
+    "title_case_object_action": (
+        "Object Action in Title Case — two or more words, single-spaced, each word "
+        "capitalized (all-caps acronyms allowed), ending in a past-tense action verb."
+    ),
+    "snake_case_object_action": (
+        "object_action in lowercase snake_case — two or more underscore-separated "
+        "tokens, all lowercase, ending in a past-tense action verb."
+    ),
+}
+
+
+def convention_description(convention: str) -> str:
+    try:
+        return _CONVENTION_DESCRIPTIONS[convention]
+    except KeyError:
+        raise ValueError(f"unknown event naming convention '{convention}'") from None
+
+
 def _is_past_tense(word: str, irregular_past: Collection[str]) -> bool:
     return word.endswith("ed") or word.lower() in irregular_past
 
