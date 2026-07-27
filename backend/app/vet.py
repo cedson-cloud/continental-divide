@@ -21,6 +21,7 @@ Usage: python -m app.vet <plan.json>
 
 from __future__ import annotations
 
+import argparse
 import difflib
 import json
 import re
@@ -28,8 +29,12 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+from .governance import DEFAULT_PROFILE, GovernanceError, GovernanceProfile, load_profile
 from .models import PropertyType
 from .rules import event_name_error, pii_hit, property_name_error
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_ACTIVE_PROFILE_PATH = _REPO_ROOT / "governance" / "active.yaml"
 
 _KNOWN_PROPERTY_TYPES = frozenset(t.value for t in PropertyType)
 
@@ -46,7 +51,7 @@ _RULES_SOURCE = {
 
 # --- per-event checks ------------------------------------------------------------
 
-def _vet_event(event: dict, index: int) -> dict:
+def _vet_event(event: dict, index: int, profile: GovernanceProfile) -> dict:
     """Per-event checks. ``structure`` separates malformed input from convention
     violations: an unusable event or property name fails ``structure`` and skips
     the convention checks, which cannot apply to a name that isn't there."""
@@ -80,6 +85,13 @@ def _vet_event(event: dict, index: int) -> dict:
             }
         )
         category = None
+    if profile.categories and category and category not in profile.categories:
+        notes.append(
+            {
+                "severity": "low",
+                "note": f"category '{category}' is not in the governance profile's categories",
+            }
+        )
 
     properties = [p for p in (event.get("properties") or []) if isinstance(p, dict)]
 
@@ -92,9 +104,9 @@ def _vet_event(event: dict, index: int) -> dict:
                 f"property at index {prop_index} has a missing or empty name"
             )
             continue
-        if property_name_error(prop_name):
+        if property_name_error(prop_name, convention=profile.property_naming.convention):
             bad_props.append(prop_name)
-        hit = pii_hit(prop_name)
+        hit = pii_hit(prop_name, blocklist=profile.pii.blocklist)
         if hit:
             pii_hits.append(f"{prop_name} -> {hit}")
         prop_type = prop.get("type")
@@ -114,12 +126,19 @@ def _vet_event(event: dict, index: int) -> dict:
         }
     ]
     if name is not None:
-        name_err = event_name_error(name)
+        naming = profile.event_naming
+        name_err = event_name_error(
+            name,
+            convention=naming.convention,
+            connectors=naming.connectors,
+            particles=naming.particles,
+            irregular_past=naming.irregular_past,
+        )
         checks.append(
             {
                 "rule": "event_naming",
                 "passed": name_err is None,
-                "detail": name_err or "valid Object Action, Title Case name",
+                "detail": name_err or f"valid name under {naming.convention}",
             }
         )
 
@@ -194,15 +213,16 @@ def _category_notes(reports: list[dict]) -> dict:
 
 # --- vetting ---------------------------------------------------------------------
 
-def vet_plan(plan: dict) -> dict:
+def vet_plan(plan: dict, profile: GovernanceProfile = DEFAULT_PROFILE) -> dict:
     """Run every event through the reused per-name rules, then the plan-scope checks.
 
     Verdict per event: "fail" if structure, event naming, or property naming failed,
     else "flag" if PII was hit or the name is touched by a duplicate check, else
-    "pass". PII flags but never rejects, matching ``evaluate()``.
+    "pass". PII flags but never rejects, matching ``evaluate()``. With no profile,
+    the built-in default reproduces the intake pipeline's conventions.
     """
     reports = [
-        _vet_event(event, index)
+        _vet_event(event, index, profile)
         for index, event in enumerate(plan.get("events") or [])
         if isinstance(event, dict)
     ]
@@ -231,6 +251,7 @@ def vet_plan(plan: dict) -> dict:
 
     return {
         "source": plan.get("source"),
+        "profile": profile.name,
         "rules_source": _RULES_SOURCE,
         "events": reports,
         "plan_checks": {
@@ -242,11 +263,26 @@ def vet_plan(plan: dict) -> dict:
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) != 1:
-        print("usage: python -m app.vet <plan.json>", file=sys.stderr)
+    parser = argparse.ArgumentParser(prog="python -m app.vet")
+    parser.add_argument("plan", help="path to a plan JSON file")
+    parser.add_argument("--profile", help="path to a governance profile YAML")
+    args = parser.parse_args(argv)
+
+    try:
+        if args.profile:
+            profile, origin = load_profile(args.profile), args.profile
+        elif _ACTIVE_PROFILE_PATH.exists():
+            profile, origin = load_profile(_ACTIVE_PROFILE_PATH), str(_ACTIVE_PROFILE_PATH)
+        else:
+            profile, origin = DEFAULT_PROFILE, "built-in default"
+    except GovernanceError as exc:
+        print(str(exc), file=sys.stderr)
         return 2
-    plan = json.loads(Path(argv[0]).read_text())
-    print(json.dumps(vet_plan(plan), indent=2))
+
+    # A run is never ambiguous about what it enforced.
+    print(f"governance profile: {profile.name} ({origin})", file=sys.stderr)
+    plan = json.loads(Path(args.plan).read_text())
+    print(json.dumps(vet_plan(plan, profile), indent=2))
     return 0
 
 

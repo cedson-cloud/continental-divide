@@ -1,0 +1,3 @@
+# The profile `python -m app.vet` enforces when no --profile is given.
+# Point extends at a different template to change conventions.
+extends: templates/segment-ecommerce.yaml

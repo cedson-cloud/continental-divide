@@ -1,0 +1,30 @@
+# Segment-style governance: Object Action event names in Title Case, snake_case
+# properties, PII flagged for human acknowledgment. This is the convention the
+# intake pipeline enforces; it is the baseline other profiles extend.
+version: 1
+name: segment-ecommerce
+source: https://segment.com/docs/protocols/tracking-plan/best-practices/
+
+event_naming:
+  convention: title_case_object_action
+  # Lowercase words allowed mid-name: "Product Added to Wishlist".
+  connectors: [to, from]
+  # Phrasal-verb particles; quoted because bare On/Off are YAML booleans.
+  particles: ["Up", "In", "Out", "On", "Off", "Down"]
+  # Past-tense verbs that don't end in "ed".
+  irregular_past:
+    [made, sent, paid, bought, sold, found, lost, left, kept, built, began,
+     chose, won, set, put, read, cut, hit, split, spent, held, told, dealt,
+     shown, drawn, given]
+
+property_naming:
+  convention: snake_case
+
+pii:
+  mode: flag  # flag for human acknowledgment; "block" is reserved, not implemented
+  blocklist:
+    [email, phone, ssn, social_security, dob, date_of_birth, address, full_name,
+     first_name, last_name, credit_card, card_number, password, ip_address]
+
+# Informational: vetting notes categories outside this list. Empty = no notes.
+categories: []

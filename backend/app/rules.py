@@ -3,12 +3,17 @@
 These run on a parsed :class:`EventDefinition` (see ``models.py``). They are pure,
 non-LLM checks: event-name convention, property-name convention, PII blocklist,
 category membership, and duplicate detection against the sample tracking plan.
+
+The three name-level checks take keyword-only overrides so a governance profile
+(see ``governance.py``) can reconfigure them; the defaults reproduce the built-in
+convention, so existing callers are unaffected.
 """
 
 from __future__ import annotations
 
 import json
 import re
+from collections.abc import Collection
 from functools import lru_cache
 from pathlib import Path
 
@@ -68,20 +73,44 @@ def known_event_names() -> frozenset:
 
 # --- naming convention -----------------------------------------------------------
 
-def _is_past_tense(word: str) -> bool:
-    return word.endswith("ed") or word.lower() in _IRREGULAR_PAST
+def _is_past_tense(word: str, irregular_past: Collection[str]) -> bool:
+    return word.endswith("ed") or word.lower() in irregular_past
 
 
-def event_name_error(name: str) -> str | None:
-    """Return an error message if ``name`` is not a valid Object Action, Title Case
-    event name, else ``None``.
+def event_name_error(
+    name: str,
+    *,
+    convention: str = "title_case_object_action",
+    connectors: Collection[str] = _CONNECTORS,
+    particles: Collection[str] = _PARTICLES,
+    irregular_past: Collection[str] = _IRREGULAR_PAST,
+) -> str | None:
+    """Return an error message if ``name`` violates the event naming convention,
+    else ``None``. The defaults reproduce the built-in Title Case convention; a
+    governance profile can swap the convention and the word lists.
 
-    Valid: two or more Title-Case words, single-spaced, with the action verb (the word
-    before a ``to``/``from`` connector, or the final word otherwise) in past tense.
-    A phrasal-verb particle ("Newsletter Signed Up") shifts the verb one word left.
-    All-caps acronyms ("SKU Added") count as Title Case words. Connectors are lowercase.
-    Underscores, camelCase, and all-lowercase are rejected.
+    title_case_object_action: two or more Title-Case words, single-spaced, with the
+    action verb (the word before a ``to``/``from`` connector, or the final word
+    otherwise) in past tense. A phrasal-verb particle ("Newsletter Signed Up")
+    shifts the verb one word left. All-caps acronyms ("SKU Added") count as Title
+    Case words. Connectors are lowercase. Underscores, camelCase, and all-lowercase
+    are rejected.
+
+    snake_case_object_action: lowercase snake_case with two or more tokens, same
+    verb, connector, and particle logic applied to lowercase tokens.
     """
+    if convention == "title_case_object_action":
+        return _title_case_error(name, set(connectors), set(particles), set(irregular_past))
+    if convention == "snake_case_object_action":
+        return _snake_case_error(
+            name, set(connectors), {p.lower() for p in particles}, set(irregular_past)
+        )
+    raise ValueError(f"unknown event naming convention '{convention}'")
+
+
+def _title_case_error(
+    name: str, connectors: set, particles: set, irregular_past: set
+) -> str | None:
     if name != name.strip() or "  " in name:
         return "name must be single-spaced with no leading/trailing whitespace"
     if "_" in name:
@@ -92,28 +121,55 @@ def event_name_error(name: str) -> str | None:
         return "name must be at least two words (Object Action)"
 
     for i, word in enumerate(words):
-        if word in _CONNECTORS:
+        if word in connectors:
             if i == 0 or i == len(words) - 1:
                 return f"connector '{word}' cannot start or end the name"
             continue
-        if word.lower() in _CONNECTORS:
+        if word.lower() in connectors:
             return f"connector '{word}' must be lowercase"
         if not _TITLE_WORD.match(word):
             return f"word '{word}' must be Title Case (no camelCase or all-lowercase)"
 
     # The action verb sits just before the first connector, or is the final word.
-    connector_positions = [i for i, w in enumerate(words) if w in _CONNECTORS]
+    connector_positions = [i for i, w in enumerate(words) if w in connectors]
     verb_index = connector_positions[0] - 1 if connector_positions else len(words) - 1
     # A trailing particle shifts the verb one word left: "Newsletter Signed Up".
-    if words[verb_index] in _PARTICLES and verb_index > 0:
+    if words[verb_index] in particles and verb_index > 0:
         verb_index -= 1
     verb = words[verb_index]
-    if not _is_past_tense(verb):
+    if not _is_past_tense(verb, irregular_past):
         return f"action verb '{verb}' must be past tense"
     return None
 
 
-def property_name_error(name: str) -> str | None:
+def _snake_case_error(
+    name: str, connectors: set, particles: set, irregular_past: set
+) -> str | None:
+    if not _SNAKE_CASE.match(name):
+        return "name must be lowercase snake_case (object_action)"
+
+    tokens = name.split("_")
+    if len(tokens) < 2:
+        return "name must be at least two tokens (object_action)"
+
+    connector_positions = [i for i, t in enumerate(tokens) if t in connectors]
+    for i in connector_positions:
+        if i == 0 or i == len(tokens) - 1:
+            return f"connector '{tokens[i]}' cannot start or end the name"
+
+    # Same verb logic as Title Case, on lowercase tokens.
+    verb_index = connector_positions[0] - 1 if connector_positions else len(tokens) - 1
+    if tokens[verb_index] in particles and verb_index > 0:
+        verb_index -= 1
+    verb = tokens[verb_index]
+    if not _is_past_tense(verb, irregular_past):
+        return f"action verb '{verb}' must be past tense"
+    return None
+
+
+def property_name_error(name: str, *, convention: str = "snake_case") -> str | None:
+    if convention != "snake_case":
+        raise ValueError(f"unknown property naming convention '{convention}'")
     if not _SNAKE_CASE.match(name):
         return f"property '{name}' must be snake_case"
     return None
@@ -126,10 +182,12 @@ def _contiguous(sub: list[str], tokens: list[str]) -> bool:
     return any(tokens[i : i + n] == sub for i in range(len(tokens) - n + 1))
 
 
-def pii_hit(property_name: str) -> str | None:
+def pii_hit(
+    property_name: str, *, blocklist: Collection[str] = _PII_BLOCKLIST
+) -> str | None:
     """Return the blocklist entry that ``property_name`` matches, or ``None``."""
     tokens = property_name.split("_")
-    for entry in _PII_BLOCKLIST:
+    for entry in blocklist:
         entry_tokens = entry.split("_")
         if len(entry_tokens) == 1:
             if entry_tokens[0] in tokens:

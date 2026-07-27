@@ -1,0 +1,9 @@
+# PostHog-style snake_case event names: user_signed_up, not "User Signed Up".
+# Everything except the naming convention is inherited from the Segment template.
+version: 1
+name: posthog-snake-case
+source: https://posthog.com/docs/data/events
+extends: segment-ecommerce.yaml
+
+event_naming:
+  convention: snake_case_object_action
