@@ -28,3 +28,8 @@ pii:
 
 # Informational: vetting notes categories outside this list. Empty = no notes.
 categories: []
+
+# Where event data is allowed to be sent. Category-level, vendor-neutral names;
+# empty means no constraint, matching categories.
+destinations:
+  [warehouse, product_analytics, crm, engagement, advertising]

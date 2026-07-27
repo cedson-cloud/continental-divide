@@ -62,6 +62,9 @@ class GovernanceProfile(BaseModel):
     # Informational for now: vetting notes categories outside this list but the
     # intake pipeline's category rule is untouched.
     categories: list[str]
+    # Where event data is allowed to be sent. Empty = no constraint, matching
+    # how categories behave.
+    destinations: list[str] = []
 
 
 DEFAULT_PROFILE = GovernanceProfile(
@@ -124,3 +127,13 @@ def load_profile(path: str | Path) -> GovernanceProfile:
         return GovernanceProfile.model_validate(data)
     except ValidationError as exc:
         raise GovernanceError(f"invalid governance profile {path}: {exc}") from exc
+
+
+_ACTIVE_PROFILE_PATH = Path(__file__).resolve().parents[2] / "governance" / "active.yaml"
+
+
+def load_active_profile() -> GovernanceProfile:
+    """The enforced profile: ``governance/active.yaml`` if present, else the default."""
+    if _ACTIVE_PROFILE_PATH.exists():
+        return load_profile(_ACTIVE_PROFILE_PATH)
+    return DEFAULT_PROFILE

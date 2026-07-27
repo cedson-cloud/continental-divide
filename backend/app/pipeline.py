@@ -136,6 +136,11 @@ def interpret_intake(
     submitter_team: Optional[str] = None,
     call_type: Optional[str] = None,
     side: Optional[str] = None,
+    business_value: Optional[str] = None,
+    needed_by: Optional[str] = None,
+    request_kind: Optional[str] = None,
+    existing_event: Optional[str] = None,
+    destinations: Optional[list] = None,
 ) -> int:
     """Draft a definition from natural-language text, then run the existing flow.
 
@@ -149,6 +154,11 @@ def interpret_intake(
         submitter_team=submitter_team,
         call_type=call_type,
         side=side,
+        business_value=business_value,
+        needed_by=needed_by,
+        request_kind=request_kind,
+        existing_event=existing_event,
+        destinations=destinations,
     )
     storage.add_audit_entry(
         request_id,
@@ -159,6 +169,11 @@ def interpret_intake(
             "submitter_team": submitter_team,
             "call_type": call_type,
             "side": side,
+            "business_value": business_value,
+            "needed_by": needed_by,
+            "request_kind": request_kind,
+            "existing_event": existing_event,
+            "destinations": destinations,
         },
     )
 
@@ -207,6 +222,11 @@ def ingest_raw_definition(
     submitter_team: Optional[str] = None,
     call_type: Optional[str] = None,
     side: Optional[str] = None,
+    business_value: Optional[str] = None,
+    needed_by: Optional[str] = None,
+    request_kind: Optional[str] = None,
+    existing_event: Optional[str] = None,
+    destinations: Optional[list] = None,
 ) -> int:
     """Route a pre-built definition that skips the model, for demos where a faithful
     model would not author the violation under test (a malformed name, a duplicate).
@@ -220,6 +240,11 @@ def ingest_raw_definition(
         submitter_team=submitter_team,
         call_type=call_type,
         side=side,
+        business_value=business_value,
+        needed_by=needed_by,
+        request_kind=request_kind,
+        existing_event=existing_event,
+        destinations=destinations,
     )
     storage.add_audit_entry(
         request_id,
@@ -230,6 +255,11 @@ def ingest_raw_definition(
             "submitter_team": submitter_team,
             "call_type": call_type,
             "side": side,
+            "business_value": business_value,
+            "needed_by": needed_by,
+            "request_kind": request_kind,
+            "existing_event": existing_event,
+            "destinations": destinations,
         },
     )
     storage.add_audit_entry(

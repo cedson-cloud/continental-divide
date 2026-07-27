@@ -64,10 +64,30 @@ export type RequestDetail = {
   status: string;
   pii_flagged: boolean;
   pii_details: string | null;
+  business_value: string | null;
+  needed_by: string | null;
+  request_kind: string | null;
+  existing_event: string | null;
+  destinations: string[] | null;
   published_artifact: PublishArtifact | null;
   created_at: string;
   updated_at: string;
   audit_log: AuditEntry[];
+};
+
+export type GovernanceProfileInfo = {
+  name: string;
+  source: string | null;
+  event_naming: {
+    convention: string;
+    connectors: string[];
+    particles: string[];
+    irregular_past: string[];
+  };
+  property_naming: { convention: string };
+  pii: { mode: string; blocklist: string[] };
+  categories: string[];
+  destinations: string[];
 };
 
 export class ApiError extends Error {
@@ -102,6 +122,11 @@ export type IntakeMeta = {
   submitter_team?: string;
   call_type?: string;
   side?: string;
+  business_value?: string;
+  needed_by?: string | null;
+  request_kind?: "new_event" | "new_property_on_existing";
+  existing_event?: string | null;
+  destinations?: string[];
 };
 
 export function submitIntake(
@@ -117,11 +142,16 @@ export function submitIntake(
 export function submitRawDefinition(
   definition: unknown,
   raw_intake_text?: string,
+  meta: IntakeMeta = {},
 ): Promise<IntakeResult> {
   return request("/requests/raw", {
     method: "POST",
-    body: JSON.stringify({ definition, raw_intake_text }),
+    body: JSON.stringify({ definition, raw_intake_text, ...meta }),
   });
+}
+
+export function getGovernanceProfile(): Promise<GovernanceProfileInfo> {
+  return request("/governance/profile");
 }
 
 export function listRequests(): Promise<QueueItem[]> {

@@ -32,6 +32,11 @@ CREATE TABLE IF NOT EXISTS event_request (
     submitter_team TEXT,
     call_type TEXT,
     side TEXT,
+    business_value TEXT,
+    needed_by TEXT,
+    request_kind TEXT,
+    existing_event TEXT,
+    destinations TEXT,
     published_artifact TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -71,6 +76,11 @@ class Storage(ABC):
         submitter_team: Optional[str] = None,
         call_type: Optional[str] = None,
         side: Optional[str] = None,
+        business_value: Optional[str] = None,
+        needed_by: Optional[str] = None,
+        request_kind: Optional[str] = None,
+        existing_event: Optional[str] = None,
+        destinations: Optional[list] = None,
     ) -> int:
         ...
 
@@ -128,6 +138,20 @@ class SqliteStorage(Storage):
     def _init_db(self) -> None:
         with self._connect() as conn:
             conn.executescript(_SCHEMA)
+            # CREATE TABLE IF NOT EXISTS does not add columns to a database created
+            # before they existed in the schema above.
+            existing = {
+                row[1] for row in conn.execute("PRAGMA table_info(event_request)")
+            }
+            for column in (
+                "business_value",
+                "needed_by",
+                "request_kind",
+                "existing_event",
+                "destinations",
+            ):
+                if column not in existing:
+                    conn.execute(f"ALTER TABLE event_request ADD COLUMN {column} TEXT")
 
     def create_request(
         self,
@@ -139,13 +163,19 @@ class SqliteStorage(Storage):
         submitter_team: Optional[str] = None,
         call_type: Optional[str] = None,
         side: Optional[str] = None,
+        business_value: Optional[str] = None,
+        needed_by: Optional[str] = None,
+        request_kind: Optional[str] = None,
+        existing_event: Optional[str] = None,
+        destinations: Optional[list] = None,
     ) -> int:
         with self._connect() as conn:
             cursor = conn.execute(
                 "INSERT INTO event_request "
                 "(raw_intake_text, parsed_definition, category, status, "
-                "submitter_name, submitter_team, call_type, side) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                "submitter_name, submitter_team, call_type, side, "
+                "business_value, needed_by, request_kind, existing_event, destinations) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     raw_intake_text,
                     json.dumps(parsed_definition) if parsed_definition else None,
@@ -155,6 +185,11 @@ class SqliteStorage(Storage):
                     submitter_team,
                     call_type,
                     side,
+                    business_value,
+                    needed_by,
+                    request_kind,
+                    existing_event,
+                    json.dumps(destinations) if destinations else None,
                 ),
             )
             return int(cursor.lastrowid)
@@ -237,6 +272,8 @@ class SqliteStorage(Storage):
             data["parsed_definition"] = json.loads(data["parsed_definition"])
         if data.get("published_artifact"):
             data["published_artifact"] = json.loads(data["published_artifact"])
+        if data.get("destinations"):
+            data["destinations"] = json.loads(data["destinations"])
         return data
 
     @staticmethod

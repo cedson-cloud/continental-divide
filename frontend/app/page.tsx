@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AuditEntry,
   EventDefinition,
   RequestDetail,
   RuleCheck,
   friendlyError,
+  getGovernanceProfile,
   getRequest,
   submitIntake,
   submitRawDefinition,
@@ -23,6 +24,14 @@ function findEntry(log: AuditEntry[], step: string): AuditEntry | undefined {
 
 export default function IntakePage() {
   const [text, setText] = useState("");
+  const [businessValue, setBusinessValue] = useState("");
+  const [neededBy, setNeededBy] = useState("");
+  const [requestKind, setRequestKind] = useState<
+    "new_event" | "new_property_on_existing"
+  >("new_event");
+  const [existingEvent, setExistingEvent] = useState("");
+  const [destinations, setDestinations] = useState<string[]>([]);
+  const [allowedDestinations, setAllowedDestinations] = useState<string[]>([]);
   const [submitterName, setSubmitterName] = useState("");
   const [submitterTeam, setSubmitterTeam] = useState("");
   const [callType, setCallType] = useState("track");
@@ -34,6 +43,20 @@ export default function IntakePage() {
   // Synchronous guard: two clicks in the same frame both render with
   // submitting=false, so the disabled prop alone cannot stop the second one.
   const inFlight = useRef(false);
+
+  useEffect(() => {
+    // Populates the destinations control; if the profile lists none (or the
+    // call fails), the control stays hidden.
+    getGovernanceProfile()
+      .then((p) => setAllowedDestinations(p.destinations))
+      .catch(() => setAllowedDestinations([]));
+  }, []);
+
+  function toggleDestination(d: string) {
+    setDestinations((prev) =>
+      prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d],
+    );
+  }
 
   async function run(submit: () => Promise<{ id: number }>) {
     if (inFlight.current) return;
@@ -62,11 +85,26 @@ export default function IntakePage() {
 
       <div className="panel">
         <div className="panel-title">Describe the event</div>
-        <textarea
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder="e.g. track when a shopper empties their entire cart"
-        />
+        <label className="field">
+          <span className="field-label">
+            Business value * — why this event matters, not what it does
+          </span>
+          <textarea
+            value={businessValue}
+            onChange={(e) => setBusinessValue(e.target.value)}
+            placeholder="e.g. tells merchandising which promotions actually drive checkout"
+            rows={2}
+            disabled={submitting}
+          />
+        </label>
+        <label className="field mt-12">
+          <span className="field-label">What to track</span>
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="e.g. track when a shopper empties their entire cart"
+          />
+        </label>
 
         <div className="fields mt-12">
           <label className="field">
@@ -114,7 +152,71 @@ export default function IntakePage() {
               <option value="Server">Server</option>
             </select>
           </label>
+          <label className="field">
+            <span className="field-label">Needed by</span>
+            <input
+              type="text"
+              placeholder="Optional, e.g. mid-August launch"
+              value={neededBy}
+              onChange={(e) => setNeededBy(e.target.value)}
+              disabled={submitting}
+            />
+          </label>
+          <label className="field">
+            <span className="field-label">Request kind</span>
+            <select
+              value={requestKind}
+              onChange={(e) =>
+                setRequestKind(
+                  e.target.value as "new_event" | "new_property_on_existing",
+                )
+              }
+              disabled={submitting}
+            >
+              <option value="new_event">New event</option>
+              <option value="new_property_on_existing">
+                New property on an existing event
+              </option>
+            </select>
+          </label>
         </div>
+
+        {requestKind === "new_property_on_existing" && (
+          <div className="mt-12">
+            <label className="field">
+              <span className="field-label">Existing event name</span>
+              <input
+                type="text"
+                placeholder="e.g. Order Completed"
+                value={existingEvent}
+                onChange={(e) => setExistingEvent(e.target.value)}
+                disabled={submitting}
+              />
+            </label>
+            <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>
+              Free text for now — a picker arrives with the event catalog.
+            </p>
+          </div>
+        )}
+
+        {allowedDestinations.length > 0 && (
+          <div className="mt-12">
+            <span className="field-label">Destinations</span>
+            <div className="row" style={{ flexWrap: "wrap", gap: 12 }}>
+              {allowedDestinations.map((d) => (
+                <label key={d} className="row" style={{ gap: 6, fontSize: 14 }}>
+                  <input
+                    type="checkbox"
+                    checked={destinations.includes(d)}
+                    onChange={() => toggleDestination(d)}
+                    disabled={submitting}
+                  />
+                  <span>{d}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="row spread mt-12">
           <button
@@ -126,10 +228,23 @@ export default function IntakePage() {
                   submitter_team: submitterTeam,
                   call_type: callType,
                   side,
+                  business_value: businessValue,
+                  needed_by: neededBy || null,
+                  request_kind: requestKind,
+                  existing_event:
+                    requestKind === "new_property_on_existing" && existingEvent
+                      ? existingEvent
+                      : null,
+                  destinations,
                 }),
               )
             }
-            disabled={submitting || text.trim().length === 0 || submitterTeam === ""}
+            disabled={
+              submitting ||
+              text.trim().length === 0 ||
+              businessValue.trim().length === 0 ||
+              submitterTeam === ""
+            }
           >
             {submitting ? "Drafting…" : "Submit request"}
           </button>
@@ -165,7 +280,14 @@ export default function IntakePage() {
                   <button
                     key={ex.key}
                     className="btn btn-ghost"
-                    onClick={() => run(() => submitRawDefinition(ex.definition))}
+                    onClick={() =>
+                      run(() =>
+                        submitRawDefinition(ex.definition, undefined, {
+                          business_value:
+                            "Demo: exercises the deterministic rules with a pre-built definition",
+                        }),
+                      )
+                    }
                     disabled={submitting}
                   >
                     {ex.label}

@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from .config import get_settings
+from .governance import GovernanceError, load_active_profile
 from .pipeline import (
     IntakeModelError,
     InvalidTransition,
@@ -38,21 +39,35 @@ CallType = Literal["track"]
 Side = Literal["Client", "Server"]
 
 
+RequestKind = Literal["new_event", "new_property_on_existing"]
+
+
 class IntakeBody(BaseModel):
     raw_intake_text: str
+    business_value: str = Field(min_length=1)
     submitter_name: Optional[str] = None
     submitter_team: Optional[SubmitterTeam] = None
     call_type: CallType = "track"
     side: Side = "Client"
+    needed_by: Optional[str] = None
+    request_kind: RequestKind = "new_event"
+    # Only meaningful when request_kind is new_property_on_existing.
+    existing_event: Optional[str] = None
+    destinations: list[str] = Field(default_factory=list)
 
 
 class RawIntakeBody(BaseModel):
     definition: dict
     raw_intake_text: Optional[str] = None
+    business_value: str = Field(min_length=1)
     submitter_name: Optional[str] = None
     submitter_team: Optional[SubmitterTeam] = None
     call_type: CallType = "track"
     side: Side = "Client"
+    needed_by: Optional[str] = None
+    request_kind: RequestKind = "new_event"
+    existing_event: Optional[str] = None
+    destinations: list[str] = Field(default_factory=list)
 
 
 class DecisionBody(BaseModel):
@@ -70,6 +85,41 @@ class IntakeResponse(BaseModel):
     flags: list = Field(default_factory=list)
 
 
+def _validate_destinations(destinations: list[str]) -> None:
+    """Reject destinations outside the active profile's list. An empty profile list
+    means no constraint, matching how categories behave."""
+    allowed = load_active_profile().destinations
+    if not allowed or not destinations:
+        return
+    unknown = sorted(set(destinations) - set(allowed))
+    if unknown:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"unknown destinations: {', '.join(unknown)}. "
+                f"The governance profile allows: {', '.join(allowed)}"
+            ),
+        )
+
+
+@router.get("/governance/profile")
+def governance_profile() -> dict:
+    """The loaded active profile — contents only, never the file path."""
+    try:
+        profile = load_active_profile()
+    except GovernanceError:
+        raise HTTPException(status_code=500, detail="governance profile failed to load")
+    return {
+        "name": profile.name,
+        "source": profile.source,
+        "event_naming": profile.event_naming.model_dump(),
+        "property_naming": profile.property_naming.model_dump(),
+        "pii": profile.pii.model_dump(),
+        "categories": profile.categories,
+        "destinations": profile.destinations,
+    }
+
+
 @router.post("/requests", response_model=IntakeResponse)
 def create_request(body: IntakeBody, request: Request) -> IntakeResponse:
     client = request.client.host if request.client else "unknown"
@@ -82,6 +132,7 @@ def create_request(body: IntakeBody, request: Request) -> IntakeResponse:
             detail=f"raw_intake_text exceeds MAX_INTAKE_CHARS ({_settings.max_intake_chars})",
         )
 
+    _validate_destinations(body.destinations)
     storage = get_storage()
     try:
         request_id = interpret_intake(
@@ -91,6 +142,11 @@ def create_request(body: IntakeBody, request: Request) -> IntakeResponse:
             submitter_team=body.submitter_team,
             call_type=body.call_type,
             side=body.side,
+            business_value=body.business_value,
+            needed_by=body.needed_by,
+            request_kind=body.request_kind,
+            existing_event=body.existing_event,
+            destinations=body.destinations,
         )
     except IntakeModelError as exc:
         raise HTTPException(
@@ -109,6 +165,7 @@ def create_request_raw(body: RawIntakeBody) -> IntakeResponse:
         or body.definition.get("name")
         or "raw definition"
     )
+    _validate_destinations(body.destinations)
     storage = get_storage()
     request_id = ingest_raw_definition(
         raw_intake_text,
@@ -118,6 +175,11 @@ def create_request_raw(body: RawIntakeBody) -> IntakeResponse:
         submitter_team=body.submitter_team,
         call_type=body.call_type,
         side=body.side,
+        business_value=body.business_value,
+        needed_by=body.needed_by,
+        request_kind=body.request_kind,
+        existing_event=body.existing_event,
+        destinations=body.destinations,
     )
     return _intake_response(storage, request_id)
 

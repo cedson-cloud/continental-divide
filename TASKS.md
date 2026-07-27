@@ -24,6 +24,8 @@ Working roadmap for the build. Keep this clean: it travels with the repo, and th
 - [ ] **"Not sure" on client vs. server.** Route the question to the approver rather than forcing a guess at intake.
 - [ ] **A `why` on every event request.** Purpose, business value, and where it fires. Segment's own tracking-plan guidance asks for this, and it is what makes the catalog useful to someone who did not submit the event.
 - [ ] **Support identify, page, and screen calls.** EventDefinition is track-shaped and rules.py enforces a track event-naming convention; traits and page calls need their own shapes and their own rules. The intake UI was narrowed to track rather than advertise support that does not exist.
+- [ ] **Fold `vet.py` onto `governance.load_active_profile()`.** The CLI keeps a private copy of the "resolve active.yaml, else default" logic. Two copies of the same resolution is the drift this design exists to prevent.
+- [ ] **Guard `load_active_profile()` at every call site.** `/governance/profile` handles `GovernanceError`; `_validate_destinations` does not, so a malformed `active.yaml` breaks live intake with an unhandled exception. The profile is read per request, so a bad edit takes effect immediately.
 
 ## Later
 

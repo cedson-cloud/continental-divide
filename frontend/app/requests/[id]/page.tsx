@@ -105,6 +105,30 @@ export default function RequestDetailPage({ params }: { params: { id: string } }
         {detail.raw_intake_text}
       </p>
 
+      {detail.business_value && (
+        <div className="panel">
+          <div className="panel-title">Why this event</div>
+          <p style={{ margin: 0 }}>{detail.business_value}</p>
+          {(detail.request_kind === "new_property_on_existing" ||
+            detail.needed_by ||
+            (detail.destinations?.length ?? 0) > 0) && (
+            <p className="muted" style={{ fontSize: 13, marginBottom: 0 }}>
+              {[
+                detail.request_kind === "new_property_on_existing"
+                  ? `New property on: ${detail.existing_event || "unspecified"}`
+                  : null,
+                detail.needed_by ? `Needed by: ${detail.needed_by}` : null,
+                detail.destinations?.length
+                  ? `Destinations: ${detail.destinations.join(", ")}`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+          )}
+        </div>
+      )}
+
       {detail.parsed_definition && (
         <div className="panel">
           <div className="panel-title">Definition</div>
