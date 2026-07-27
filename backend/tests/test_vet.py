@@ -102,6 +102,70 @@ def test_category_notes():
     }
 
 
+def test_unnamed_event_fails_structure_not_naming():
+    result = vet_plan({"source": "acme", "events": [{"category": "Growth"}]})
+    report = result["events"][0]
+    assert report["index"] == 0
+    assert report["name"] is None
+    assert report["verdict"] == "fail"
+    structure = _check(report, "structure")
+    assert not structure["passed"]
+    assert "event at index 0 has no name" in structure["detail"]
+    # A name that isn't there cannot violate a naming convention.
+    assert not any(c["rule"] == "event_naming" for c in report["checks"])
+
+
+def test_two_unnamed_events_are_not_duplicates():
+    result = vet_plan({"source": "acme", "events": [{}, {"name": "   "}]})
+    assert [r["verdict"] for r in result["events"]] == ["fail", "fail"]
+    assert result["plan_checks"]["exact_duplicates"] == []
+    assert result["plan_checks"]["near_duplicates"] == []
+
+
+def test_non_string_category_is_a_note_not_a_crash():
+    event = {"name": "Cart Cleared", "category": ["Growth"], "properties": []}
+    result = vet_plan({"source": "acme", "events": [event]})
+    report = result["events"][0]
+    assert report["verdict"] == "pass"
+    assert report["category"] is None
+    assert report["notes"] == [
+        {
+            "severity": "low",
+            "note": "non-string category (list) treated as uncategorized",
+        }
+    ]
+    assert result["plan_checks"]["category_notes"]["uncategorized_events"] == [
+        "Cart Cleared"
+    ]
+
+
+def test_unnamed_property_is_a_structure_problem():
+    event = {
+        "name": "Cart Cleared",
+        "category": "Growth",
+        "properties": [{"type": "string"}],
+    }
+    report = vet_plan({"source": "acme", "events": [event]})["events"][0]
+    assert report["verdict"] == "fail"
+    structure = _check(report, "structure")
+    assert not structure["passed"]
+    assert "property at index 0 has a missing or empty name" in structure["detail"]
+    # Not misreported as a convention violation.
+    assert _check(report, "property_naming")["passed"]
+
+
+def test_similarity_does_not_chain_across_a_cluster():
+    # Consecutive names score ~0.9 against each other but the endpoints only 0.6.
+    # Complete linkage breaks the run into tight pairs instead of one chained
+    # five-name cluster.
+    names = ["aaaaaaaaaa", "aaaaaaaaab", "aaaaaaaabb", "aaaaaaabbb", "aaaaaabbbb"]
+    result = _vet(*[_event(n) for n in names])
+    assert result["plan_checks"]["near_duplicates"] == [
+        ["aaaaaaaaaa", "aaaaaaaaab"],
+        ["aaaaaaaabb", "aaaaaaabbb"],
+    ]
+
+
 def test_empty_plan():
     result = vet_plan({"source": "acme", "events": []})
     assert result["events"] == []

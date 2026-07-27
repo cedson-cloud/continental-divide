@@ -9,7 +9,11 @@ wrong for a plan being audited against itself.
 
 Parsing is plain json + dict access, not Pydantic: foreign plans carry property types
 outside our ``PropertyType`` enum (e.g. "datetime"), recorded as low-severity notes
-rather than failures. Category notes are informational and do not change verdicts.
+rather than failures. A ``structure`` check separates malformed input (missing or
+unusable event and property names) from convention violations, and structure-failed
+names are excluded from duplicate detection — a name that isn't there can neither
+violate a convention nor collide with another. Category notes are informational and
+do not change verdicts.
 Reads only the given JSON file; writes nothing to disk and never touches the database.
 
 Usage: python -m app.vet <plan.json>
@@ -42,26 +46,52 @@ _RULES_SOURCE = {
 
 # --- per-event checks ------------------------------------------------------------
 
-def _vet_event(event: dict) -> dict:
-    name = str(event.get("name") or "")
-    properties = [p for p in (event.get("properties") or []) if isinstance(p, dict)]
-
-    checks = []
+def _vet_event(event: dict, index: int) -> dict:
+    """Per-event checks. ``structure`` separates malformed input from convention
+    violations: an unusable event or property name fails ``structure`` and skips
+    the convention checks, which cannot apply to a name that isn't there."""
+    problems = []
     notes = []
 
-    name_err = event_name_error(name)
-    checks.append(
-        {
-            "rule": "event_naming",
-            "passed": name_err is None,
-            "detail": name_err or "valid Object Action, Title Case name",
-        }
-    )
+    raw_name = event.get("name")
+    if isinstance(raw_name, str) and raw_name.strip():
+        name = raw_name
+    else:
+        name = None
+        if raw_name is None:
+            problems.append(f"event at index {index} has no name")
+        elif isinstance(raw_name, str):
+            problems.append(f"event at index {index} has a whitespace-only name")
+        else:
+            problems.append(
+                f"event at index {index} has a non-string name "
+                f"({type(raw_name).__name__})"
+            )
+
+    category = event.get("category")
+    if category is not None and not isinstance(category, str):
+        notes.append(
+            {
+                "severity": "low",
+                "note": (
+                    f"non-string category ({type(category).__name__}) "
+                    "treated as uncategorized"
+                ),
+            }
+        )
+        category = None
+
+    properties = [p for p in (event.get("properties") or []) if isinstance(p, dict)]
 
     bad_props = []
     pii_hits = []
-    for prop in properties:
-        prop_name = str(prop.get("name") or "")
+    for prop_index, prop in enumerate(properties):
+        prop_name = prop.get("name")
+        if not isinstance(prop_name, str) or not prop_name.strip():
+            problems.append(
+                f"property at index {prop_index} has a missing or empty name"
+            )
+            continue
         if property_name_error(prop_name):
             bad_props.append(prop_name)
         hit = pii_hit(prop_name)
@@ -75,6 +105,23 @@ def _vet_event(event: dict) -> dict:
                     "note": f"unrecognized property type '{prop_type}' on '{prop_name}'",
                 }
             )
+
+    checks = [
+        {
+            "rule": "structure",
+            "passed": not problems,
+            "detail": "; ".join(problems) if problems else "event shape is well-formed",
+        }
+    ]
+    if name is not None:
+        name_err = event_name_error(name)
+        checks.append(
+            {
+                "rule": "event_naming",
+                "passed": name_err is None,
+                "detail": name_err or "valid Object Action, Title Case name",
+            }
+        )
 
     checks.append(
         {
@@ -100,8 +147,9 @@ def _vet_event(event: dict) -> dict:
     )
 
     return {
+        "index": index,
         "name": name,
-        "category": event.get("category"),
+        "category": category,
         "checks": checks,
         "notes": notes,
     }
@@ -119,13 +167,15 @@ def _near(a: str, b: str) -> bool:
 
 def _near_duplicate_clusters(names: list[str]) -> list[list[str]]:
     """Cluster distinct names whose lowercase-alphanumeric forms match exactly or sit
-    at or above the difflib ratio threshold against any existing cluster member."""
+    at or above the difflib ratio threshold. Complete linkage: a name joins a cluster
+    only if it clears the bar against every current member, so a run of pairwise-close
+    neighbours cannot chain into one sprawling cluster whose endpoints barely relate."""
     unique = list(dict.fromkeys(names))
     normalized = {name: _normalize(name) for name in unique}
     clusters: list[list[str]] = []
     for name in unique:
         for cluster in clusters:
-            if any(_near(normalized[name], normalized[member]) for member in cluster):
+            if all(_near(normalized[name], normalized[member]) for member in cluster):
                 cluster.append(name)
                 break
         else:
@@ -147,13 +197,17 @@ def _category_notes(reports: list[dict]) -> dict:
 def vet_plan(plan: dict) -> dict:
     """Run every event through the reused per-name rules, then the plan-scope checks.
 
-    Verdict per event: "fail" if event naming or property naming failed, else "flag"
-    if PII was hit or the name is touched by a duplicate check, else "pass". PII flags
-    but never rejects, matching ``evaluate()``.
+    Verdict per event: "fail" if structure, event naming, or property naming failed,
+    else "flag" if PII was hit or the name is touched by a duplicate check, else
+    "pass". PII flags but never rejects, matching ``evaluate()``.
     """
-    events = [e for e in (plan.get("events") or []) if isinstance(e, dict)]
-    reports = [_vet_event(event) for event in events]
-    names = [r["name"] for r in reports]
+    reports = [
+        _vet_event(event, index)
+        for index, event in enumerate(plan.get("events") or [])
+        if isinstance(event, dict)
+    ]
+    # Structure-failed events carry no usable name and sit out duplicate detection.
+    names = [r["name"] for r in reports if r["name"] is not None]
 
     exact_duplicates = sorted(n for n, count in Counter(names).items() if count > 1)
     near_duplicates = _near_duplicate_clusters(names)
