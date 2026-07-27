@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   AuditEntry,
   EventDefinition,
@@ -31,8 +31,13 @@ export default function IntakePage() {
   const [error, setError] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<RequestDetail | null>(null);
   const [showRaw, setShowRaw] = useState(false);
+  // Synchronous guard: two clicks in the same frame both render with
+  // submitting=false, so the disabled prop alone cannot stop the second one.
+  const inFlight = useRef(false);
 
   async function run(submit: () => Promise<{ id: number }>) {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setError(null);
     setOutcome(null);
     setSubmitting(true);
@@ -42,6 +47,7 @@ export default function IntakePage() {
     } catch (err) {
       setError(friendlyError(err));
     } finally {
+      inFlight.current = false;
       setSubmitting(false);
     }
   }
@@ -95,9 +101,6 @@ export default function IntakePage() {
               disabled={submitting}
             >
               <option value="track">track</option>
-              <option value="identify">identify</option>
-              <option value="page">page</option>
-              <option value="screen">screen</option>
             </select>
           </label>
           <label className="field">

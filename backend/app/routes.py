@@ -32,7 +32,9 @@ _limiter = RateLimiter(_settings.rate_limit_max, _settings.rate_limit_window_sec
 
 
 SubmitterTeam = Literal["Product", "Marketing", "Data", "Engineering"]
-CallType = Literal["track", "identify", "page", "screen"]
+# track only: EventDefinition is track-shaped and rules.py enforces an event-name
+# convention. identify/page/screen need their own shapes and rules (see TASKS.md).
+CallType = Literal["track"]
 Side = Literal["Client", "Server"]
 
 
