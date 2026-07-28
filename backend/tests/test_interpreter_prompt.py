@@ -172,3 +172,24 @@ def test_raw_text_alone_matches_todays_message_apart_from_the_label():
 
 def test_interpreter_no_longer_touches_known_categories():
     assert "known_categories" not in inspect.getsource(app.interpreter)
+
+
+def _paragraph_starting(prompt: str, prefix: str) -> str:
+    matches = [p for p in prompt.split("\n\n") if p.startswith(prefix)]
+    assert len(matches) == 1, f"expected exactly one paragraph starting {prefix!r}"
+    return matches[0]
+
+
+def test_description_field_spec_is_business_value_aware():
+    field_list = _paragraph_starting(build_system_prompt(SEGMENT), "The object has these fields:")
+    assert (
+        '"description": one or two short sentences: when the event fires, and, when the '
+        "requester supplied a business value note, what decision or question it supports."
+    ) in field_list
+
+
+def test_business_value_paragraph_does_not_instruct_on_the_description():
+    paragraph = _paragraph_starting(
+        build_system_prompt(SEGMENT), "The requester may supply a business value note."
+    )
+    assert "description" not in paragraph
