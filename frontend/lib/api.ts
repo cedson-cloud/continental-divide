@@ -25,6 +25,9 @@ export type ReviewFinding = {
   property_names: string[];
   reason: string;
   confidence: "high" | "medium" | "low";
+  // Derived in the response layer from the catalog at read time; never stored.
+  existing_event_description?: string | null;
+  existing_event_properties?: string[];
 };
 
 export type IntakeResult = {
@@ -190,13 +193,32 @@ export function getRequest(id: number): Promise<RequestDetail> {
   return request(`/requests/${id}`);
 }
 
+export type SubmitResolution = {
+  duplicateNote?: string;
+  duplicateUnsure?: boolean;
+};
+
 export function submitRequest(
   id: number,
-  duplicateNote?: string,
+  resolution: SubmitResolution = {},
 ): Promise<{ id: number; status: string }> {
   return request(`/requests/${id}/submit`, {
     method: "POST",
-    body: JSON.stringify({ duplicate_note: duplicateNote || null }),
+    body: JSON.stringify({
+      duplicate_note: resolution.duplicateNote || null,
+      duplicate_unsure: resolution.duplicateUnsure ?? false,
+    }),
+  });
+}
+
+export function withdrawRequest(
+  id: number,
+  existingEvent: string,
+  reason?: string,
+): Promise<{ id: number; status: string }> {
+  return request(`/requests/${id}/withdraw`, {
+    method: "POST",
+    body: JSON.stringify({ existing_event: existingEvent, reason: reason || null }),
   });
 }
 

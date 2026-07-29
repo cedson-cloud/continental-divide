@@ -7,16 +7,19 @@ import {
   RequestDetail,
   ReviewFinding,
   RuleCheck,
+  SubmitResolution,
   convertRequest,
   decideRequest,
   friendlyError,
   getRequest,
   submitRequest,
+  withdrawRequest,
 } from "@/lib/api";
 import { isActionable } from "@/lib/format";
 import { AuditTimeline } from "@/components/AuditTimeline";
 import { DefinitionView } from "@/components/DefinitionView";
 import { AgentReview } from "@/components/AgentReview";
+import { DuplicateResolution } from "@/components/DuplicateResolution";
 import { PublishCards } from "@/components/PublishCards";
 import { RuleChecks } from "@/components/RuleChecks";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -69,7 +72,6 @@ export default function RequestDetailPage({ params }: { params: { id: string } }
   const [findingsAcknowledged, setFindingsAcknowledged] = useState(false);
   const [deciding, setDeciding] = useState(false);
   const [decisionError, setDecisionError] = useState<string | null>(null);
-  const [duplicateNote, setDuplicateNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [convertingEvent, setConvertingEvent] = useState<string | null>(null);
@@ -123,12 +125,25 @@ export default function RequestDetailPage({ params }: { params: { id: string } }
     }
   }
 
-  async function submitDraft() {
+  async function submitDraft(resolution: SubmitResolution = {}) {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      await submitRequest(id, noteRequired ? duplicateNote : undefined);
-      setDuplicateNote("");
+      await submitRequest(id, resolution);
+      load();
+    } catch (err) {
+      setSubmitError(friendlyError(err));
+      load();
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function withdraw(existingEvent: string) {
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      await withdrawRequest(id, existingEvent);
       load();
     } catch (err) {
       setSubmitError(friendlyError(err));
@@ -163,9 +178,14 @@ export default function RequestDetailPage({ params }: { params: { id: string } }
   const supersededById = auditNumber(detail, "superseded_by", "new_request_id");
   const supersedesId = auditNumber(detail, "supersedes", "original_request_id");
   const findings = detail.duplicate_candidates;
-  const noteRequired =
-    isDraft &&
-    findings.some((f) => (f.kind ?? "duplicate_event") === "duplicate_event");
+  const duplicateFindings = findings.filter(
+    (f) => (f.kind ?? "duplicate_event") === "duplicate_event",
+  );
+  const isWithdrawn = detail.status === "withdrawn";
+  const withdrawnEntry = detail.audit_log.find((e) => e.step === "withdrawn");
+  const requesterUnsure =
+    detail.audit_log.find((e) => e.step === "submitted")?.detail
+      ?.duplicate_unsure === true;
 
   return (
     <main className="container">
@@ -202,6 +222,16 @@ export default function RequestDetailPage({ params }: { params: { id: string } }
           This request replaces{" "}
           <Link href={`/requests/${supersedesId}`}>request #{supersedesId}</Link>,
           converted to a property on an existing event.
+        </div>
+      )}
+
+      {isWithdrawn && (
+        <div className="msg msg-info">
+          This request was withdrawn — the requester agreed that{" "}
+          {typeof withdrawnEntry?.detail?.existing_event === "string"
+            ? withdrawnEntry.detail.existing_event
+            : "an existing event"}{" "}
+          already covers it.
         </div>
       )}
 
@@ -273,6 +303,12 @@ export default function RequestDetailPage({ params }: { params: { id: string } }
             onConvert={isDraft ? convert : undefined}
             convertingEvent={convertingEvent}
           />
+          {!isDraft && requesterUnsure && (
+            <div className="msg msg-info mt-16">
+              The requester wasn&apos;t sure whether this duplicates the existing
+              event and asked the approver to decide.
+            </div>
+          )}
           {convertingEvent !== null && (
             <div className="msg msg-info mt-16">
               Creating a new request on {convertingEvent} — the model is drafting
@@ -290,30 +326,24 @@ export default function RequestDetailPage({ params }: { params: { id: string } }
             This draft has not been submitted. It enters the approval queue when you
             submit it.
           </p>
-          {noteRequired && (
-            <label className="field">
-              <span className="field-label">These are different because…</span>
-              <textarea
-                value={duplicateNote}
-                onChange={(e) => setDuplicateNote(e.target.value)}
-                rows={2}
-                disabled={submitting}
-              />
-            </label>
+          {duplicateFindings.length > 0 ? (
+            <DuplicateResolution
+              findings={duplicateFindings}
+              busy={submitting || convertingEvent !== null}
+              onWithdraw={withdraw}
+              onSubmit={submitDraft}
+            />
+          ) : (
+            <div className="row mt-12">
+              <button
+                className="btn btn-primary"
+                onClick={() => submitDraft()}
+                disabled={submitting || convertingEvent !== null}
+              >
+                {submitting ? "Submitting…" : "Submit request"}
+              </button>
+            </div>
           )}
-          <div className="row mt-12">
-            <button
-              className="btn btn-primary"
-              onClick={submitDraft}
-              disabled={
-                submitting ||
-                convertingEvent !== null ||
-                (noteRequired && duplicateNote.trim().length === 0)
-              }
-            >
-              {submitting ? "Submitting…" : "Submit request"}
-            </button>
-          </div>
           {submitError && <div className="msg msg-error mt-16">{submitError}</div>}
         </div>
       )}

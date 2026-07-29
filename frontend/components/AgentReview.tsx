@@ -7,7 +7,7 @@ const KIND_ORDER = [
 ] as const;
 
 const KIND_HEADINGS: Record<(typeof KIND_ORDER)[number], string> = {
-  duplicate_event: "This may already exist",
+  duplicate_event: "This sounds like an event you already have",
   property_extension: "This may belong on an existing event",
   property_already_exists: "That event may already have this",
 };
@@ -53,6 +53,20 @@ export function AgentReview({
                     )}
                   </div>
                   <div className="candidate-reason">{finding.reason}</div>
+                  {finding.existing_event_description && (
+                    <p className="muted" style={{ fontSize: 13, margin: "6px 0 0" }}>
+                      {finding.existing_event} today: {finding.existing_event_description}
+                    </p>
+                  )}
+                  {(finding.existing_event_properties?.length ?? 0) > 0 && (
+                    <div className="row" style={{ flexWrap: "wrap", gap: 6, marginTop: 6 }}>
+                      {finding.existing_event_properties?.map((name) => (
+                        <span className="tag" key={name}>
+                          {name}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                   {variant === "requester" &&
                     kind === "property_extension" &&
                     onConvert && (

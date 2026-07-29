@@ -7,16 +7,19 @@ import {
   EventDefinition,
   RequestDetail,
   RuleCheck,
+  SubmitResolution,
   friendlyError,
   getGovernanceProfile,
   getRequest,
   submitIntake,
   submitRawDefinition,
   submitRequest,
+  withdrawRequest,
 } from "@/lib/api";
 import { NATURAL_LANGUAGE_EXAMPLES, RAW_EXAMPLES } from "@/lib/examples";
 import { ProposedDefinition } from "@/components/AuditTimeline";
 import { AgentReview } from "@/components/AgentReview";
+import { DuplicateResolution } from "@/components/DuplicateResolution";
 import { RuleChecks } from "@/components/RuleChecks";
 import { StatusBadge } from "@/components/StatusBadge";
 
@@ -136,21 +139,23 @@ export default function IntakePage() {
             </select>
           </label>
           <label className="field">
-            <span className="field-label">Call type</span>
+            <span className="field-label">Call type *</span>
             <select
               value={callType}
               onChange={(e) => setCallType(e.target.value)}
               disabled={submitting}
+              required
             >
               <option value="track">track</option>
             </select>
           </label>
           <label className="field">
-            <span className="field-label">Server Side or Client Side</span>
+            <span className="field-label">Server Side or Client Side *</span>
             <select
               value={side}
               onChange={(e) => setSide(e.target.value)}
               disabled={submitting}
+              required
             >
               <option value="Client">Client</option>
               <option value="Server">Server</option>
@@ -167,7 +172,7 @@ export default function IntakePage() {
             />
           </label>
           <label className="field">
-            <span className="field-label">Request kind</span>
+            <span className="field-label">Request kind *</span>
             <select
               value={requestKind}
               onChange={(e) =>
@@ -176,6 +181,7 @@ export default function IntakePage() {
                 )
               }
               disabled={submitting}
+              required
             >
               <option value="new_event">New event</option>
               <option value="new_property_on_existing">
@@ -343,10 +349,10 @@ export default function IntakePage() {
 }
 
 function Outcome({ detail }: { detail: RequestDetail }) {
-  const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const [withdrawnTo, setWithdrawnTo] = useState<string | null>(null);
 
   const log = detail.audit_log;
   const modelEntry = findEntry(log, "model_interpreted");
@@ -363,21 +369,48 @@ function Outcome({ detail }: { detail: RequestDetail }) {
 
   const isDraft = detail.status === "draft";
   const findings = detail.duplicate_candidates;
-  const noteRequired = findings.some(
+  const duplicateFindings = findings.filter(
     (f) => (f.kind ?? "duplicate_event") === "duplicate_event",
   );
 
-  async function submit() {
+  async function submit(resolution: SubmitResolution = {}) {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      await submitRequest(detail.id, noteRequired ? note : undefined);
+      await submitRequest(detail.id, resolution);
       setSubmitted(true);
     } catch (err) {
       setSubmitError(friendlyError(err));
     } finally {
       setSubmitting(false);
     }
+  }
+
+  async function withdraw(existingEvent: string) {
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      await withdrawRequest(detail.id, existingEvent);
+      setWithdrawnTo(existingEvent);
+    } catch (err) {
+      setSubmitError(friendlyError(err));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (withdrawnTo) {
+    return (
+      <div className="panel">
+        <div className="panel-title">Request withdrawn</div>
+        <p style={{ marginTop: 0 }}>
+          Request #{detail.id} was withdrawn — {withdrawnTo} already covers it.
+        </p>
+        <div className="row">
+          <Link href={`/requests/${detail.id}`}>View request #{detail.id} →</Link>
+        </div>
+      </div>
+    );
   }
 
   if (submitted) {
@@ -437,26 +470,24 @@ function Outcome({ detail }: { detail: RequestDetail }) {
 
       {isDraft ? (
         <>
-          {noteRequired && (
-            <label className="field mt-16">
-              <span className="field-label">These are different because…</span>
-              <textarea
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                rows={2}
+          {duplicateFindings.length > 0 ? (
+            <DuplicateResolution
+              findings={duplicateFindings}
+              busy={submitting}
+              onWithdraw={withdraw}
+              onSubmit={submit}
+            />
+          ) : (
+            <div className="mt-16">
+              <button
+                className="btn btn-primary"
+                onClick={() => submit()}
                 disabled={submitting}
-              />
-            </label>
+              >
+                {submitting ? "Submitting…" : "Submit request"}
+              </button>
+            </div>
           )}
-          <div className="mt-16">
-            <button
-              className="btn btn-primary"
-              onClick={submit}
-              disabled={submitting || (noteRequired && note.trim().length === 0)}
-            >
-              {submitting ? "Submitting…" : "Submit request"}
-            </button>
-          </div>
           {submitError && <div className="msg msg-error mt-16">{submitError}</div>}
         </>
       ) : (

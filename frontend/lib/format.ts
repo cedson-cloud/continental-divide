@@ -8,6 +8,7 @@ const STATUS_META: Record<string, StatusMeta> = {
   published: { label: "Published", tone: "published" },
   rejected: { label: "Rejected", tone: "rejected" },
   superseded: { label: "Superseded", tone: "neutral" },
+  withdrawn: { label: "Withdrawn", tone: "neutral" },
 };
 
 export function statusMeta(status: string): StatusMeta {
@@ -30,6 +31,7 @@ const STEP_LABELS: Record<string, string> = {
   rejection_recorded: "Rejection recorded",
   superseded_by: "Superseded by replacement",
   supersedes: "Supersedes original",
+  withdrawn: "Withdrawn",
 };
 
 export function stepLabel(step: string): string {

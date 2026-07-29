@@ -50,7 +50,7 @@ class DuplicateNoteRequired(Exception):
 
 
 class NoMatchingFinding(Exception):
-    """Conversion named an event that no stored property finding on the request
+    """The caller named an event that no qualifying stored finding on the request
     points at; the finding is the authority on the target, not the caller."""
 
 
@@ -421,17 +421,21 @@ def submit_request(
     request_id: int,
     storage: Storage,
     duplicate_note: Optional[str] = None,
+    *,
+    duplicate_unsure: bool = False,
 ) -> None:
     """Confirm a draft and move it into the approval queue.
 
     Only a request currently at ``draft`` can be submitted. The routed decision is
     recovered from the ``routed`` audit entry, so the audit log stays the one source
-    of truth for it. A draft with stored ``duplicate_event`` findings requires
-    ``duplicate_note`` — the requester's statement of why it is not a duplicate —
-    before it can enter the queue. Other finding kinds are information, not an
-    accusation, and never gate submission. Raises :class:`RequestNotFound`,
-    :class:`InvalidTransition`, or :class:`DuplicateNoteRequired` for the caller to
-    map to HTTP.
+    of truth for it. A draft with stored ``duplicate_event`` findings requires either
+    ``duplicate_note`` — the requester's statement of why the existing event won't
+    work for them — or ``duplicate_unsure``, which passes the question to the
+    approver instead of forcing the requester to fabricate a difference. The
+    ``submitted`` entry records whichever was used. Other finding kinds are
+    information, not an accusation, and never gate submission. Raises
+    :class:`RequestNotFound`, :class:`InvalidTransition`, or
+    :class:`DuplicateNoteRequired` for the caller to map to HTTP.
     """
     request = storage.get_request(request_id)
     if request is None:
@@ -450,10 +454,12 @@ def submit_request(
         for f in request.get("duplicate_candidates") or []
         if f.get("kind", "duplicate_event") == "duplicate_event"
     ]
-    if duplicate_findings and not duplicate_note:
+    if duplicate_findings and not duplicate_note and not duplicate_unsure:
         raise DuplicateNoteRequired(
             f"request {request_id} has {len(duplicate_findings)} possible semantic "
-            "duplicate(s); a note stating why it is not a duplicate is required to submit"
+            "duplicate(s); a note stating why the existing event won't work — or "
+            "duplicate_unsure, passing the question to the approver — is required "
+            "to submit"
         )
 
     storage.add_audit_entry(
@@ -462,6 +468,11 @@ def submit_request(
         {
             "decision": decision,
             **({"duplicate_note": duplicate_note} if duplicate_note else {}),
+            **(
+                {"duplicate_unsure": True}
+                if duplicate_unsure and not duplicate_note
+                else {}
+            ),
         },
     )
     storage.update_request_status(request_id, decision)
@@ -542,6 +553,52 @@ def convert_to_property_request(
         {"original_request_id": request_id, "existing_event": existing_event},
     )
     return new_request_id
+
+
+WITHDRAWABLE_FINDING_KINDS = {"duplicate_event"}
+
+
+def withdraw_request(
+    request_id: int,
+    existing_event: str,
+    reason: Optional[str],
+    storage: Storage,
+) -> None:
+    """End a draft because the requester agrees the existing event already covers it.
+
+    The requester has read a stored ``duplicate_event`` finding naming
+    ``existing_event`` and agreed with it; this is their path out that doesn't
+    require fabricating a difference or abandoning the tab. A caller naming an
+    event no such finding points at is refused. Makes no model call and no Notion
+    push — the request never entered the approval queue. Raises
+    :class:`RequestNotFound`, :class:`InvalidTransition`, or
+    :class:`NoMatchingFinding` for the caller to map to HTTP.
+    """
+    request = storage.get_request(request_id)
+    if request is None:
+        raise RequestNotFound(f"request {request_id} not found")
+    if request["status"] != "draft":
+        raise InvalidTransition(
+            f"request {request_id} is '{request['status']}' and cannot be withdrawn"
+        )
+    # Rows written before findings carried a kind are all duplicate candidates.
+    if not any(
+        f.get("kind", "duplicate_event") in WITHDRAWABLE_FINDING_KINDS
+        and f.get("existing_event") == existing_event
+        for f in request.get("duplicate_candidates") or []
+    ):
+        raise NoMatchingFinding(
+            f"request {request_id} has no duplicate finding naming "
+            f"'{existing_event}'; withdrawal must target an event a stored "
+            "finding points at"
+        )
+
+    storage.add_audit_entry(
+        request_id,
+        "withdrawn",
+        {"existing_event": existing_event, "reason": reason},
+    )
+    storage.update_request_status(request_id, "withdrawn")
 
 
 FINDING_KIND_LABELS = {

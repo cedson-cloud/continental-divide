@@ -12,6 +12,7 @@ from typing import Literal, Optional
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from .catalog import catalog_entries
 from .config import get_settings
 from .governance import (
     EXAMPLE_EVENT_NAMES,
@@ -32,6 +33,7 @@ from .pipeline import (
     ingest_raw_definition,
     interpret_intake,
     submit_request,
+    withdraw_request,
 )
 from .publisher import get_publisher
 from .rate_limit import RateLimiter
@@ -114,10 +116,16 @@ class RawIntakeBody(BaseModel):
 
 class SubmitBody(BaseModel):
     duplicate_note: Optional[str] = None
+    duplicate_unsure: bool = False
 
 
 class ConvertBody(BaseModel):
     existing_event: str = Field(min_length=1)
+
+
+class WithdrawBody(BaseModel):
+    existing_event: str = Field(min_length=1)
+    reason: Optional[str] = None
 
 
 class DecisionBody(BaseModel):
@@ -288,8 +296,8 @@ def _intake_response(storage, request_id: int) -> IntakeResponse:
 def list_requests() -> list:
     storage = get_storage()
     rows = storage.list_requests()
-    # A draft is not in anyone's queue yet, and a superseded request left the queue
-    # for its replacement; both stay reachable by id.
+    # A draft is not in anyone's queue yet, a superseded request left the queue for
+    # its replacement, and a withdrawn one never entered it; all stay reachable by id.
     return [
         {
             "id": row["id"],
@@ -299,8 +307,28 @@ def list_requests() -> list:
             "created_at": row["created_at"],
         }
         for row in rows
-        if row["status"] not in ("draft", "superseded")
+        if row["status"] not in ("draft", "superseded", "withdrawn")
     ]
+
+
+def _with_catalog_evidence(findings: list) -> list:
+    """Attach the named event's own description and full property list, joined
+    against the catalog at read time. The stored finding stays the model's output
+    alone — engine-derived catalog data lives only in the response, so the panel
+    follows the catalog if the catalog changes. An event absent from the catalog
+    gets null/empty, not an error."""
+    entries = {e.name: e for e in catalog_entries()}
+    enriched = []
+    for finding in findings:
+        entry = entries.get(finding.get("existing_event"))
+        enriched.append(
+            {
+                **finding,
+                "existing_event_description": entry.description if entry else None,
+                "existing_event_properties": entry.property_names if entry else [],
+            }
+        )
+    return enriched
 
 
 @router.get("/requests/{request_id}")
@@ -309,6 +337,9 @@ def get_request(request_id: int) -> dict:
     request = storage.get_request(request_id)
     if request is None:
         raise HTTPException(status_code=404, detail=f"request {request_id} not found")
+    request["duplicate_candidates"] = _with_catalog_evidence(
+        request.get("duplicate_candidates") or []
+    )
     request["audit_log"] = storage.get_audit_log(request_id)
     return request
 
@@ -321,12 +352,30 @@ def submit_request_route(request_id: int, body: Optional[SubmitBody] = None) -> 
             request_id,
             storage,
             duplicate_note=body.duplicate_note if body else None,
+            duplicate_unsure=body.duplicate_unsure if body else False,
         )
     except RequestNotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     except InvalidTransition as exc:
         raise HTTPException(status_code=409, detail=str(exc))
     except DuplicateNoteRequired as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    saved = storage.get_request(request_id)
+    return {"id": request_id, "status": saved["status"]}
+
+
+@router.post("/requests/{request_id}/withdraw")
+def withdraw_request_route(request_id: int, body: WithdrawBody) -> dict:
+    # No rate limit: withdrawing makes no model call and no Notion push.
+    storage = get_storage()
+    try:
+        withdraw_request(request_id, body.existing_event, body.reason, storage)
+    except RequestNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except InvalidTransition as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except NoMatchingFinding as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
     saved = storage.get_request(request_id)
