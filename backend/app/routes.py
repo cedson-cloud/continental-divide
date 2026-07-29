@@ -238,7 +238,7 @@ def _intake_response(storage, request_id: int) -> IntakeResponse:
         checks=rules_entry["detail"]["checks"] if rules_entry else [],
         flags=rules_entry["detail"]["flags"] if rules_entry else [],
         duplicate_candidates=(
-            duplicate_entry["detail"].get("candidates", []) if duplicate_entry else []
+            duplicate_entry["detail"].get("findings", []) if duplicate_entry else []
         ),
     )
 

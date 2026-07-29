@@ -17,7 +17,7 @@ from typing import Callable, Optional, Tuple
 
 from pydantic import ValidationError
 
-from .catalog import DuplicateReview, review_for_duplicates
+from .catalog import DuplicateReview, review_against_catalog
 from .governance import GovernanceProfile, load_active_profile
 from .interpreter import Interpretation, InterpreterError, interpret
 from .models import Decision, EventDefinition
@@ -85,7 +85,7 @@ def _route(
     the approval queue. The ``routed`` entry still records the real decision — that
     is how :func:`submit_request` recovers it later.
 
-    ``duplicate_fn`` is the advisory semantic duplicate review (see ``catalog.py``).
+    ``duplicate_fn`` is the advisory semantic catalog review (see ``catalog.py``).
     ``None`` skips it entirely — no call, no audit entry — which is what the
     model-free paths pass. When it runs, it runs only on drafts the rules did not
     reject, and a failure in it never blocks routing: the error is recorded and the
@@ -126,25 +126,31 @@ def _route(
         },
     )
 
-    # Advisory semantic duplicate review — inference, never a rejection. A draft the
+    # Advisory semantic catalog review — inference, never a rejection. A draft the
     # rules rejected is not worth a model call, and a review failure must never take
-    # down intake: record it and route normally.
+    # down intake: record it and route normally. The review's question depends on
+    # what was asked for, so it gets the request kind and named event off the row.
     if duplicate_fn is not None and evaluation.decision is not Decision.rejected:
+        request = storage.get_request(request_id)
         try:
-            review = duplicate_fn(parsed)
+            review = duplicate_fn(
+                parsed,
+                request_kind=request.get("request_kind"),
+                existing_event=request.get("existing_event"),
+            )
         except Exception as exc:
             storage.add_audit_entry(
                 request_id, "duplicate_review_failed", {"error": str(exc)}
             )
         else:
-            candidates = [c.model_dump() for c in review.candidates]
-            storage.set_duplicate_candidates(request_id, candidates)
+            findings = [f.model_dump() for f in review.findings]
+            storage.set_duplicate_candidates(request_id, findings)
             storage.add_audit_entry(
                 request_id,
                 "duplicate_review",
                 {
                     "model": review.model,
-                    "candidates": candidates,
+                    "findings": findings,
                     **({"parse_error": review.parse_error} if review.parse_error else {}),
                 },
             )
@@ -187,7 +193,7 @@ def interpret_intake(
     raw_intake_text: str,
     storage: Storage,
     interpret_fn: Callable[..., Interpretation] = interpret,
-    duplicate_fn: Callable[..., DuplicateReview] = review_for_duplicates,
+    duplicate_fn: Callable[..., DuplicateReview] = review_against_catalog,
     submitter_name: Optional[str] = None,
     submitter_team: Optional[str] = None,
     call_type: Optional[str] = None,
@@ -395,9 +401,10 @@ def submit_request(
 
     Only a request currently at ``draft`` can be submitted. The routed decision is
     recovered from the ``routed`` audit entry, so the audit log stays the one source
-    of truth for it. A draft with stored duplicate candidates requires
+    of truth for it. A draft with stored ``duplicate_event`` findings requires
     ``duplicate_note`` — the requester's statement of why it is not a duplicate —
-    before it can enter the queue. Raises :class:`RequestNotFound`,
+    before it can enter the queue. Other finding kinds are information, not an
+    accusation, and never gate submission. Raises :class:`RequestNotFound`,
     :class:`InvalidTransition`, or :class:`DuplicateNoteRequired` for the caller to
     map to HTTP.
     """
@@ -412,10 +419,15 @@ def submit_request(
         e for e in reversed(storage.get_audit_log(request_id)) if e["step"] == "routed"
     )
     decision = routed["detail"]["decision"]
-    duplicate_candidates = request.get("duplicate_candidates") or []
-    if duplicate_candidates and not duplicate_note:
+    # Rows written before findings carried a kind are all duplicate candidates.
+    duplicate_findings = [
+        f
+        for f in request.get("duplicate_candidates") or []
+        if f.get("kind", "duplicate_event") == "duplicate_event"
+    ]
+    if duplicate_findings and not duplicate_note:
         raise DuplicateNoteRequired(
-            f"request {request_id} has {len(duplicate_candidates)} possible semantic "
+            f"request {request_id} has {len(duplicate_findings)} possible semantic "
             "duplicate(s); a note stating why it is not a duplicate is required to submit"
         )
 

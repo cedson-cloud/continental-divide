@@ -1,20 +1,23 @@
-"""The semantic duplicate review: catalog construction, prompt builders, and the
+"""The semantic catalog review: catalog construction, prompt builders, and the
 advisory pipeline seam. Every test injects a stub for the review — nothing here (or
-anywhere in the suite) makes a live Anthropic call."""
+anywhere in the suite) makes a live Anthropic call; the one test that exercises
+``review_against_catalog`` end-to-end patches the Anthropic client with a fake."""
 
 import json
 from functools import partial
+from types import SimpleNamespace
 
 import pytest
 
 from app.catalog import (
     EMPTY_RESULT_SENTENCE,
-    DuplicateCandidate,
     DuplicateReview,
-    _parse_candidates,
-    build_duplicate_system_prompt,
-    build_duplicate_user_message,
+    ReviewFinding,
+    _parse_findings,
+    build_review_system_prompt,
+    build_review_user_message,
     catalog_entries,
+    review_against_catalog,
 )
 from app.interpreter import Interpretation
 from app.models import EventDefinition
@@ -37,7 +40,8 @@ BOOKMARKED = {
     "properties": [{"name": "product_id", "type": "string", "required": True}],
 }
 
-CANDIDATE = DuplicateCandidate(
+FINDING = ReviewFinding(
+    kind="duplicate_event",
     existing_event="Product Added to Wishlist",
     category="Wishlisting",
     reason=(
@@ -52,11 +56,11 @@ def stub_interpret(_raw, **_):
     return Interpretation(MODEL, BOOKMARKED, json.dumps(BOOKMARKED), None)
 
 
-def stub_one_candidate(_definition, **_):
-    return DuplicateReview(MODEL, [CANDIDATE], '{"candidates": [...]}')
+def stub_one_finding(_definition, **_):
+    return DuplicateReview(MODEL, [FINDING], '{"findings": [...]}')
 
 
-def stub_no_candidates(_definition, **_):
+def stub_no_findings(_definition, **_):
     return DuplicateReview(MODEL)
 
 
@@ -68,6 +72,25 @@ def _entry(storage, request_id, step):
     return next(
         e for e in storage.get_audit_log(request_id) if e["step"] == step
     )
+
+
+def _install_fake_model(monkeypatch, payload, calls=None):
+    """Patch the Anthropic client so ``review_against_catalog`` runs without a
+    network call, returning ``payload`` as the model's JSON output."""
+
+    def create(**kwargs):
+        if calls is not None:
+            calls.append(kwargs)
+        return SimpleNamespace(
+            content=[SimpleNamespace(type="text", text=json.dumps(payload))]
+        )
+
+    class FakeClient:
+        def __init__(self, api_key=None):
+            self.messages = SimpleNamespace(create=create)
+
+    monkeypatch.setattr("app.catalog.anthropic.Anthropic", FakeClient)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
 
 
 # --- catalog and prompts ---------------------------------------------------------
@@ -90,63 +113,137 @@ def test_every_plan_event_has_a_nonempty_description():
 
 
 def test_system_prompt_names_every_event_and_permits_an_empty_answer():
-    prompt = build_duplicate_system_prompt(catalog_entries())
+    prompt = build_review_system_prompt(catalog_entries())
     for entry in catalog_entries():
         assert entry.name in prompt
     assert EMPTY_RESULT_SENTENCE in prompt
 
 
 def test_user_message_carries_the_draft():
-    message = build_duplicate_user_message(EventDefinition.model_validate(BOOKMARKED))
+    message = build_review_user_message(EventDefinition.model_validate(BOOKMARKED))
     assert "Product Bookmarked" in message
     assert "Wishlisting" in message
     assert "product_id" in message
 
 
-def test_system_prompt_scopes_the_job_to_semantic_duplicates():
-    prompt = build_duplicate_system_prompt(catalog_entries())
+def test_system_prompt_scopes_the_job_past_the_mechanical_checks():
+    prompt = build_review_system_prompt(catalog_entries())
     assert "ALREADY handled by a deterministic engine" in prompt
 
 
 def test_system_prompt_states_the_model_is_not_authoritative():
-    prompt = build_duplicate_system_prompt(catalog_entries())
+    prompt = build_review_system_prompt(catalog_entries())
     assert "recorded as inference, not fact" in prompt
+
+
+def test_new_event_prompt_asks_both_questions():
+    prompt = build_review_system_prompt(catalog_entries(), "new_event")
+    assert "duplicate_event" in prompt
+    assert "property_extension" in prompt
+    assert "property_already_exists" not in prompt.split("Return ONLY")[0]
+
+
+def test_property_prompt_forbids_reporting_the_named_event():
+    prompt = build_review_system_prompt(
+        catalog_entries(), "new_property_on_existing", "Product Added to Wishlist"
+    )
+    assert 'never report it with kind "duplicate_event"' in prompt
+    assert "property_already_exists" in prompt
+    assert '"Product Added to Wishlist"' in prompt
+    assert EMPTY_RESULT_SENTENCE in prompt
 
 
 # --- output parsing --------------------------------------------------------------
 
-def test_parse_candidates_accepts_a_valid_object():
-    payload = json.dumps({"candidates": [CANDIDATE.model_dump()]})
-    candidates, error = _parse_candidates(payload)
+def test_parse_findings_accepts_a_valid_object():
+    payload = json.dumps({"findings": [FINDING.model_dump()]})
+    findings, error = _parse_findings(payload)
     assert error is None
-    assert candidates == [CANDIDATE]
+    assert findings == [FINDING]
 
 
-def test_parse_candidates_rejects_non_json():
-    candidates, error = _parse_candidates("the draft looks novel to me")
-    assert candidates == []
+def test_parse_findings_rejects_non_json():
+    findings, error = _parse_findings("the draft looks novel to me")
+    assert findings == []
     assert "not valid JSON" in error
 
 
-def test_parse_candidates_rejects_a_missing_candidates_list():
-    candidates, error = _parse_candidates(json.dumps({"duplicates": []}))
-    assert candidates == []
-    assert '"candidates" list' in error
+def test_parse_findings_rejects_a_missing_findings_list():
+    findings, error = _parse_findings(json.dumps({"duplicates": []}))
+    assert findings == []
+    assert '"findings" list' in error
 
 
-def test_parse_candidates_rejects_a_malformed_candidate():
-    bad = {**CANDIDATE.model_dump(), "confidence": "certain"}
-    candidates, error = _parse_candidates(json.dumps({"candidates": [bad]}))
-    assert candidates == []
+def test_parse_findings_rejects_a_malformed_finding():
+    bad = {**FINDING.model_dump(), "confidence": "certain"}
+    findings, error = _parse_findings(json.dumps({"findings": [bad]}))
+    assert findings == []
     assert "expected shape" in error
+
+
+# --- the review itself (Anthropic client faked, no network) ----------------------
+
+def test_property_request_never_returns_its_named_event_as_a_duplicate(monkeypatch):
+    # Even a model that ignores the prompt and calls the named event a duplicate
+    # cannot get that finding past the deterministic guard.
+    payload = {
+        "findings": [
+            {
+                "kind": "duplicate_event",
+                "existing_event": "Product Added to Wishlist",
+                "category": "Wishlisting",
+                "property_names": [],
+                "reason": "The draft describes the same wishlist behavior.",
+                "confidence": "high",
+            },
+            {
+                "kind": "property_already_exists",
+                "existing_event": "Product Added to Wishlist",
+                "category": "Wishlisting",
+                "property_names": ["wishlist_name"],
+                "reason": (
+                    "The event already carries wishlist_id; a wishlist_name that "
+                    "identifies the same list duplicates its meaning."
+                ),
+                "confidence": "medium",
+            },
+        ]
+    }
+    _install_fake_model(monkeypatch, payload)
+    draft = {
+        "name": "Product Added to Wishlist",
+        "category": "Wishlisting",
+        "description": "Adds the wishlist name to the existing event.",
+        "properties": [{"name": "wishlist_name", "type": "string", "required": False}],
+    }
+    review = review_against_catalog(
+        EventDefinition.model_validate(draft),
+        request_kind="new_property_on_existing",
+        existing_event="Product Added to Wishlist",
+    )
+    assert review.parse_error is None
+    assert [f.kind for f in review.findings] == ["property_already_exists"]
+
+
+def test_property_request_prompt_reaches_the_model(monkeypatch):
+    calls = []
+    _install_fake_model(monkeypatch, {"findings": []}, calls)
+    review = review_against_catalog(
+        EventDefinition.model_validate(BOOKMARKED),
+        request_kind="new_property_on_existing",
+        existing_event="Product Added to Wishlist",
+    )
+    assert review.findings == []
+    assert len(calls) == 1
+    assert 'never report it with kind "duplicate_event"' in calls[0]["system"]
 
 
 # --- pipeline seam ---------------------------------------------------------------
 
-def test_candidate_is_audited_stored_and_returned(client, storage, monkeypatch):
+def test_finding_is_audited_stored_and_returned(client, storage, monkeypatch):
     monkeypatch.setattr(
         "app.routes.ingest_raw_definition",
-        partial(ingest_raw_definition, duplicate_fn=stub_one_candidate),
+        partial(ingest_raw_definition, duplicate_fn=stub_one_finding),
     )
     response = client.post(
         "/requests/raw",
@@ -155,32 +252,51 @@ def test_candidate_is_audited_stored_and_returned(client, storage, monkeypatch):
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "pending_approval"
-    assert body["duplicate_candidates"] == [CANDIDATE.model_dump()]
+    assert body["duplicate_candidates"] == [FINDING.model_dump()]
 
     request = storage.get_request(body["id"])
-    assert request["duplicate_candidates"] == [CANDIDATE.model_dump()]
+    assert request["duplicate_candidates"] == [FINDING.model_dump()]
 
     audit = _entry(storage, body["id"], "duplicate_review")
     assert audit["detail"]["model"] == MODEL
-    assert audit["detail"]["candidates"] == [CANDIDATE.model_dump()]
+    assert audit["detail"]["findings"] == [FINDING.model_dump()]
 
 
-def test_no_candidates_leaves_behaviour_unchanged(storage):
+def test_no_findings_leaves_behaviour_unchanged(storage):
     rid = interpret_intake(
         "track when a shopper bookmarks a product",
         storage,
         interpret_fn=stub_interpret,
-        duplicate_fn=stub_no_candidates,
+        duplicate_fn=stub_no_findings,
     )
     request = storage.get_request(rid)
     assert request["status"] == "draft"
     assert request["duplicate_candidates"] == []
-    assert _entry(storage, rid, "duplicate_review")["detail"]["candidates"] == []
+    assert _entry(storage, rid, "duplicate_review")["detail"]["findings"] == []
 
-    # No candidates, no gate: submission needs no note and approval no acknowledgment.
+    # No findings, no gate: submission needs no note and approval no acknowledgment.
     submit_request(rid, storage)
     decide(rid, "approve", storage, get_publisher())
     assert storage.get_request(rid)["status"] == "published"
+
+
+def test_review_receives_the_request_kind_and_named_event(storage):
+    seen = {}
+
+    def recording_stub(_definition, **kwargs):
+        seen.update(kwargs)
+        return DuplicateReview(MODEL)
+
+    interpret_intake(
+        "add the wishlist name to the wishlist event",
+        storage,
+        interpret_fn=stub_interpret,
+        duplicate_fn=recording_stub,
+        request_kind="new_property_on_existing",
+        existing_event="Product Added to Wishlist",
+    )
+    assert seen["request_kind"] == "new_property_on_existing"
+    assert seen["existing_event"] == "Product Added to Wishlist"
 
 
 def test_raising_review_never_blocks_routing(storage):
@@ -248,7 +364,7 @@ def test_unreadable_review_output_is_recorded_and_routes_normally(storage):
     )
     assert storage.get_request(rid)["status"] == "draft"
     audit = _entry(storage, rid, "duplicate_review")
-    assert audit["detail"]["candidates"] == []
+    assert audit["detail"]["findings"] == []
     assert audit["detail"]["parse_error"] == "model output was not valid JSON"
 
 
@@ -269,12 +385,12 @@ def test_rejected_draft_never_invokes_the_review(storage):
     assert calls == []
 
 
-def test_approval_with_candidates_requires_acknowledgment(client, storage):
+def test_approval_with_findings_requires_acknowledgment(client, storage):
     rid = interpret_intake(
         "track when a shopper bookmarks a product",
         storage,
         interpret_fn=stub_interpret,
-        duplicate_fn=stub_one_candidate,
+        duplicate_fn=stub_one_finding,
     )
     submit_request(rid, storage, duplicate_note="bookmarking is a distinct behavior")
 

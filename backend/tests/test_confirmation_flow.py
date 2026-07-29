@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from app.catalog import DuplicateCandidate, DuplicateReview
+from app.catalog import DuplicateReview, ReviewFinding
 from app.interpreter import Interpretation
 from app.pipeline import (
     DECIDABLE_STATUSES,
@@ -44,11 +44,24 @@ WISHLISTED = {
     "properties": [{"name": "product_id", "type": "string", "required": True}],
 }
 
-CANDIDATE = DuplicateCandidate(
+DUPLICATE_FINDING = ReviewFinding(
+    kind="duplicate_event",
     existing_event="Product Added to Wishlist",
     category="Wishlisting",
     reason="Both fire when a shopper saves a product for later.",
     confidence="high",
+)
+
+EXTENSION_FINDING = ReviewFinding(
+    kind="property_extension",
+    existing_event="Product Added to Wishlist",
+    category="Wishlisting",
+    property_names=["product_id"],
+    reason=(
+        "Bookmarking detail could live on the existing wishlist event rather than "
+        "a new one."
+    ),
+    confidence="medium",
 )
 
 
@@ -60,11 +73,15 @@ def stub_interpret_wishlisted(_raw, **_):
     return Interpretation(MODEL, WISHLISTED, json.dumps(WISHLISTED), None)
 
 
-def stub_one_candidate(_definition, **_):
-    return DuplicateReview(MODEL, [CANDIDATE], '{"candidates": [...]}')
+def stub_duplicate_finding(_definition, **_):
+    return DuplicateReview(MODEL, [DUPLICATE_FINDING], '{"findings": [...]}')
 
 
-def stub_no_candidates(_definition, **_):
+def stub_extension_finding(_definition, **_):
+    return DuplicateReview(MODEL, [EXTENSION_FINDING], '{"findings": [...]}')
+
+
+def stub_no_findings(_definition, **_):
     return DuplicateReview(MODEL)
 
 
@@ -72,7 +89,7 @@ def _steps(storage, request_id):
     return [entry["step"] for entry in storage.get_audit_log(request_id)]
 
 
-def _draft(storage, duplicate_fn=stub_no_candidates):
+def _draft(storage, duplicate_fn=stub_no_findings):
     return interpret_intake(
         "track when a shopper bookmarks a product",
         storage,
@@ -98,9 +115,11 @@ def test_model_free_raw_path_never_produces_a_draft(client, storage):
     assert "submitted" not in _steps(storage, rid)
 
 
-def test_submit_with_candidates_and_no_note_is_refused(client, storage):
-    rid = _draft(storage, duplicate_fn=stub_one_candidate)
-    assert storage.get_request(rid)["duplicate_candidates"] == [CANDIDATE.model_dump()]
+def test_submit_with_a_duplicate_finding_and_no_note_is_refused(client, storage):
+    rid = _draft(storage, duplicate_fn=stub_duplicate_finding)
+    assert storage.get_request(rid)["duplicate_candidates"] == [
+        DUPLICATE_FINDING.model_dump()
+    ]
 
     with pytest.raises(DuplicateNoteRequired):
         submit_request(rid, storage)
@@ -120,6 +139,19 @@ def test_submit_with_candidates_and_no_note_is_refused(client, storage):
         e for e in storage.get_audit_log(rid) if e["step"] == "submitted"
     )
     assert submitted["detail"]["duplicate_note"] == "bookmarking is a distinct behavior"
+
+
+def test_property_extension_finding_alone_needs_no_duplicate_note(client, storage):
+    # A property-extension finding is information, not an accusation: the requester
+    # is not asked to argue their draft is not a duplicate, because nothing said it was.
+    rid = _draft(storage, duplicate_fn=stub_extension_finding)
+    assert storage.get_request(rid)["duplicate_candidates"] == [
+        EXTENSION_FINDING.model_dump()
+    ]
+
+    response = client.post(f"/requests/{rid}/submit", json={})
+    assert response.status_code == 200
+    assert response.json()["status"] == "pending_approval"
 
 
 def test_draft_is_never_decidable(client, storage):
@@ -164,7 +196,7 @@ def test_submit_recovers_the_routed_decision(storage):
         "track when a shopper wishlists a product",
         storage,
         interpret_fn=stub_interpret_wishlisted,
-        duplicate_fn=stub_no_candidates,
+        duplicate_fn=stub_no_findings,
     )
     assert storage.get_request(rid)["status"] == "draft"
     routed = next(e for e in storage.get_audit_log(rid) if e["step"] == "routed")
