@@ -192,6 +192,16 @@ export function submitRequest(
   });
 }
 
+export function convertRequest(
+  id: number,
+  existingEvent: string,
+): Promise<{ id: number; status: string }> {
+  return request(`/requests/${id}/convert`, {
+    method: "POST",
+    body: JSON.stringify({ existing_event: existingEvent }),
+  });
+}
+
 export function decideRequest(
   id: number,
   decision: "approve" | "reject",

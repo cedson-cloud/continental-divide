@@ -15,9 +15,13 @@ const KIND_HEADINGS: Record<(typeof KIND_ORDER)[number], string> = {
 export function AgentReview({
   findings,
   variant,
+  onConvert,
+  convertingEvent,
 }: {
   findings: ReviewFinding[];
   variant: "requester" | "approver";
+  onConvert?: (existingEvent: string) => void;
+  convertingEvent?: string | null;
 }) {
   if (findings.length === 0) return null;
   return (
@@ -49,6 +53,21 @@ export function AgentReview({
                     )}
                   </div>
                   <div className="candidate-reason">{finding.reason}</div>
+                  {variant === "requester" &&
+                    kind === "property_extension" &&
+                    onConvert && (
+                      <div className="row" style={{ gap: 8, marginTop: 8 }}>
+                        <button
+                          className="btn"
+                          onClick={() => onConvert(finding.existing_event)}
+                          disabled={convertingEvent != null}
+                        >
+                          {convertingEvent === finding.existing_event
+                            ? "Creating a new request…"
+                            : `Submit as a property on ${finding.existing_event} instead`}
+                        </button>
+                      </div>
+                    )}
                 </div>
               ))}
             </div>

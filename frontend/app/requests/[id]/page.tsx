@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import {
   RequestDetail,
   ReviewFinding,
   RuleCheck,
+  convertRequest,
   decideRequest,
   friendlyError,
   getRequest,
@@ -47,8 +49,18 @@ function acknowledgeLabel(findings: ReviewFinding[]): string {
     .join(", ")}`;
 }
 
+function auditNumber(
+  detail: RequestDetail,
+  step: string,
+  key: string,
+): number | null {
+  const value = detail.audit_log.find((e) => e.step === step)?.detail?.[key];
+  return typeof value === "number" ? value : null;
+}
+
 export default function RequestDetailPage({ params }: { params: { id: string } }) {
   const id = Number(params.id);
+  const router = useRouter();
   const [detail, setDetail] = useState<RequestDetail | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [note, setNote] = useState("");
@@ -60,6 +72,8 @@ export default function RequestDetailPage({ params }: { params: { id: string } }
   const [duplicateNote, setDuplicateNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [convertingEvent, setConvertingEvent] = useState<string | null>(null);
+  const [convertError, setConvertError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     getRequest(id)
@@ -93,6 +107,19 @@ export default function RequestDetailPage({ params }: { params: { id: string } }
       load();
     } finally {
       setDeciding(false);
+    }
+  }
+
+  async function convert(existingEvent: string) {
+    setConvertingEvent(existingEvent);
+    setConvertError(null);
+    try {
+      const res = await convertRequest(id, existingEvent);
+      router.push(`/requests/${res.id}`);
+    } catch (err) {
+      setConvertError(friendlyError(err));
+      setConvertingEvent(null);
+      load();
     }
   }
 
@@ -132,6 +159,9 @@ export default function RequestDetailPage({ params }: { params: { id: string } }
 
   const evaluation = evaluationFrom(detail);
   const isDraft = detail.status === "draft";
+  const isSuperseded = detail.status === "superseded";
+  const supersededById = auditNumber(detail, "superseded_by", "new_request_id");
+  const supersedesId = auditNumber(detail, "supersedes", "original_request_id");
   const findings = detail.duplicate_candidates;
   const noteRequired =
     isDraft &&
@@ -152,6 +182,28 @@ export default function RequestDetailPage({ params }: { params: { id: string } }
       <p className="page-subtitle" style={{ marginTop: 8 }}>
         {detail.raw_intake_text}
       </p>
+
+      {isSuperseded && (
+        <div className="msg msg-info">
+          This request was replaced by{" "}
+          {supersededById !== null ? (
+            <Link href={`/requests/${supersededById}`}>
+              request #{supersededById}
+            </Link>
+          ) : (
+            "a newer request"
+          )}
+          , which asks for the same thing as a property on an existing event.
+        </div>
+      )}
+
+      {supersedesId !== null && (
+        <div className="msg msg-info">
+          This request replaces{" "}
+          <Link href={`/requests/${supersedesId}`}>request #{supersedesId}</Link>,
+          converted to a property on an existing event.
+        </div>
+      )}
 
       {detail.business_value && (
         <div className="panel">
@@ -196,7 +248,16 @@ export default function RequestDetailPage({ params }: { params: { id: string } }
           <AgentReview
             findings={findings}
             variant={isDraft ? "requester" : "approver"}
+            onConvert={isDraft ? convert : undefined}
+            convertingEvent={convertingEvent}
           />
+          {convertingEvent !== null && (
+            <div className="msg msg-info mt-16">
+              Creating a new request on {convertingEvent} — the model is drafting
+              and reviewing it, which takes a few seconds…
+            </div>
+          )}
+          {convertError && <div className="msg msg-error mt-16">{convertError}</div>}
         </div>
       )}
 
@@ -223,7 +284,9 @@ export default function RequestDetailPage({ params }: { params: { id: string } }
               className="btn btn-primary"
               onClick={submitDraft}
               disabled={
-                submitting || (noteRequired && duplicateNote.trim().length === 0)
+                submitting ||
+                convertingEvent !== null ||
+                (noteRequired && duplicateNote.trim().length === 0)
               }
             >
               {submitting ? "Submitting…" : "Submit request"}
