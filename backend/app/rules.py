@@ -235,7 +235,11 @@ def pii_hit(
 # --- evaluation ------------------------------------------------------------------
 
 def evaluate(
-    event: EventDefinition, profile: "GovernanceProfile | None" = None
+    event: EventDefinition,
+    profile: "GovernanceProfile | None" = None,
+    *,
+    request_kind: str | None = None,
+    existing_event: str | None = None,
 ) -> Evaluation:
     """Run all deterministic rules over a parsed definition and return a decision.
 
@@ -244,6 +248,11 @@ def evaluate(
     routes to approval, where a human must acknowledge the PII before approving. A clean
     definition whose name already exists in the plan is flagged as a duplicate and routed
     to approval. A clean, novel definition is routed to approval as ``pending_approval``.
+
+    ``request_kind`` and ``existing_event`` qualify the duplicate check: a
+    ``new_property_on_existing`` request drafts against the event it names, so its
+    name matching ``existing_event`` is expected, recorded as a passing ``duplicate``
+    check rather than flagged. A match against any other plan event still flags.
 
     ``profile`` configures the rules; ``None`` resolves to ``DEFAULT_PROFILE``, which
     reproduces the constants above. (The default is ``None`` rather than the profile
@@ -331,9 +340,29 @@ def evaluate(
 
     # PII does not reject; only the naming, category, and property-naming rules do.
     hard_failed = any(not c.passed for c in checks if c.rule != "pii")
+
+    # A property request drafts against the event it names, so its name matching
+    # that event is expected, not a duplicate. The check still runs and its result
+    # is recorded — silence would look the same as the check not running.
+    expected_match = (
+        request_kind == "new_property_on_existing"
+        and existing_event is not None
+        and event.name.strip() == existing_event.strip()
+    )
+    if expected_match and not hard_failed:
+        checks.append(
+            RuleCheck(
+                rule="duplicate",
+                passed=True,
+                detail=(
+                    f"'{event.name}' matches the event this property is being "
+                    "added to; expected, not a duplicate"
+                ),
+            )
+        )
     flags = (
         [f"'{event.name}' already exists in the tracking plan"]
-        if not hard_failed and event.name in known_event_names()
+        if not hard_failed and not expected_match and event.name in known_event_names()
         else []
     )
     if hard_failed:

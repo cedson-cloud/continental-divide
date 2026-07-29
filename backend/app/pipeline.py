@@ -117,7 +117,16 @@ def _route(
 
     if profile is None:
         profile = load_active_profile()
-    evaluation = evaluate(parsed, profile)
+    # The duplicate rule needs to know what was asked for: a property request's
+    # name is supposed to match the event it targets. Same two values the catalog
+    # review reads below.
+    request = storage.get_request(request_id)
+    evaluation = evaluate(
+        parsed,
+        profile,
+        request_kind=request.get("request_kind"),
+        existing_event=request.get("existing_event"),
+    )
     storage.set_pii_flags(request_id, evaluation.pii_flagged, evaluation.pii_details)
     storage.add_audit_entry(
         request_id,
@@ -136,7 +145,6 @@ def _route(
     # down intake: record it and route normally. The review's question depends on
     # what was asked for, so it gets the request kind and named event off the row.
     if duplicate_fn is not None and evaluation.decision is not Decision.rejected:
-        request = storage.get_request(request_id)
         try:
             review = duplicate_fn(
                 parsed,
