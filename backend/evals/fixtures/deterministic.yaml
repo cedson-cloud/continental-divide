@@ -1,0 +1,284 @@
+# Deterministic-tier fixtures. Every entry pins a specific engine decision and
+# carries a note naming it, so a claim about behaviour resolves to one fixture
+# instead of a green suite. Profiles are pinned templates — never active.yaml.
+
+names:
+  - id: phrasal_signed_up
+    note: "The 915696e fix: a trailing particle shifts the verb left, so Newsletter Signed Up is valid."
+    profile: templates/segment-ecommerce.yaml
+    name: Newsletter Signed Up
+    expect_valid: true
+
+  - id: phrasal_opted_in
+    note: "Particle 'In' shifts the verb: Opted is the action, not In."
+    profile: templates/segment-ecommerce.yaml
+    name: User Opted In
+    expect_valid: true
+
+  - id: phrasal_checked_out
+    note: "Particle 'Out' shifts the verb: Checked is the action, not Out."
+    profile: templates/segment-ecommerce.yaml
+    name: Cart Checked Out
+    expect_valid: true
+
+  - id: particle_before_connector
+    note: "Particle and connector compose: the verb sits before 'Out to', not at the end."
+    profile: templates/segment-ecommerce.yaml
+    name: Wishlist Product Checked Out to Cart
+    expect_valid: true
+
+  - id: for_is_not_a_connector
+    note: "Only 'to' and 'from' are connectors; lowercase 'for' fails Title Case rather than reading as one."
+    profile: templates/segment-ecommerce.yaml
+    name: Item Saved for Later
+    expect_valid: false
+    expect_fragment: Title Case
+
+  - id: acronym_object
+    note: "An all-caps acronym counts as a Title Case word."
+    profile: templates/segment-ecommerce.yaml
+    name: SKU Added
+    expect_valid: true
+
+  - id: acronym_midname
+    note: "An acronym mid-name is fine; the verb is still the final word."
+    profile: templates/segment-ecommerce.yaml
+    name: Coupon QR Scanned
+    expect_valid: true
+
+  - id: dictated_snake_under_title
+    note: "A dictated snake_case name fails Title Case on underscores; the engine rejects, it never corrects."
+    profile: templates/segment-ecommerce.yaml
+    name: checkout_coupon_applied
+    expect_valid: false
+    expect_fragment: underscores
+
+  - id: bare_verb_with_particle
+    note: "The particle shift does not excuse a bare verb: Sign Up is not past tense."
+    profile: templates/segment-ecommerce.yaml
+    name: Newsletter Sign Up
+    expect_valid: false
+    expect_fragment: past tense
+
+  - id: verb_before_connector
+    note: "The verb before a connector must be past tense: Add to Wishlist fails."
+    profile: templates/segment-ecommerce.yaml
+    name: Product Add to Wishlist
+    expect_valid: false
+    expect_fragment: past tense
+
+  - id: posthog_clean
+    note: "The snake_case convention accepts what Title Case rejects."
+    profile: templates/posthog-snake-case.yaml
+    name: coupon_applied
+    expect_valid: true
+
+  - id: posthog_phrasal
+    note: "The particle shift works on lowercase tokens too."
+    profile: templates/posthog-snake-case.yaml
+    name: newsletter_signed_up
+    expect_valid: true
+
+  - id: posthog_rejects_title
+    note: "Under posthog the plan's own Title Case names fail: the profile is load-bearing."
+    profile: templates/posthog-snake-case.yaml
+    name: Coupon Applied
+    expect_valid: false
+    expect_fragment: snake_case
+
+  - id: posthog_for_fails
+    note: "'for' is not a connector under snake_case either; the final token must be the verb."
+    profile: templates/posthog-snake-case.yaml
+    name: item_saved_for_later
+    expect_valid: false
+    expect_fragment: past tense
+
+definitions:
+  - id: clean_novel
+    note: "The baseline: a clean, novel definition routes to approval with nothing failed."
+    profile: templates/segment-ecommerce.yaml
+    definition:
+      name: Cart Cleared
+      category: Core Ordering
+      properties:
+        - {name: cart_id, type: string}
+    expect:
+      decision: pending_approval
+      failed_rules: []
+      pii_flagged: false
+
+  - id: phrasal_verb_end_to_end
+    note: "Newsletter Signed Up routes cleanly end to end — the claim that outlived its fix by three days."
+    profile: templates/segment-ecommerce.yaml
+    definition:
+      name: Newsletter Signed Up
+      category: Core Ordering
+      properties:
+        - {name: newsletter_id, type: string}
+    expect:
+      decision: pending_approval
+      failed_rules: []
+
+  - id: for_not_a_connector
+    note: "'for' fails naming at the definition level too: a rejection, not a flag."
+    profile: templates/segment-ecommerce.yaml
+    definition:
+      name: Item Saved for Later
+      category: Wishlisting
+      properties:
+        - {name: product_id, type: string}
+    expect:
+      decision: rejected
+      failed_rules: [event_naming]
+
+  - id: unknown_category
+    note: "A category outside the plan is a hard rejection."
+    profile: templates/segment-ecommerce.yaml
+    definition:
+      name: Cart Cleared
+      category: Made Up
+      properties:
+        - {name: cart_id, type: string}
+    expect:
+      decision: rejected
+      failed_rules: [category]
+
+  - id: bad_property_name
+    note: "A camelCase property name rejects the whole definition."
+    profile: templates/segment-ecommerce.yaml
+    definition:
+      name: Cart Cleared
+      category: Core Ordering
+      properties:
+        - {name: cartId, type: string}
+    expect:
+      decision: rejected
+      failed_rules: [property_naming]
+
+  - id: pii_flags_but_routes
+    note: "A failed rule is not the same as a rejection: PII flags and still routes to approval."
+    profile: templates/segment-ecommerce.yaml
+    definition:
+      name: Newsletter Subscribed
+      category: Core Ordering
+      properties:
+        - {name: email, type: string}
+    expect:
+      decision: pending_approval
+      failed_rules: [pii]
+      pii_flagged: true
+
+  - id: pii_multi_token
+    note: "A multi-token blocklist entry matches as a contiguous token subsequence: credit_card_last4 flags."
+    profile: templates/segment-ecommerce.yaml
+    definition:
+      name: Card Verified
+      category: Core Ordering
+      properties:
+        - {name: credit_card_last4, type: string}
+    expect:
+      decision: pending_approval
+      failed_rules: [pii]
+      pii_flagged: true
+
+  - id: hard_failure_beats_pii
+    note: "A hard naming failure rejects even when PII also fired; both failures are recorded."
+    profile: templates/segment-ecommerce.yaml
+    definition:
+      name: add_to_cart
+      category: Core Ordering
+      properties:
+        - {name: email, type: string}
+    expect:
+      decision: rejected
+      failed_rules: [event_naming, pii]
+
+  - id: mechanical_duplicate
+    note: "A clean name already in the plan is flagged as a duplicate, not rejected, and still routes."
+    profile: templates/segment-ecommerce.yaml
+    definition:
+      name: Product Added
+      category: Core Ordering
+      properties:
+        - {name: product_id, type: string}
+    expect:
+      decision: flagged_duplicate
+      failed_rules: []
+      flags_present: true
+
+  - id: duplicate_check_absent
+    note: "A genuine duplicate should carry a duplicate check explaining the flag, not just the flag."
+    profile: templates/segment-ecommerce.yaml
+    definition:
+      name: Product Added
+      category: Core Ordering
+      properties:
+        - {name: product_id, type: string}
+    expect:
+      duplicate_check_present: true
+    xfail_reason: "TASKS.md item 1 — a genuine duplicate is flagged with no check explaining it. Remove this marker when the check is always emitted."
+
+  - id: property_request_exempt
+    note: "A property request matching its target event is expected, not a duplicate — and the check is recorded, not silent."
+    profile: templates/segment-ecommerce.yaml
+    definition:
+      name: Coupon Applied
+      category: Coupons
+      properties:
+        - {name: coupon_source, type: string}
+    request_kind: new_property_on_existing
+    existing_event: Coupon Applied
+    expect:
+      decision: pending_approval
+      flags_present: false
+      duplicate_check_present: true
+
+  - id: property_request_other
+    note: "A property request colliding with a different plan event still flags as a duplicate."
+    profile: templates/segment-ecommerce.yaml
+    definition:
+      name: Product Added
+      category: Core Ordering
+      properties:
+        - {name: product_id, type: string}
+    request_kind: new_property_on_existing
+    existing_event: Coupon Applied
+    expect:
+      decision: flagged_duplicate
+      failed_rules: []
+
+  - id: dictated_name_verbatim
+    note: "The engine rejects a dictated name; the model never corrects it."
+    profile: templates/segment-ecommerce.yaml
+    definition:
+      name: checkout_coupon_applied
+      category: Coupons
+      properties:
+        - {name: coupon_id, type: string}
+    expect:
+      decision: rejected
+      failed_rules: [event_naming]
+
+  - id: posthog_clean
+    note: "A snake_case definition passes end to end under the posthog template."
+    profile: templates/posthog-snake-case.yaml
+    definition:
+      name: coupon_applied
+      category: Coupons
+      properties:
+        - {name: coupon_id, type: string}
+    expect:
+      decision: pending_approval
+      failed_rules: []
+
+  - id: posthog_rejects_title
+    note: "The definition that passes under segment rejects under posthog: same engine, different profile."
+    profile: templates/posthog-snake-case.yaml
+    definition:
+      name: Coupon Applied
+      category: Coupons
+      properties:
+        - {name: coupon_id, type: string}
+    expect:
+      decision: rejected
+      failed_rules: [event_naming]

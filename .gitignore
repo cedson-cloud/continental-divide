@@ -18,6 +18,9 @@ venv/
 *.sqlite3
 backend/data/
 
+# Eval run outputs. Results are regenerated; baseline.json is committed.
+backend/evals/results/
+
 # Node / Next
 node_modules/
 .next/
@@ -33,3 +36,6 @@ yarn-error.log*
 
 # Claude Code local permissions (machine-specific)
 .claude/settings.local.json
+
+# Local repo-state check (personal workflow tool)
+check.sh
