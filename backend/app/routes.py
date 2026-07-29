@@ -20,6 +20,7 @@ from .governance import (
 )
 from .pipeline import (
     DuplicateAcknowledgmentRequired,
+    DuplicateNoteRequired,
     IntakeModelError,
     InvalidTransition,
     PiiAcknowledgmentRequired,
@@ -27,6 +28,7 @@ from .pipeline import (
     decide,
     ingest_raw_definition,
     interpret_intake,
+    submit_request,
 )
 from .publisher import get_publisher
 from .rate_limit import RateLimiter
@@ -75,6 +77,10 @@ class RawIntakeBody(BaseModel):
     request_kind: RequestKind = "new_event"
     existing_event: Optional[str] = None
     destinations: list[str] = Field(default_factory=list)
+
+
+class SubmitBody(BaseModel):
+    duplicate_note: Optional[str] = None
 
 
 class DecisionBody(BaseModel):
@@ -241,6 +247,7 @@ def _intake_response(storage, request_id: int) -> IntakeResponse:
 def list_requests() -> list:
     storage = get_storage()
     rows = storage.list_requests()
+    # A draft is not in anyone's queue yet; it is reachable by id until submitted.
     return [
         {
             "id": row["id"],
@@ -250,6 +257,7 @@ def list_requests() -> list:
             "created_at": row["created_at"],
         }
         for row in rows
+        if row["status"] != "draft"
     ]
 
 
@@ -261,6 +269,26 @@ def get_request(request_id: int) -> dict:
         raise HTTPException(status_code=404, detail=f"request {request_id} not found")
     request["audit_log"] = storage.get_audit_log(request_id)
     return request
+
+
+@router.post("/requests/{request_id}/submit")
+def submit_request_route(request_id: int, body: Optional[SubmitBody] = None) -> dict:
+    storage = get_storage()
+    try:
+        submit_request(
+            request_id,
+            storage,
+            duplicate_note=body.duplicate_note if body else None,
+        )
+    except RequestNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except InvalidTransition as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except DuplicateNoteRequired as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    saved = storage.get_request(request_id)
+    return {"id": request_id, "status": saved["status"]}
 
 
 @router.post("/requests/{request_id}/decision")

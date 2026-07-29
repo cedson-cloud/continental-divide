@@ -14,7 +14,12 @@ import pytest
 from app.catalog import DuplicateReview
 from app.governance import load_profile
 from app.interpreter import Interpretation
-from app.pipeline import PiiAcknowledgmentRequired, decide, interpret_intake
+from app.pipeline import (
+    PiiAcknowledgmentRequired,
+    decide,
+    interpret_intake,
+    submit_request,
+)
 from app.publisher import get_publisher
 
 MODEL = "claude-sonnet-4-6"
@@ -58,7 +63,7 @@ def test_clean_intake_routes_then_approve_publishes(storage):
     )
 
     request = storage.get_request(rid)
-    assert request["status"] == "pending_approval"
+    assert request["status"] == "draft"
     assert request["parsed_definition"]["name"] == "Cart Cleared"
     assert _steps(storage, rid) == [
         "intake_received",
@@ -68,6 +73,9 @@ def test_clean_intake_routes_then_approve_publishes(storage):
         "duplicate_review",
         "routed",
     ]
+
+    submit_request(rid, storage)
+    assert storage.get_request(rid)["status"] == "pending_approval"
 
     result = decide(rid, "approve", storage, get_publisher(), note="looks good")
     assert result is not None
@@ -84,6 +92,7 @@ def test_clean_intake_routes_then_approve_publishes(storage):
         "rules_evaluated",
         "duplicate_review",
         "routed",
+        "submitted",
         "decision_received",
         "published",
     ]
@@ -97,9 +106,12 @@ def test_pii_intake_is_flagged_and_gated_on_acknowledgment(storage):
     )
 
     request = storage.get_request(rid)
-    assert request["status"] == "pending_approval"
+    assert request["status"] == "draft"
     assert request["pii_flagged"] is True
     assert request["pii_details"] == "email -> email"
+
+    submit_request(rid, storage)
+    assert storage.get_request(rid)["status"] == "pending_approval"
 
     with pytest.raises(PiiAcknowledgmentRequired):
         decide(rid, "approve", storage, get_publisher())

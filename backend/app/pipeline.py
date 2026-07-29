@@ -45,6 +45,10 @@ class DuplicateAcknowledgmentRequired(Exception):
     pass
 
 
+class DuplicateNoteRequired(Exception):
+    pass
+
+
 class IntakeModelError(Exception):
     """The model service failed while drafting a definition; the request is persisted
     and rejected, and the caller should surface a 502."""
@@ -68,11 +72,18 @@ def _route(
     storage: Storage,
     profile: Optional[GovernanceProfile] = None,
     duplicate_fn: Optional[Callable[..., DuplicateReview]] = None,
+    *,
+    requires_confirmation: bool = False,
 ) -> None:
     """Write the schema -> rules -> routed tail of the audit trail and set the final
     status. The request row and the entries that precede ``schema_parsed`` are written
     by the caller. ``profile`` is the governance profile to evaluate under; ``None``
     resolves to the active profile so offline callers enforce the same rules.
+
+    ``requires_confirmation`` holds a request that was not rejected at ``draft``
+    instead of its routed decision, so the requester can review it before it enters
+    the approval queue. The ``routed`` entry still records the real decision — that
+    is how :func:`submit_request` recovers it later.
 
     ``duplicate_fn`` is the advisory semantic duplicate review (see ``catalog.py``).
     ``None`` skips it entirely — no call, no audit entry — which is what the
@@ -138,7 +149,10 @@ def _route(
                 },
             )
 
-    storage.update_request_status(request_id, evaluation.decision.value)
+    if requires_confirmation and evaluation.decision is not Decision.rejected:
+        storage.update_request_status(request_id, "draft")
+    else:
+        storage.update_request_status(request_id, evaluation.decision.value)
     storage.add_audit_entry(
         request_id,
         "routed",
@@ -151,7 +165,7 @@ def _route(
 
 
 def _push_if_pending(request_id: int, storage: Storage) -> None:
-    """Push a request to the Notion approval board if it landed at ``pending_approval``.
+    """Push a request to the Notion approval board if it is at ``pending_approval``.
 
     Store-first and one-way: the local event is already persisted and is kept regardless.
     No token configured -> skip silently. A real push error (token set) is recorded as
@@ -188,7 +202,9 @@ def interpret_intake(
     """Draft a definition from natural-language text, then run the existing flow.
 
     Persists the request and writes ``intake_received`` before calling the model, so a
-    model failure still leaves an auditable record. Returns the request id; raises
+    model failure still leaves an auditable record. A request the rules did not reject
+    lands at ``draft`` for the requester to confirm via :func:`submit_request` before
+    it enters the approval queue. Returns the request id; raises
     :class:`IntakeModelError` if the model service is unreachable.
     """
     request_id = storage.create_request(
@@ -265,14 +281,22 @@ def interpret_intake(
             storage,
             profile,
             duplicate_fn,
+            requires_confirmation=True,
         )
         return request_id
 
     parsed, parse_errors = _parse(result.proposed_definition)
     if parsed is not None:
         storage.set_parsed_definition(request_id, parsed.model_dump(), parsed.category)
-    _route(request_id, parsed, parse_errors, storage, profile, duplicate_fn)
-    _push_if_pending(request_id, storage)
+    _route(
+        request_id,
+        parsed,
+        parse_errors,
+        storage,
+        profile,
+        duplicate_fn,
+        requires_confirmation=True,
+    )
     return request_id
 
 
@@ -334,7 +358,6 @@ def ingest_raw_definition(
     if parsed is not None:
         storage.set_parsed_definition(request_id, parsed.model_dump(), parsed.category)
     _route(request_id, parsed, parse_errors, storage, profile, duplicate_fn)
-    _push_if_pending(request_id, storage)
     return request_id
 
 
@@ -361,6 +384,51 @@ def ingest(
     )
     _route(request_id, parsed, parse_errors, storage, duplicate_fn=duplicate_fn)
     return request_id
+
+
+def submit_request(
+    request_id: int,
+    storage: Storage,
+    duplicate_note: Optional[str] = None,
+) -> None:
+    """Confirm a draft and move it into the approval queue.
+
+    Only a request currently at ``draft`` can be submitted. The routed decision is
+    recovered from the ``routed`` audit entry, so the audit log stays the one source
+    of truth for it. A draft with stored duplicate candidates requires
+    ``duplicate_note`` — the requester's statement of why it is not a duplicate —
+    before it can enter the queue. Raises :class:`RequestNotFound`,
+    :class:`InvalidTransition`, or :class:`DuplicateNoteRequired` for the caller to
+    map to HTTP.
+    """
+    request = storage.get_request(request_id)
+    if request is None:
+        raise RequestNotFound(f"request {request_id} not found")
+    if request["status"] != "draft":
+        raise InvalidTransition(
+            f"request {request_id} is '{request['status']}' and cannot be submitted"
+        )
+    routed = next(
+        e for e in reversed(storage.get_audit_log(request_id)) if e["step"] == "routed"
+    )
+    decision = routed["detail"]["decision"]
+    duplicate_candidates = request.get("duplicate_candidates") or []
+    if duplicate_candidates and not duplicate_note:
+        raise DuplicateNoteRequired(
+            f"request {request_id} has {len(duplicate_candidates)} possible semantic "
+            "duplicate(s); a note stating why it is not a duplicate is required to submit"
+        )
+
+    storage.add_audit_entry(
+        request_id,
+        "submitted",
+        {
+            "decision": decision,
+            **({"duplicate_note": duplicate_note} if duplicate_note else {}),
+        },
+    )
+    storage.update_request_status(request_id, decision)
+    _push_if_pending(request_id, storage)
 
 
 def decide(

@@ -23,6 +23,7 @@ from app.pipeline import (
     decide,
     ingest_raw_definition,
     interpret_intake,
+    submit_request,
 )
 from app.publisher import get_publisher
 from app.rules import load_plan
@@ -172,11 +173,12 @@ def test_no_candidates_leaves_behaviour_unchanged(storage):
         duplicate_fn=stub_no_candidates,
     )
     request = storage.get_request(rid)
-    assert request["status"] == "pending_approval"
+    assert request["status"] == "draft"
     assert request["duplicate_candidates"] == []
     assert _entry(storage, rid, "duplicate_review")["detail"]["candidates"] == []
 
-    # No candidates, no gate: approval needs no acknowledgment.
+    # No candidates, no gate: submission needs no note and approval no acknowledgment.
+    submit_request(rid, storage)
     decide(rid, "approve", storage, get_publisher())
     assert storage.get_request(rid)["status"] == "published"
 
@@ -192,7 +194,7 @@ def test_raising_review_never_blocks_routing(storage):
         duplicate_fn=stub_raises,
     )
     request = storage.get_request(rid)
-    assert request["status"] == "pending_approval"
+    assert request["status"] == "draft"
     assert request["duplicate_candidates"] == []
     assert _entry(storage, rid, "duplicate_review_failed")["detail"] == {
         "error": "model service down"
@@ -230,7 +232,7 @@ def test_raising_review_still_returns_200_over_http(client, storage, monkeypatch
         },
     )
     assert response.status_code == 200
-    assert response.json()["status"] == "pending_approval"
+    assert response.json()["status"] == "draft"
     assert "duplicate_review_failed" in _steps(storage, response.json()["id"])
 
 
@@ -244,7 +246,7 @@ def test_unreadable_review_output_is_recorded_and_routes_normally(storage):
         interpret_fn=stub_interpret,
         duplicate_fn=stub_unparseable,
     )
-    assert storage.get_request(rid)["status"] == "pending_approval"
+    assert storage.get_request(rid)["status"] == "draft"
     audit = _entry(storage, rid, "duplicate_review")
     assert audit["detail"]["candidates"] == []
     assert audit["detail"]["parse_error"] == "model output was not valid JSON"
@@ -274,6 +276,7 @@ def test_approval_with_candidates_requires_acknowledgment(client, storage):
         interpret_fn=stub_interpret,
         duplicate_fn=stub_one_candidate,
     )
+    submit_request(rid, storage, duplicate_note="bookmarking is a distinct behavior")
 
     with pytest.raises(DuplicateAcknowledgmentRequired):
         decide(rid, "approve", storage, get_publisher())
