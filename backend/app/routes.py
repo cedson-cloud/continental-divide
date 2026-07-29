@@ -20,6 +20,11 @@ from .governance import (
     GovernanceProfile,
     load_active_profile,
 )
+from .governance_draft import (
+    GovernanceDraftAnswers,
+    build_profile_yaml,
+    validate_profile_yaml,
+)
 from .pipeline import (
     DuplicateAcknowledgmentRequired,
     DuplicateNoteRequired,
@@ -200,6 +205,25 @@ def governance_profile() -> dict:
         "destinations": profile.destinations,
         "examples": examples,
     }
+
+
+# The answers are all short curated choices, so a body anywhere near this cap
+# is not from the setup wizard.
+_MAX_GOVERNANCE_DRAFT_BYTES = 4096
+
+
+@router.post("/governance/draft")
+def governance_draft(body: GovernanceDraftAnswers, request: Request) -> dict:
+    """Build and validate a profile draft entirely in memory. Download-only:
+    this route must never write to disk, run git, or touch the network — the
+    app has no auth, so any write here would be an unauthenticated write path."""
+    content_length = request.headers.get("content-length", "")
+    if content_length.isdigit() and int(content_length) > _MAX_GOVERNANCE_DRAFT_BYTES:
+        raise HTTPException(status_code=413, detail="request body too large")
+
+    yaml_text = build_profile_yaml(body)
+    errors = validate_profile_yaml(yaml_text)
+    return {"yaml": yaml_text, "valid": not errors, "errors": errors}
 
 
 @router.post("/requests", response_model=IntakeResponse)

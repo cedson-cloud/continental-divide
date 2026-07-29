@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
   GovernanceProfileInfo,
@@ -22,7 +23,8 @@ export default function AdminPage() {
       <h1 className="page-title">Governance</h1>
       <p className="page-subtitle">
         The rules the active profile enforces on every incoming request. Read-only:
-        this page shows what the engine is checking right now.
+        this page shows what the engine is checking right now.{" "}
+        <Link href="/admin/setup">Draft a new profile →</Link>
       </p>
 
       {error && <div className="msg msg-error">{error}</div>}

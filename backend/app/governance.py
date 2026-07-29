@@ -136,13 +136,19 @@ def _load_raw(path: Path, seen: tuple[Path, ...]) -> dict:
     return data
 
 
-def load_profile(path: str | Path) -> GovernanceProfile:
-    path = Path(path)
-    data = _load_raw(path, ())
+def profile_from_dict(data: dict, *, label: str = "<in-memory>") -> GovernanceProfile:
+    """Validate an already-loaded mapping. ``label`` names the source in errors;
+    in-memory callers (the setup wizard draft) never touch the filesystem."""
     try:
         return GovernanceProfile.model_validate(data)
     except ValidationError as exc:
-        raise GovernanceError(f"invalid governance profile {path}: {exc}") from exc
+        raise GovernanceError(f"invalid governance profile {label}: {exc}") from exc
+
+
+def load_profile(path: str | Path) -> GovernanceProfile:
+    path = Path(path)
+    data = _load_raw(path, ())
+    return profile_from_dict(data, label=str(path))
 
 
 _ACTIVE_PROFILE_PATH = Path(__file__).resolve().parents[2] / "governance" / "active.yaml"

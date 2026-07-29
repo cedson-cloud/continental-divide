@@ -185,6 +185,30 @@ export function getGovernanceProfile(): Promise<GovernanceProfileInfo> {
   return request("/governance/profile");
 }
 
+export type GovernanceDraftAnswers = {
+  business_type: string;
+  current_platform: string;
+  call_side: string;
+  naming_convention: string;
+  destinations: string[];
+  pii_additions: string[];
+};
+
+export type GovernanceDraftResult = {
+  yaml: string;
+  valid: boolean;
+  errors: string[];
+};
+
+export function draftGovernanceProfile(
+  answers: GovernanceDraftAnswers,
+): Promise<GovernanceDraftResult> {
+  return request("/governance/draft", {
+    method: "POST",
+    body: JSON.stringify(answers),
+  });
+}
+
 export function listRequests(): Promise<QueueItem[]> {
   return request("/requests");
 }
