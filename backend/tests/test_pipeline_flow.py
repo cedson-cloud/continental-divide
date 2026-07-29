@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from app.catalog import DuplicateReview
 from app.governance import load_profile
 from app.interpreter import Interpretation
 from app.pipeline import PiiAcknowledgmentRequired, decide, interpret_intake
@@ -40,13 +41,20 @@ def stub_newsletter(_raw: str, **_) -> Interpretation:
     return Interpretation(MODEL, definition, json.dumps(definition), None)
 
 
+def stub_no_duplicates(_definition, **_) -> DuplicateReview:
+    return DuplicateReview(MODEL)
+
+
 def _steps(storage, request_id):
     return [entry["step"] for entry in storage.get_audit_log(request_id)]
 
 
 def test_clean_intake_routes_then_approve_publishes(storage):
     rid = interpret_intake(
-        "track when a shopper empties their entire cart", storage, interpret_fn=stub_cart
+        "track when a shopper empties their entire cart",
+        storage,
+        interpret_fn=stub_cart,
+        duplicate_fn=stub_no_duplicates,
     )
 
     request = storage.get_request(rid)
@@ -57,6 +65,7 @@ def test_clean_intake_routes_then_approve_publishes(storage):
         "model_interpreted",
         "schema_parsed",
         "rules_evaluated",
+        "duplicate_review",
         "routed",
     ]
 
@@ -73,6 +82,7 @@ def test_clean_intake_routes_then_approve_publishes(storage):
         "model_interpreted",
         "schema_parsed",
         "rules_evaluated",
+        "duplicate_review",
         "routed",
         "decision_received",
         "published",

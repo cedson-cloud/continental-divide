@@ -19,6 +19,7 @@ from .governance import (
     load_active_profile,
 )
 from .pipeline import (
+    DuplicateAcknowledgmentRequired,
     IntakeModelError,
     InvalidTransition,
     PiiAcknowledgmentRequired,
@@ -81,6 +82,7 @@ class DecisionBody(BaseModel):
     note: Optional[str] = None
     approver_name: Optional[str] = None
     pii_acknowledged: bool = False
+    duplicate_acknowledged: bool = False
 
 
 class IntakeResponse(BaseModel):
@@ -89,6 +91,7 @@ class IntakeResponse(BaseModel):
     routed_to_approval: bool
     checks: list = Field(default_factory=list)
     flags: list = Field(default_factory=list)
+    duplicate_candidates: list = Field(default_factory=list)
 
 
 def _active_profile() -> GovernanceProfile:
@@ -221,12 +224,16 @@ def _intake_response(storage, request_id: int) -> IntakeResponse:
     log = storage.get_audit_log(request_id)
     rules_entry = next((e for e in log if e["step"] == "rules_evaluated"), None)
     routed_entry = next((e for e in log if e["step"] == "routed"), None)
+    duplicate_entry = next((e for e in log if e["step"] == "duplicate_review"), None)
     return IntakeResponse(
         id=request_id,
         status=saved["status"],
         routed_to_approval=bool(routed_entry and routed_entry["detail"].get("routed_to_approval")),
         checks=rules_entry["detail"]["checks"] if rules_entry else [],
         flags=rules_entry["detail"]["flags"] if rules_entry else [],
+        duplicate_candidates=(
+            duplicate_entry["detail"].get("candidates", []) if duplicate_entry else []
+        ),
     )
 
 
@@ -268,12 +275,15 @@ def decide_request(request_id: int, body: DecisionBody) -> dict:
             note=body.note,
             approver_name=body.approver_name,
             pii_acknowledged=body.pii_acknowledged,
+            duplicate_acknowledged=body.duplicate_acknowledged,
         )
     except RequestNotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     except InvalidTransition as exc:
         raise HTTPException(status_code=409, detail=str(exc))
     except PiiAcknowledgmentRequired as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except DuplicateAcknowledgmentRequired as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
     saved = storage.get_request(request_id)

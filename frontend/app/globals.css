@@ -604,3 +604,62 @@ table.prop-table {
   color: var(--accent);
   margin-bottom: 10px;
 }
+
+/* Agent output, deliberately styled apart from the engine's .checks: dashed border
+   and the flagged palette mark it as inference, not fact. */
+.agent-review {
+  border: 1px dashed var(--flagged-line);
+  border-left: 3px solid var(--flagged-line);
+  border-radius: 8px;
+  padding: 14px 16px;
+  background: #fcfbfe;
+}
+.agent-review-label {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--flagged-fg);
+  margin-bottom: 8px;
+}
+.agent-review-note {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0 0 12px;
+}
+.candidates {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.candidate + .candidate {
+  border-top: 1px dashed var(--border);
+  padding-top: 12px;
+}
+.candidate-event {
+  font-weight: 600;
+  font-size: 14px;
+}
+.candidate-reason {
+  color: var(--muted);
+  font-size: 13.5px;
+  margin-top: 4px;
+}
+.confidence {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 5px;
+}
+.confidence.high {
+  color: var(--flagged-fg);
+  background: var(--flagged-bg);
+}
+.confidence.medium {
+  color: var(--pending-fg);
+  background: var(--pending-bg);
+}
+.confidence.low {
+  color: var(--neutral-fg);
+  background: var(--neutral-bg);
+}

@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS event_request (
     status TEXT NOT NULL,
     pii_flagged INTEGER NOT NULL DEFAULT 0,
     pii_details TEXT,
+    duplicate_candidates TEXT,
     submitter_name TEXT,
     submitter_team TEXT,
     call_type TEXT,
@@ -109,6 +110,12 @@ class Storage(ABC):
         ...
 
     @abstractmethod
+    def set_duplicate_candidates(
+        self, request_id: int, candidates: list[dict]
+    ) -> None:
+        ...
+
+    @abstractmethod
     def set_publish_result(self, request_id: int, artifact: dict) -> None:
         ...
 
@@ -149,6 +156,7 @@ class SqliteStorage(Storage):
                 "request_kind",
                 "existing_event",
                 "destinations",
+                "duplicate_candidates",
             ):
                 if column not in existing:
                     conn.execute(f"ALTER TABLE event_request ADD COLUMN {column} TEXT")
@@ -238,6 +246,17 @@ class SqliteStorage(Storage):
                 (1 if pii_flagged else 0, pii_details, request_id),
             )
 
+    def set_duplicate_candidates(
+        self, request_id: int, candidates: list[dict]
+    ) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE event_request "
+                "SET duplicate_candidates = ?, updated_at = datetime('now') "
+                "WHERE id = ?",
+                (json.dumps(candidates), request_id),
+            )
+
     def set_publish_result(self, request_id: int, artifact: dict) -> None:
         with self._connect() as conn:
             conn.execute(
@@ -268,6 +287,11 @@ class SqliteStorage(Storage):
     def _request_row(row: sqlite3.Row) -> dict:
         data: dict[str, Any] = dict(row)
         data["pii_flagged"] = bool(data.get("pii_flagged"))
+        data["duplicate_candidates"] = (
+            json.loads(data["duplicate_candidates"])
+            if data.get("duplicate_candidates")
+            else []
+        )
         if data.get("parsed_definition"):
             data["parsed_definition"] = json.loads(data["parsed_definition"])
         if data.get("published_artifact"):

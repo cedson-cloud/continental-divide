@@ -37,6 +37,7 @@ Working roadmap for the build. Keep this clean: it travels with the repo, and th
 - [ ] **Platform specs as data** (`platforms/*.yaml`): call shape, identity model, and source URL for Segment, PostHog, and Hightouch. The three SDKs differ structurally, not cosmetically, so one template with a swapped function name will not work. The app, the agent, and any skill must read one file or they will drift.
 - [ ] **Code snippets per SDK**, generated from those specs and syntax-checked in CI. A wrong snippet is worse than no snippet, because it gets shipped.
 - [ ] **Categories in one place.** `evaluate()` reads them from `sample_tracking_plan.json`; `vet.py` reads them from the profile. The sample plan is a fixture and should not also be configuration.
+- [ ] **Configurable catalog source for the duplicate review.** `catalog_entries()` reads the bundled sample plan; in a real deployment the catalog would come from the customer's own tracking plan, so the source should be configurable the way governance profiles are.
 - [ ] **`pii.mode: block`.** Reserved in the schema, not implemented.
 - [ ] **Notion board categories drift from the sample plan.** Notion auto-creates missing options, so nothing breaks, but the demo looks inconsistent.
 - [ ] **`properties` as a non-list is silently skipped** in `vet.py`, and the event then reports that all property names are snake_case — a passing check on properties nobody examined.

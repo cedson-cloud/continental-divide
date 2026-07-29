@@ -15,6 +15,7 @@ import {
 } from "@/lib/api";
 import { NATURAL_LANGUAGE_EXAMPLES, RAW_EXAMPLES } from "@/lib/examples";
 import { ProposedDefinition } from "@/components/AuditTimeline";
+import { DuplicateReview } from "@/components/DuplicateReview";
 import { RuleChecks } from "@/components/RuleChecks";
 import { StatusBadge } from "@/components/StatusBadge";
 
@@ -346,6 +347,12 @@ function Outcome({ detail }: { detail: RequestDetail }) {
           </div>
         ) : null}
       </div>
+
+      {detail.duplicate_candidates.length > 0 && (
+        <div className="mt-16">
+          <DuplicateReview candidates={detail.duplicate_candidates} />
+        </div>
+      )}
 
       <div className="mt-16">
         <Link href={`/requests/${detail.id}`}>

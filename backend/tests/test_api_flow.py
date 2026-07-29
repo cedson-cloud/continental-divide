@@ -40,6 +40,7 @@ def test_submit_approve_publish_and_409_guard(client):
     assert response.status_code == 200
     detail = response.json()
     assert detail["status"] == "published"
+    # The raw path is model-free, so no duplicate-review step appears in its trail.
     assert [entry["step"] for entry in detail["audit_log"]] == [
         "intake_received",
         "definition_provided",

@@ -16,12 +16,20 @@ export type EventDefinition = {
   properties: EventProperty[];
 };
 
+export type DuplicateCandidate = {
+  existing_event: string;
+  category: string;
+  reason: string;
+  confidence: "high" | "medium" | "low";
+};
+
 export type IntakeResult = {
   id: number;
   status: string;
   routed_to_approval: boolean;
   checks: RuleCheck[];
   flags: string[];
+  duplicate_candidates: DuplicateCandidate[];
 };
 
 export type QueueItem = {
@@ -64,6 +72,7 @@ export type RequestDetail = {
   status: string;
   pii_flagged: boolean;
   pii_details: string | null;
+  duplicate_candidates: DuplicateCandidate[];
   business_value: string | null;
   needed_by: string | null;
   request_kind: string | null;
@@ -172,7 +181,12 @@ export function getRequest(id: number): Promise<RequestDetail> {
 export function decideRequest(
   id: number,
   decision: "approve" | "reject",
-  opts: { note?: string; approver_name?: string; pii_acknowledged?: boolean } = {},
+  opts: {
+    note?: string;
+    approver_name?: string;
+    pii_acknowledged?: boolean;
+    duplicate_acknowledged?: boolean;
+  } = {},
 ): Promise<{ id: number; status: string; published_artifact: PublishArtifact | null }> {
   return request(`/requests/${id}/decision`, {
     method: "POST",
@@ -181,6 +195,7 @@ export function decideRequest(
       note: opts.note || null,
       approver_name: opts.approver_name || null,
       pii_acknowledged: opts.pii_acknowledged ?? false,
+      duplicate_acknowledged: opts.duplicate_acknowledged ?? false,
     }),
   });
 }

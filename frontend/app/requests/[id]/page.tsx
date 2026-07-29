@@ -12,6 +12,7 @@ import {
 import { isActionable } from "@/lib/format";
 import { AuditTimeline } from "@/components/AuditTimeline";
 import { DefinitionView } from "@/components/DefinitionView";
+import { DuplicateReview } from "@/components/DuplicateReview";
 import { PublishCards } from "@/components/PublishCards";
 import { RuleChecks } from "@/components/RuleChecks";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -32,6 +33,7 @@ export default function RequestDetailPage({ params }: { params: { id: string } }
   const [note, setNote] = useState("");
   const [approverName, setApproverName] = useState("");
   const [piiAcknowledged, setPiiAcknowledged] = useState(false);
+  const [duplicateAcknowledged, setDuplicateAcknowledged] = useState(false);
   const [deciding, setDeciding] = useState(false);
   const [decisionError, setDecisionError] = useState<string | null>(null);
 
@@ -56,9 +58,11 @@ export default function RequestDetailPage({ params }: { params: { id: string } }
         note,
         approver_name: approverName,
         pii_acknowledged: piiAcknowledged,
+        duplicate_acknowledged: duplicateAcknowledged,
       });
       setNote("");
       setPiiAcknowledged(false);
+      setDuplicateAcknowledged(false);
       load();
     } catch (err) {
       setDecisionError(friendlyError(err));
@@ -143,6 +147,13 @@ export default function RequestDetailPage({ params }: { params: { id: string } }
         </div>
       )}
 
+      {detail.duplicate_candidates.length > 0 && (
+        <div className="panel">
+          <div className="panel-title">Possible semantic duplicates</div>
+          <DuplicateReview candidates={detail.duplicate_candidates} />
+        </div>
+      )}
+
       {isActionable(detail.status) && (
         <div className="panel">
           <div className="panel-title">Decision</div>
@@ -175,11 +186,31 @@ export default function RequestDetailPage({ params }: { params: { id: string } }
               </span>
             </label>
           )}
+          {detail.duplicate_candidates.length > 0 && (
+            <label className="row mt-12" style={{ gap: 8, fontSize: 14 }}>
+              <input
+                type="checkbox"
+                checked={duplicateAcknowledged}
+                onChange={(e) => setDuplicateAcknowledged(e.target.checked)}
+                disabled={deciding}
+              />
+              <span>
+                Possible duplicates reviewed — this event is not{" "}
+                {detail.duplicate_candidates
+                  .map((c) => c.existing_event)
+                  .join(", ")}
+              </span>
+            </label>
+          )}
           <div className="row mt-12">
             <button
               className="btn btn-approve"
               onClick={() => decide("approve")}
-              disabled={deciding || (detail.pii_flagged && !piiAcknowledged)}
+              disabled={
+                deciding ||
+                (detail.pii_flagged && !piiAcknowledged) ||
+                (detail.duplicate_candidates.length > 0 && !duplicateAcknowledged)
+              }
             >
               {deciding ? "Working…" : "Approve & publish"}
             </button>

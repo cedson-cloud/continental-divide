@@ -17,6 +17,7 @@ from typing import Callable, Optional, Tuple
 
 from pydantic import ValidationError
 
+from .catalog import DuplicateReview, review_for_duplicates
 from .governance import GovernanceProfile, load_active_profile
 from .interpreter import Interpretation, InterpreterError, interpret
 from .models import Decision, EventDefinition
@@ -37,6 +38,10 @@ class InvalidTransition(Exception):
 
 
 class PiiAcknowledgmentRequired(Exception):
+    pass
+
+
+class DuplicateAcknowledgmentRequired(Exception):
     pass
 
 
@@ -62,11 +67,18 @@ def _route(
     parse_errors: Optional[list],
     storage: Storage,
     profile: Optional[GovernanceProfile] = None,
+    duplicate_fn: Optional[Callable[..., DuplicateReview]] = None,
 ) -> None:
     """Write the schema -> rules -> routed tail of the audit trail and set the final
     status. The request row and the entries that precede ``schema_parsed`` are written
     by the caller. ``profile`` is the governance profile to evaluate under; ``None``
-    resolves to the active profile so offline callers enforce the same rules."""
+    resolves to the active profile so offline callers enforce the same rules.
+
+    ``duplicate_fn`` is the advisory semantic duplicate review (see ``catalog.py``).
+    ``None`` skips it entirely — no call, no audit entry — which is what the
+    model-free paths pass. When it runs, it runs only on drafts the rules did not
+    reject, and a failure in it never blocks routing: the error is recorded and the
+    request continues."""
     if parsed is None:
         storage.add_audit_entry(request_id, "schema_rejected", {"errors": parse_errors})
         storage.update_request_status(request_id, Decision.rejected.value)
@@ -103,6 +115,29 @@ def _route(
         },
     )
 
+    # Advisory semantic duplicate review — inference, never a rejection. A draft the
+    # rules rejected is not worth a model call, and a review failure must never take
+    # down intake: record it and route normally.
+    if duplicate_fn is not None and evaluation.decision is not Decision.rejected:
+        try:
+            review = duplicate_fn(parsed)
+        except Exception as exc:
+            storage.add_audit_entry(
+                request_id, "duplicate_review_failed", {"error": str(exc)}
+            )
+        else:
+            candidates = [c.model_dump() for c in review.candidates]
+            storage.set_duplicate_candidates(request_id, candidates)
+            storage.add_audit_entry(
+                request_id,
+                "duplicate_review",
+                {
+                    "model": review.model,
+                    "candidates": candidates,
+                    **({"parse_error": review.parse_error} if review.parse_error else {}),
+                },
+            )
+
     storage.update_request_status(request_id, evaluation.decision.value)
     storage.add_audit_entry(
         request_id,
@@ -138,6 +173,7 @@ def interpret_intake(
     raw_intake_text: str,
     storage: Storage,
     interpret_fn: Callable[..., Interpretation] = interpret,
+    duplicate_fn: Callable[..., DuplicateReview] = review_for_duplicates,
     submitter_name: Optional[str] = None,
     submitter_team: Optional[str] = None,
     call_type: Optional[str] = None,
@@ -228,13 +264,14 @@ def interpret_intake(
             [{"source": "model_output", "msg": result.parse_error}],
             storage,
             profile,
+            duplicate_fn,
         )
         return request_id
 
     parsed, parse_errors = _parse(result.proposed_definition)
     if parsed is not None:
         storage.set_parsed_definition(request_id, parsed.model_dump(), parsed.category)
-    _route(request_id, parsed, parse_errors, storage, profile)
+    _route(request_id, parsed, parse_errors, storage, profile, duplicate_fn)
     _push_if_pending(request_id, storage)
     return request_id
 
@@ -243,6 +280,8 @@ def ingest_raw_definition(
     raw_intake_text: str,
     candidate_definition: dict,
     storage: Storage,
+    # None skips the review: this path is deliberately model-free for offline demos.
+    duplicate_fn: Optional[Callable[..., DuplicateReview]] = None,
     submitter_name: Optional[str] = None,
     submitter_team: Optional[str] = None,
     call_type: Optional[str] = None,
@@ -294,12 +333,18 @@ def ingest_raw_definition(
     parsed, parse_errors = _parse(candidate_definition)
     if parsed is not None:
         storage.set_parsed_definition(request_id, parsed.model_dump(), parsed.category)
-    _route(request_id, parsed, parse_errors, storage, profile)
+    _route(request_id, parsed, parse_errors, storage, profile, duplicate_fn)
     _push_if_pending(request_id, storage)
     return request_id
 
 
-def ingest(raw_intake_text: str, candidate_definition: dict, storage: Storage) -> int:
+def ingest(
+    raw_intake_text: str,
+    candidate_definition: dict,
+    storage: Storage,
+    # None skips the review: this path is deliberately model-free for offline demos.
+    duplicate_fn: Optional[Callable[..., DuplicateReview]] = None,
+) -> int:
     """Persist and route a request from a structured definition supplied directly.
 
     Used offline where the definition is given rather than drafted by the model (see
@@ -314,7 +359,7 @@ def ingest(raw_intake_text: str, candidate_definition: dict, storage: Storage) -
     storage.add_audit_entry(
         request_id, "intake_received", {"raw_intake_text": raw_intake_text}
     )
-    _route(request_id, parsed, parse_errors, storage)
+    _route(request_id, parsed, parse_errors, storage, duplicate_fn=duplicate_fn)
     return request_id
 
 
@@ -326,14 +371,17 @@ def decide(
     note: Optional[str] = None,
     approver_name: Optional[str] = None,
     pii_acknowledged: bool = False,
+    duplicate_acknowledged: bool = False,
 ) -> Optional[PublishResult]:
     """Apply a human approve/reject decision and write the audit trail.
 
     Only a request currently pending approval or flagged as a duplicate can be decided.
-    Approving a PII-flagged request requires ``pii_acknowledged``. Approve publishes and
-    moves to ``published``; reject moves to ``rejected``. Raises :class:`RequestNotFound`,
-    :class:`InvalidTransition`, or :class:`PiiAcknowledgmentRequired` for the caller to
-    map to HTTP.
+    Approving a PII-flagged request requires ``pii_acknowledged``; approving one with
+    semantic duplicate candidates requires ``duplicate_acknowledged``. Approve publishes
+    and moves to ``published``; reject moves to ``rejected``. Raises
+    :class:`RequestNotFound`, :class:`InvalidTransition`,
+    :class:`PiiAcknowledgmentRequired`, or :class:`DuplicateAcknowledgmentRequired` for
+    the caller to map to HTTP.
     """
     request = storage.get_request(request_id)
     if request is None:
@@ -346,6 +394,12 @@ def decide(
         raise PiiAcknowledgmentRequired(
             f"request {request_id} is PII-flagged ({request['pii_details']}); "
             "acknowledgment is required to approve"
+        )
+    duplicate_candidates = request.get("duplicate_candidates") or []
+    if decision == "approve" and duplicate_candidates and not duplicate_acknowledged:
+        raise DuplicateAcknowledgmentRequired(
+            f"request {request_id} has {len(duplicate_candidates)} possible semantic "
+            "duplicate(s); acknowledgment is required to approve"
         )
 
     storage.add_audit_entry(
@@ -362,6 +416,18 @@ def decide(
                 {
                     "message": f"PII acknowledged by {approver_name or 'unknown'}",
                     "pii_details": request["pii_details"],
+                },
+            )
+        if duplicate_candidates:
+            storage.add_audit_entry(
+                request_id,
+                "duplicate_acknowledged",
+                {
+                    "message": (
+                        "possible semantic duplicates acknowledged by "
+                        f"{approver_name or 'unknown'}"
+                    ),
+                    "candidates": [c["existing_event"] for c in duplicate_candidates],
                 },
             )
         storage.update_request_status(request_id, "approved")
