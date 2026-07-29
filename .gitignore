@@ -34,8 +34,9 @@ yarn-error.log*
 .vscode/
 .idea/
 
-# Claude Code local permissions (machine-specific)
+# Claude Code local permissions (machine-specific), plus any backup of it
 .claude/settings.local.json
+.claude/settings.local.json.*
 
 # Local repo-state check (personal workflow tool)
 check.sh
