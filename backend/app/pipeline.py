@@ -443,6 +443,21 @@ def submit_request(
     _push_if_pending(request_id, storage)
 
 
+FINDING_KIND_LABELS = {
+    "duplicate_event": "possible semantic duplicates",
+    "property_extension": "possible property extensions",
+    "property_already_exists": "possibly pre-existing properties",
+}
+
+
+def _finding_labels(findings: list) -> str:
+    """Name the kinds actually present, in a fixed order, without claiming more."""
+    kinds = {f.get("kind", "duplicate_event") for f in findings}
+    return ", ".join(
+        label for kind, label in FINDING_KIND_LABELS.items() if kind in kinds
+    )
+
+
 def decide(
     request_id: int,
     decision: str,
@@ -451,13 +466,13 @@ def decide(
     note: Optional[str] = None,
     approver_name: Optional[str] = None,
     pii_acknowledged: bool = False,
-    duplicate_acknowledged: bool = False,
+    findings_acknowledged: bool = False,
 ) -> Optional[PublishResult]:
     """Apply a human approve/reject decision and write the audit trail.
 
     Only a request currently pending approval or flagged as a duplicate can be decided.
     Approving a PII-flagged request requires ``pii_acknowledged``; approving one with
-    semantic duplicate candidates requires ``duplicate_acknowledged``. Approve publishes
+    stored agent findings requires ``findings_acknowledged``. Approve publishes
     and moves to ``published``; reject moves to ``rejected``. Raises
     :class:`RequestNotFound`, :class:`InvalidTransition`,
     :class:`PiiAcknowledgmentRequired`, or :class:`DuplicateAcknowledgmentRequired` for
@@ -475,11 +490,11 @@ def decide(
             f"request {request_id} is PII-flagged ({request['pii_details']}); "
             "acknowledgment is required to approve"
         )
-    duplicate_candidates = request.get("duplicate_candidates") or []
-    if decision == "approve" and duplicate_candidates and not duplicate_acknowledged:
+    findings = request.get("duplicate_candidates") or []
+    if decision == "approve" and findings and not findings_acknowledged:
         raise DuplicateAcknowledgmentRequired(
-            f"request {request_id} has {len(duplicate_candidates)} possible semantic "
-            "duplicate(s); acknowledgment is required to approve"
+            f"request {request_id} has {len(findings)} agent finding(s) "
+            f"({_finding_labels(findings)}); acknowledgment is required to approve"
         )
 
     storage.add_audit_entry(
@@ -498,16 +513,16 @@ def decide(
                     "pii_details": request["pii_details"],
                 },
             )
-        if duplicate_candidates:
+        if findings:
             storage.add_audit_entry(
                 request_id,
-                "duplicate_acknowledged",
+                "findings_acknowledged",
                 {
                     "message": (
-                        "possible semantic duplicates acknowledged by "
+                        f"{_finding_labels(findings)} acknowledged by "
                         f"{approver_name or 'unknown'}"
                     ),
-                    "candidates": [c["existing_event"] for c in duplicate_candidates],
+                    "candidates": [f["existing_event"] for f in findings],
                 },
             )
         storage.update_request_status(request_id, "approved")

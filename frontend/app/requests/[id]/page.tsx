@@ -4,15 +4,17 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import {
   RequestDetail,
+  ReviewFinding,
   RuleCheck,
   decideRequest,
   friendlyError,
   getRequest,
+  submitRequest,
 } from "@/lib/api";
 import { isActionable } from "@/lib/format";
 import { AuditTimeline } from "@/components/AuditTimeline";
 import { DefinitionView } from "@/components/DefinitionView";
-import { DuplicateReview } from "@/components/DuplicateReview";
+import { AgentReview } from "@/components/AgentReview";
 import { PublishCards } from "@/components/PublishCards";
 import { RuleChecks } from "@/components/RuleChecks";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -26,6 +28,25 @@ function evaluationFrom(detail: RequestDetail): { checks: RuleCheck[]; flags: st
   };
 }
 
+const KIND_PHRASES: Record<string, string> = {
+  duplicate_event: "possible duplicates",
+  property_extension: "possible property extensions",
+  property_already_exists: "possibly existing properties",
+};
+
+function acknowledgeLabel(findings: ReviewFinding[]): string {
+  const kinds = Array.from(
+    new Set(findings.map((f) => f.kind ?? "duplicate_event")),
+  );
+  if (kinds.length === 1 && kinds[0] === "duplicate_event") {
+    const names = Array.from(new Set(findings.map((f) => f.existing_event)));
+    return `Possible duplicates reviewed — this event is not ${names.join(", ")}`;
+  }
+  return `Agent findings reviewed — ${kinds
+    .map((k) => KIND_PHRASES[k] ?? k)
+    .join(", ")}`;
+}
+
 export default function RequestDetailPage({ params }: { params: { id: string } }) {
   const id = Number(params.id);
   const [detail, setDetail] = useState<RequestDetail | null>(null);
@@ -33,9 +54,12 @@ export default function RequestDetailPage({ params }: { params: { id: string } }
   const [note, setNote] = useState("");
   const [approverName, setApproverName] = useState("");
   const [piiAcknowledged, setPiiAcknowledged] = useState(false);
-  const [duplicateAcknowledged, setDuplicateAcknowledged] = useState(false);
+  const [findingsAcknowledged, setFindingsAcknowledged] = useState(false);
   const [deciding, setDeciding] = useState(false);
   const [decisionError, setDecisionError] = useState<string | null>(null);
+  const [duplicateNote, setDuplicateNote] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     getRequest(id)
@@ -58,17 +82,32 @@ export default function RequestDetailPage({ params }: { params: { id: string } }
         note,
         approver_name: approverName,
         pii_acknowledged: piiAcknowledged,
-        duplicate_acknowledged: duplicateAcknowledged,
+        findings_acknowledged: findingsAcknowledged,
       });
       setNote("");
       setPiiAcknowledged(false);
-      setDuplicateAcknowledged(false);
+      setFindingsAcknowledged(false);
       load();
     } catch (err) {
       setDecisionError(friendlyError(err));
       load();
     } finally {
       setDeciding(false);
+    }
+  }
+
+  async function submitDraft() {
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      await submitRequest(id, noteRequired ? duplicateNote : undefined);
+      setDuplicateNote("");
+      load();
+    } catch (err) {
+      setSubmitError(friendlyError(err));
+      load();
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -92,6 +131,11 @@ export default function RequestDetailPage({ params }: { params: { id: string } }
   }
 
   const evaluation = evaluationFrom(detail);
+  const isDraft = detail.status === "draft";
+  const findings = detail.duplicate_candidates;
+  const noteRequired =
+    isDraft &&
+    findings.some((f) => (f.kind ?? "duplicate_event") === "duplicate_event");
 
   return (
     <main className="container">
@@ -147,14 +191,49 @@ export default function RequestDetailPage({ params }: { params: { id: string } }
         </div>
       )}
 
-      {detail.duplicate_candidates.length > 0 && (
+      {findings.length > 0 && (
         <div className="panel">
-          <div className="panel-title">Possible semantic duplicates</div>
-          <DuplicateReview candidates={detail.duplicate_candidates} />
+          <AgentReview
+            findings={findings}
+            variant={isDraft ? "requester" : "approver"}
+          />
         </div>
       )}
 
-      {isActionable(detail.status) && (
+      {isDraft && (
+        <div className="panel">
+          <div className="panel-title">Submit for approval</div>
+          <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>
+            This draft has not been submitted. It enters the approval queue when you
+            submit it.
+          </p>
+          {noteRequired && (
+            <label className="field">
+              <span className="field-label">These are different because…</span>
+              <textarea
+                value={duplicateNote}
+                onChange={(e) => setDuplicateNote(e.target.value)}
+                rows={2}
+                disabled={submitting}
+              />
+            </label>
+          )}
+          <div className="row mt-12">
+            <button
+              className="btn btn-primary"
+              onClick={submitDraft}
+              disabled={
+                submitting || (noteRequired && duplicateNote.trim().length === 0)
+              }
+            >
+              {submitting ? "Submitting…" : "Submit request"}
+            </button>
+          </div>
+          {submitError && <div className="msg msg-error mt-16">{submitError}</div>}
+        </div>
+      )}
+
+      {!isDraft && isActionable(detail.status) && (
         <div className="panel">
           <div className="panel-title">Decision</div>
           <input
@@ -186,20 +265,15 @@ export default function RequestDetailPage({ params }: { params: { id: string } }
               </span>
             </label>
           )}
-          {detail.duplicate_candidates.length > 0 && (
+          {findings.length > 0 && (
             <label className="row mt-12" style={{ gap: 8, fontSize: 14 }}>
               <input
                 type="checkbox"
-                checked={duplicateAcknowledged}
-                onChange={(e) => setDuplicateAcknowledged(e.target.checked)}
+                checked={findingsAcknowledged}
+                onChange={(e) => setFindingsAcknowledged(e.target.checked)}
                 disabled={deciding}
               />
-              <span>
-                Possible duplicates reviewed — this event is not{" "}
-                {detail.duplicate_candidates
-                  .map((c) => c.existing_event)
-                  .join(", ")}
-              </span>
+              <span>{acknowledgeLabel(findings)}</span>
             </label>
           )}
           <div className="row mt-12">
@@ -209,7 +283,7 @@ export default function RequestDetailPage({ params }: { params: { id: string } }
               disabled={
                 deciding ||
                 (detail.pii_flagged && !piiAcknowledged) ||
-                (detail.duplicate_candidates.length > 0 && !duplicateAcknowledged)
+                (findings.length > 0 && !findingsAcknowledged)
               }
             >
               {deciding ? "Working…" : "Approve & publish"}
@@ -226,7 +300,7 @@ export default function RequestDetailPage({ params }: { params: { id: string } }
         </div>
       )}
 
-      {detail.published_artifact && (
+      {!isDraft && detail.published_artifact && (
         <div className="panel">
           <div className="panel-title">
             Published · via {detail.published_artifact.publisher} publisher
@@ -235,10 +309,12 @@ export default function RequestDetailPage({ params }: { params: { id: string } }
         </div>
       )}
 
-      <div className="panel">
-        <div className="panel-title">Audit log</div>
-        <AuditTimeline entries={detail.audit_log} />
-      </div>
+      {!isDraft && (
+        <div className="panel">
+          <div className="panel-title">Audit log</div>
+          <AuditTimeline entries={detail.audit_log} />
+        </div>
+      )}
     </main>
   );
 }

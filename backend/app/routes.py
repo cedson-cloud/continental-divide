@@ -88,7 +88,7 @@ class DecisionBody(BaseModel):
     note: Optional[str] = None
     approver_name: Optional[str] = None
     pii_acknowledged: bool = False
-    duplicate_acknowledged: bool = False
+    findings_acknowledged: bool = False
 
 
 class IntakeResponse(BaseModel):
@@ -303,7 +303,7 @@ def decide_request(request_id: int, body: DecisionBody) -> dict:
             note=body.note,
             approver_name=body.approver_name,
             pii_acknowledged=body.pii_acknowledged,
-            duplicate_acknowledged=body.duplicate_acknowledged,
+            findings_acknowledged=body.findings_acknowledged,
         )
     except RequestNotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc))

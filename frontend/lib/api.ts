@@ -16,9 +16,13 @@ export type EventDefinition = {
   properties: EventProperty[];
 };
 
-export type DuplicateCandidate = {
+export type ReviewFinding = {
+  // Absent on rows written before findings carried a kind; default it to
+  // "duplicate_event" at the render site.
+  kind?: "duplicate_event" | "property_extension" | "property_already_exists";
   existing_event: string;
   category: string;
+  property_names: string[];
   reason: string;
   confidence: "high" | "medium" | "low";
 };
@@ -29,7 +33,7 @@ export type IntakeResult = {
   routed_to_approval: boolean;
   checks: RuleCheck[];
   flags: string[];
-  duplicate_candidates: DuplicateCandidate[];
+  duplicate_candidates: ReviewFinding[];
 };
 
 export type QueueItem = {
@@ -72,7 +76,7 @@ export type RequestDetail = {
   status: string;
   pii_flagged: boolean;
   pii_details: string | null;
-  duplicate_candidates: DuplicateCandidate[];
+  duplicate_candidates: ReviewFinding[];
   business_value: string | null;
   needed_by: string | null;
   request_kind: string | null;
@@ -178,6 +182,16 @@ export function getRequest(id: number): Promise<RequestDetail> {
   return request(`/requests/${id}`);
 }
 
+export function submitRequest(
+  id: number,
+  duplicateNote?: string,
+): Promise<{ id: number; status: string }> {
+  return request(`/requests/${id}/submit`, {
+    method: "POST",
+    body: JSON.stringify({ duplicate_note: duplicateNote || null }),
+  });
+}
+
 export function decideRequest(
   id: number,
   decision: "approve" | "reject",
@@ -185,7 +199,7 @@ export function decideRequest(
     note?: string;
     approver_name?: string;
     pii_acknowledged?: boolean;
-    duplicate_acknowledged?: boolean;
+    findings_acknowledged?: boolean;
   } = {},
 ): Promise<{ id: number; status: string; published_artifact: PublishArtifact | null }> {
   return request(`/requests/${id}/decision`, {
@@ -195,7 +209,7 @@ export function decideRequest(
       note: opts.note || null,
       approver_name: opts.approver_name || null,
       pii_acknowledged: opts.pii_acknowledged ?? false,
-      duplicate_acknowledged: opts.duplicate_acknowledged ?? false,
+      findings_acknowledged: opts.findings_acknowledged ?? false,
     }),
   });
 }

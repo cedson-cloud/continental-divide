@@ -407,12 +407,46 @@ def test_approval_with_findings_requires_acknowledgment(client, storage):
         json={
             "decision": "approve",
             "approver_name": "Sam",
-            "duplicate_acknowledged": True,
+            "findings_acknowledged": True,
         },
     )
     assert response.status_code == 200
     assert response.json()["status"] == "published"
 
-    acknowledged = _entry(storage, rid, "duplicate_acknowledged")
+    acknowledged = _entry(storage, rid, "findings_acknowledged")
     assert "Sam" in acknowledged["detail"]["message"]
     assert acknowledged["detail"]["candidates"] == ["Product Added to Wishlist"]
+
+
+def test_approval_gate_names_property_extension_not_duplicate(client, storage):
+    extension = ReviewFinding(
+        kind="property_extension",
+        existing_event="Product Added",
+        category="Core Ordering",
+        property_names=["product_id"],
+        reason=(
+            "Bookmarking captures a property of an add interaction the plan already "
+            "tracks on Product Added."
+        ),
+        confidence="medium",
+    )
+
+    def stub_extension(_definition, **_):
+        return DuplicateReview(MODEL, [extension], '{"findings": [...]}')
+
+    rid = interpret_intake(
+        "track when a shopper bookmarks a product",
+        storage,
+        interpret_fn=stub_interpret,
+        duplicate_fn=stub_extension,
+    )
+    # A property_extension finding alone never gates submission on a note.
+    submit_request(rid, storage)
+
+    response = client.post(
+        f"/requests/{rid}/decision", json={"decision": "approve", "approver_name": "Sam"}
+    )
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert "duplicate" not in detail.lower()
+    assert "possible property extensions" in detail

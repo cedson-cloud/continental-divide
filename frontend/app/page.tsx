@@ -12,10 +12,11 @@ import {
   getRequest,
   submitIntake,
   submitRawDefinition,
+  submitRequest,
 } from "@/lib/api";
 import { NATURAL_LANGUAGE_EXAMPLES, RAW_EXAMPLES } from "@/lib/examples";
 import { ProposedDefinition } from "@/components/AuditTimeline";
-import { DuplicateReview } from "@/components/DuplicateReview";
+import { AgentReview } from "@/components/AgentReview";
 import { RuleChecks } from "@/components/RuleChecks";
 import { StatusBadge } from "@/components/StatusBadge";
 
@@ -308,6 +309,11 @@ export default function IntakePage() {
 }
 
 function Outcome({ detail }: { detail: RequestDetail }) {
+  const [note, setNote] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitted, setSubmitted] = useState(false);
+
   const log = detail.audit_log;
   const modelEntry = findEntry(log, "model_interpreted");
   const providedEntry = findEntry(log, "definition_provided");
@@ -321,14 +327,55 @@ function Outcome({ detail }: { detail: RequestDetail }) {
   const checks = (rulesEntry?.detail?.checks as RuleCheck[]) || [];
   const flags = (rulesEntry?.detail?.flags as string[]) || [];
 
+  const isDraft = detail.status === "draft";
+  const findings = detail.duplicate_candidates;
+  const noteRequired = findings.some(
+    (f) => (f.kind ?? "duplicate_event") === "duplicate_event",
+  );
+
+  async function submit() {
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      await submitRequest(detail.id, noteRequired ? note : undefined);
+      setSubmitted(true);
+    } catch (err) {
+      setSubmitError(friendlyError(err));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (submitted) {
+    return (
+      <div className="panel">
+        <div className="panel-title">Request submitted</div>
+        <p style={{ marginTop: 0 }}>
+          Request #{detail.id} is now in the approval queue.
+        </p>
+        <div className="row">
+          <Link href="/queue">View the queue →</Link>
+          <Link href={`/requests/${detail.id}`}>View request #{detail.id} →</Link>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="panel">
       <div className="row spread">
         <div className="panel-title" style={{ margin: 0 }}>
-          Outcome
+          {isDraft ? "Review your request" : "Outcome"}
         </div>
         <StatusBadge status={detail.status} />
       </div>
+
+      {isDraft && (
+        <p className="muted" style={{ fontSize: 13, marginBottom: 0 }}>
+          Nothing has been submitted yet. Check the draft below, then send it to the
+          approval queue.
+        </p>
+      )}
 
       {proposed && (
         <div className="proposal mt-12">
@@ -348,17 +395,43 @@ function Outcome({ detail }: { detail: RequestDetail }) {
         ) : null}
       </div>
 
-      {detail.duplicate_candidates.length > 0 && (
+      {findings.length > 0 && (
         <div className="mt-16">
-          <DuplicateReview candidates={detail.duplicate_candidates} />
+          <AgentReview findings={findings} variant="requester" />
         </div>
       )}
 
-      <div className="mt-16">
-        <Link href={`/requests/${detail.id}`}>
-          View request #{detail.id} and audit log →
-        </Link>
-      </div>
+      {isDraft ? (
+        <>
+          {noteRequired && (
+            <label className="field mt-16">
+              <span className="field-label">These are different because…</span>
+              <textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                rows={2}
+                disabled={submitting}
+              />
+            </label>
+          )}
+          <div className="mt-16">
+            <button
+              className="btn btn-primary"
+              onClick={submit}
+              disabled={submitting || (noteRequired && note.trim().length === 0)}
+            >
+              {submitting ? "Submitting…" : "Submit request"}
+            </button>
+          </div>
+          {submitError && <div className="msg msg-error mt-16">{submitError}</div>}
+        </>
+      ) : (
+        <div className="mt-16">
+          <Link href={`/requests/${detail.id}`}>
+            View request #{detail.id} and audit log →
+          </Link>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 export type StatusMeta = { label: string; tone: string };
 
 const STATUS_META: Record<string, StatusMeta> = {
+  draft: { label: "Draft — not submitted", tone: "neutral" },
   pending_approval: { label: "Pending approval", tone: "pending" },
   flagged_duplicate: { label: "Flagged duplicate", tone: "flagged" },
   approved: { label: "Approved", tone: "approved" },
@@ -23,6 +24,7 @@ const STEP_LABELS: Record<string, string> = {
   routed: "Routed",
   decision_received: "Decision received",
   pii_acknowledged: "PII acknowledged",
+  findings_acknowledged: "Findings acknowledged",
   published: "Published",
   rejection_recorded: "Rejection recorded",
 };
