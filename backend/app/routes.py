@@ -23,8 +23,10 @@ from .pipeline import (
     DuplicateNoteRequired,
     IntakeModelError,
     InvalidTransition,
+    NoMatchingFinding,
     PiiAcknowledgmentRequired,
     RequestNotFound,
+    convert_to_property_request,
     decide,
     ingest_raw_definition,
     interpret_intake,
@@ -81,6 +83,10 @@ class RawIntakeBody(BaseModel):
 
 class SubmitBody(BaseModel):
     duplicate_note: Optional[str] = None
+
+
+class ConvertBody(BaseModel):
+    existing_event: str = Field(min_length=1)
 
 
 class DecisionBody(BaseModel):
@@ -247,7 +253,8 @@ def _intake_response(storage, request_id: int) -> IntakeResponse:
 def list_requests() -> list:
     storage = get_storage()
     rows = storage.list_requests()
-    # A draft is not in anyone's queue yet; it is reachable by id until submitted.
+    # A draft is not in anyone's queue yet, and a superseded request left the queue
+    # for its replacement; both stay reachable by id.
     return [
         {
             "id": row["id"],
@@ -257,7 +264,7 @@ def list_requests() -> list:
             "created_at": row["created_at"],
         }
         for row in rows
-        if row["status"] != "draft"
+        if row["status"] not in ("draft", "superseded")
     ]
 
 
@@ -289,6 +296,35 @@ def submit_request_route(request_id: int, body: Optional[SubmitBody] = None) -> 
 
     saved = storage.get_request(request_id)
     return {"id": request_id, "status": saved["status"]}
+
+
+@router.post("/requests/{request_id}/convert")
+def convert_request(request_id: int, body: ConvertBody, request: Request) -> dict:
+    # A convert re-runs full model intake — a drafting call plus a catalog review —
+    # so it draws on the same rate-limit budget as POST /requests.
+    client = request.client.host if request.client else "unknown"
+    if not _limiter.allow(client):
+        raise HTTPException(status_code=429, detail="rate limit exceeded")
+
+    storage = get_storage()
+    try:
+        new_request_id = convert_to_property_request(
+            request_id, body.existing_event, storage
+        )
+    except RequestNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except InvalidTransition as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except NoMatchingFinding as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except IntakeModelError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"could not draft a definition (request {exc.request_id}): {exc}",
+        )
+
+    saved = storage.get_request(new_request_id)
+    return {"id": new_request_id, "status": saved["status"]}
 
 
 @router.post("/requests/{request_id}/decision")

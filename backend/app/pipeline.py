@@ -49,6 +49,11 @@ class DuplicateNoteRequired(Exception):
     pass
 
 
+class NoMatchingFinding(Exception):
+    """Conversion named an event that no stored property finding on the request
+    points at; the finding is the authority on the target, not the caller."""
+
+
 class IntakeModelError(Exception):
     """The model service failed while drafting a definition; the request is persisted
     and rejected, and the caller should surface a 502."""
@@ -441,6 +446,80 @@ def submit_request(
     )
     storage.update_request_status(request_id, decision)
     _push_if_pending(request_id, storage)
+
+
+CONVERTIBLE_FINDING_KINDS = {"property_extension", "property_already_exists"}
+
+
+def convert_to_property_request(
+    request_id: int,
+    existing_event: str,
+    storage: Storage,
+    interpret_fn: Callable[..., Interpretation] = interpret,
+    duplicate_fn: Callable[..., DuplicateReview] = review_against_catalog,
+) -> int:
+    """Supersede a draft with a new request that adds its properties to
+    ``existing_event`` instead of introducing a new event.
+
+    The requester has read a stored ``property_extension`` or
+    ``property_already_exists`` finding naming ``existing_event`` and agreed with it;
+    a caller naming an event no such finding points at is refused. The original is
+    never mutated: a new request re-enters model intake with the original's intake
+    fields and ``request_kind="new_property_on_existing"``, drafts, evaluates, gets
+    its own catalog review, and lands at ``draft`` for its own confirmation. Only
+    then is the original marked ``superseded``, with audit entries linking the two
+    in both directions. A model failure while drafting leaves the original at
+    ``draft`` so conversion can be retried. Returns the new request id; raises
+    :class:`RequestNotFound`, :class:`InvalidTransition`,
+    :class:`NoMatchingFinding`, or :class:`IntakeModelError` for the caller to map
+    to HTTP.
+    """
+    request = storage.get_request(request_id)
+    if request is None:
+        raise RequestNotFound(f"request {request_id} not found")
+    if request["status"] != "draft":
+        raise InvalidTransition(
+            f"request {request_id} is '{request['status']}' and cannot be converted"
+        )
+    if not any(
+        f.get("kind") in CONVERTIBLE_FINDING_KINDS
+        and f.get("existing_event") == existing_event
+        for f in request.get("duplicate_candidates") or []
+    ):
+        raise NoMatchingFinding(
+            f"request {request_id} has no property finding naming "
+            f"'{existing_event}'; conversion must target an event a stored "
+            "finding points at"
+        )
+
+    new_request_id = interpret_intake(
+        request["raw_intake_text"],
+        storage,
+        interpret_fn=interpret_fn,
+        duplicate_fn=duplicate_fn,
+        submitter_name=request.get("submitter_name"),
+        submitter_team=request.get("submitter_team"),
+        call_type=request.get("call_type"),
+        side=request.get("side"),
+        business_value=request.get("business_value"),
+        needed_by=request.get("needed_by"),
+        request_kind="new_property_on_existing",
+        existing_event=existing_event,
+        destinations=request.get("destinations"),
+    )
+
+    storage.update_request_status(request_id, "superseded")
+    storage.add_audit_entry(
+        request_id,
+        "superseded_by",
+        {"new_request_id": new_request_id, "existing_event": existing_event},
+    )
+    storage.add_audit_entry(
+        new_request_id,
+        "supersedes",
+        {"original_request_id": request_id, "existing_event": existing_event},
+    )
+    return new_request_id
 
 
 FINDING_KIND_LABELS = {
