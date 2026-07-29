@@ -39,8 +39,7 @@ export default function IntakePage() {
   const [allowedDestinations, setAllowedDestinations] = useState<string[]>([]);
   const [submitterName, setSubmitterName] = useState("");
   const [submitterTeam, setSubmitterTeam] = useState("");
-  const [callType, setCallType] = useState("track");
-  const [side, setSide] = useState("Client");
+  const [side, setSide] = useState("Unsure");
   const [urgent, setUrgent] = useState(false);
   const [urgencyReason, setUrgencyReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -90,30 +89,13 @@ export default function IntakePage() {
         structured definition; the rules and a human approver decide what gets through.
       </p>
 
+      <div className="msg msg-info" style={{ marginBottom: 16 }}>
+        New to this? <Link href="/request/new">Use the guided request →</Link>
+      </div>
+
       <div className="panel">
         <div className="panel-title">Describe the event</div>
-        <label className="field">
-          <span className="field-label">
-            Business value * — why this event matters, not what it does
-          </span>
-          <textarea
-            value={businessValue}
-            onChange={(e) => setBusinessValue(e.target.value)}
-            placeholder="e.g. tells merchandising which promotions actually drive checkout"
-            rows={2}
-            disabled={submitting}
-          />
-        </label>
-        <label className="field mt-12">
-          <span className="field-label">What to track</span>
-          <textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder="e.g. track when a shopper empties their entire cart"
-          />
-        </label>
-
-        <div className="fields mt-12">
+        <div className="fields">
           <label className="field">
             <span className="field-label">Submitted By *</span>
             <input
@@ -138,17 +120,10 @@ export default function IntakePage() {
               <option value="Engineering">Engineering</option>
             </select>
           </label>
-          <label className="field">
-            <span className="field-label">Call type *</span>
-            <select
-              value={callType}
-              onChange={(e) => setCallType(e.target.value)}
-              disabled={submitting}
-              required
-            >
-              <option value="track">track</option>
-            </select>
-          </label>
+          <div className="field">
+            <span className="field-label">Call type</span>
+            <span style={{ fontSize: 14, padding: "6px 0" }}>track</span>
+          </div>
           <label className="field">
             <span className="field-label">Server Side or Client Side *</span>
             <select
@@ -190,6 +165,31 @@ export default function IntakePage() {
             </select>
           </label>
         </div>
+        <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>
+          Browser = the user&apos;s device. Server = your backend. Not sure is fine —
+          the approver decides.
+        </p>
+
+        <label className="field mt-12">
+          <span className="field-label">What to track</span>
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="e.g. track when a shopper empties their entire cart"
+          />
+        </label>
+        <label className="field mt-12">
+          <span className="field-label">
+            Business value * — why this event matters, not what it does
+          </span>
+          <textarea
+            value={businessValue}
+            onChange={(e) => setBusinessValue(e.target.value)}
+            placeholder="e.g. tells merchandising which promotions actually drive checkout"
+            rows={2}
+            disabled={submitting}
+          />
+        </label>
 
         <label className="row mt-12" style={{ gap: 8, fontSize: 14 }}>
           <input
@@ -258,7 +258,7 @@ export default function IntakePage() {
                 submitIntake(text, {
                   submitter_name: submitterName,
                   submitter_team: submitterTeam,
-                  call_type: callType,
+                  call_type: "track",
                   side,
                   business_value: businessValue,
                   urgent,

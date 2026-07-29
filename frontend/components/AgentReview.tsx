@@ -55,11 +55,15 @@ export function AgentReview({
                   <div className="candidate-reason">{finding.reason}</div>
                   {finding.existing_event_description && (
                     <p className="muted" style={{ fontSize: 13, margin: "6px 0 0" }}>
-                      {finding.existing_event} today: {finding.existing_event_description}
+                      What {finding.existing_event} tracks today:{" "}
+                      {finding.existing_event_description}
                     </p>
                   )}
                   {(finding.existing_event_properties?.length ?? 0) > 0 && (
                     <div className="row" style={{ flexWrap: "wrap", gap: 6, marginTop: 6 }}>
+                      <span className="muted" style={{ fontSize: 13 }}>
+                        Properties it already carries:
+                      </span>
                       {finding.existing_event_properties?.map((name) => (
                         <span className="tag" key={name}>
                           {name}
