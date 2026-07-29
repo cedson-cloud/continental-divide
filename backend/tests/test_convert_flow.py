@@ -255,7 +255,12 @@ def test_convert_shares_the_intake_rate_limiter(client, storage, monkeypatch):
     # The single allowed hit is spent, and it gates plain intake and convert alike.
     intake = client.post(
         "/requests",
-        json={"raw_intake_text": "track something", "business_value": "curiosity"},
+        json={
+            "raw_intake_text": "track something",
+            "business_value": "curiosity",
+            "submitter_name": "Ada",
+            "submitter_team": "Product",
+        },
     )
     assert intake.status_code == 429
     response = client.post(

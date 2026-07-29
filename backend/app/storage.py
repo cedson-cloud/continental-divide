@@ -34,6 +34,8 @@ CREATE TABLE IF NOT EXISTS event_request (
     call_type TEXT,
     side TEXT,
     business_value TEXT,
+    urgent INTEGER NOT NULL DEFAULT 0,
+    urgency_reason TEXT,
     needed_by TEXT,
     request_kind TEXT,
     existing_event TEXT,
@@ -65,6 +67,32 @@ END;
 """
 
 
+def _ensure_columns(conn: sqlite3.Connection) -> None:
+    """Add any event_request column the schema declares but the live table lacks.
+
+    CREATE TABLE IF NOT EXISTS never alters an existing table, so a database created
+    under an older schema silently misses new columns. Idempotent: a column is only
+    added when absent. Touches event_request only — never audit_log or its
+    append-only triggers.
+    """
+    declared = sqlite3.connect(":memory:")
+    try:
+        declared.executescript(_SCHEMA)
+        wanted = declared.execute("PRAGMA table_info(event_request)").fetchall()
+    finally:
+        declared.close()
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(event_request)")}
+    for _cid, name, col_type, notnull, default, pk in wanted:
+        if name in existing or pk:
+            continue
+        clause = f"ALTER TABLE event_request ADD COLUMN {name} {col_type}"
+        if notnull:
+            clause += " NOT NULL"
+        if default is not None:
+            clause += f" DEFAULT ({default})"
+        conn.execute(clause)
+
+
 class Storage(ABC):
     @abstractmethod
     def create_request(
@@ -78,6 +106,8 @@ class Storage(ABC):
         call_type: Optional[str] = None,
         side: Optional[str] = None,
         business_value: Optional[str] = None,
+        urgent: bool = False,
+        urgency_reason: Optional[str] = None,
         needed_by: Optional[str] = None,
         request_kind: Optional[str] = None,
         existing_event: Optional[str] = None,
@@ -145,21 +175,7 @@ class SqliteStorage(Storage):
     def _init_db(self) -> None:
         with self._connect() as conn:
             conn.executescript(_SCHEMA)
-            # CREATE TABLE IF NOT EXISTS does not add columns to a database created
-            # before they existed in the schema above.
-            existing = {
-                row[1] for row in conn.execute("PRAGMA table_info(event_request)")
-            }
-            for column in (
-                "business_value",
-                "needed_by",
-                "request_kind",
-                "existing_event",
-                "destinations",
-                "duplicate_candidates",
-            ):
-                if column not in existing:
-                    conn.execute(f"ALTER TABLE event_request ADD COLUMN {column} TEXT")
+            _ensure_columns(conn)
 
     def create_request(
         self,
@@ -172,6 +188,8 @@ class SqliteStorage(Storage):
         call_type: Optional[str] = None,
         side: Optional[str] = None,
         business_value: Optional[str] = None,
+        urgent: bool = False,
+        urgency_reason: Optional[str] = None,
         needed_by: Optional[str] = None,
         request_kind: Optional[str] = None,
         existing_event: Optional[str] = None,
@@ -182,8 +200,9 @@ class SqliteStorage(Storage):
                 "INSERT INTO event_request "
                 "(raw_intake_text, parsed_definition, category, status, "
                 "submitter_name, submitter_team, call_type, side, "
-                "business_value, needed_by, request_kind, existing_event, destinations) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "business_value, urgent, urgency_reason, needed_by, "
+                "request_kind, existing_event, destinations) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     raw_intake_text,
                     json.dumps(parsed_definition) if parsed_definition else None,
@@ -194,6 +213,8 @@ class SqliteStorage(Storage):
                     call_type,
                     side,
                     business_value,
+                    1 if urgent else 0,
+                    urgency_reason,
                     needed_by,
                     request_kind,
                     existing_event,
@@ -287,6 +308,7 @@ class SqliteStorage(Storage):
     def _request_row(row: sqlite3.Row) -> dict:
         data: dict[str, Any] = dict(row)
         data["pii_flagged"] = bool(data.get("pii_flagged"))
+        data["urgent"] = bool(data.get("urgent"))
         data["duplicate_candidates"] = (
             json.loads(data["duplicate_candidates"])
             if data.get("duplicate_candidates")

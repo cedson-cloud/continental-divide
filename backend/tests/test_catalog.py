@@ -345,6 +345,8 @@ def test_raising_review_still_returns_200_over_http(client, storage, monkeypatch
         json={
             "raw_intake_text": "track when a shopper bookmarks a product",
             "business_value": "counts saved products",
+            "submitter_name": "Ada",
+            "submitter_team": "Product",
         },
     )
     assert response.status_code == 200

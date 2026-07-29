@@ -98,13 +98,13 @@ def test_example_verdicts_flip_with_the_active_profile(client, monkeypatch):
 def test_valid_destinations_are_accepted_and_stored(client):
     response = client.post(
         "/requests/raw",
-        json=_raw_body(destinations=["warehouse", "crm"], needed_by="Q3 launch"),
+        json=_raw_body(destinations=["warehouse", "crm"], needed_by="2026-09-30"),
     )
     assert response.status_code == 200
 
     detail = client.get(f"/requests/{response.json()['id']}").json()
     assert detail["business_value"] == "measures cart abandonment"
-    assert detail["needed_by"] == "Q3 launch"
+    assert detail["needed_by"] == "2026-09-30"
     assert detail["request_kind"] == "new_event"
     assert detail["destinations"] == ["warehouse", "crm"]
 

@@ -77,7 +77,13 @@ export type RequestDetail = {
   pii_flagged: boolean;
   pii_details: string | null;
   duplicate_candidates: ReviewFinding[];
+  submitter_name: string | null;
+  submitter_team: string | null;
+  call_type: string | null;
+  side: string | null;
   business_value: string | null;
+  urgent: boolean;
+  urgency_reason: string | null;
   needed_by: string | null;
   request_kind: string | null;
   existing_event: string | null;
@@ -143,6 +149,8 @@ export type IntakeMeta = {
   call_type?: string;
   side?: string;
   business_value?: string;
+  urgent?: boolean;
+  urgency_reason?: string | null;
   needed_by?: string | null;
   request_kind?: "new_event" | "new_property_on_existing";
   existing_event?: string | null;

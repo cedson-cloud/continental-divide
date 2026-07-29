@@ -1,15 +1,23 @@
-export type NaturalLanguageExample = { key: string; label: string; text: string };
+export type NaturalLanguageExample = {
+  key: string;
+  label: string;
+  text: string;
+  businessValue: string;
+};
 
 export const NATURAL_LANGUAGE_EXAMPLES: NaturalLanguageExample[] = [
   {
     key: "clean",
-    label: "Clean",
+    label: "Standard request",
     text: "track when a shopper empties their entire cart",
+    businessValue:
+      "tells merchandising how often shoppers abandon by emptying the cart",
   },
   {
     key: "pii",
-    label: "PII",
+    label: "Request containing PII",
     text: "track when someone subscribes to our newsletter and capture their email address",
+    businessValue: "measures newsletter growth against campaign spend",
   },
 ];
 

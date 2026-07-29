@@ -205,19 +205,41 @@ export default function RequestDetailPage({ params }: { params: { id: string } }
         </div>
       )}
 
+      <div className="panel">
+        <div className="panel-title">Requester</div>
+        <dl className="kv">
+          <dt>Submitted By</dt>
+          <dd>{detail.submitter_name || "—"}</dd>
+          <dt>Team</dt>
+          <dd>{detail.submitter_team || "—"}</dd>
+          <dt>Date you need this by</dt>
+          <dd>{detail.needed_by || "—"}</dd>
+          <dt>Server/Client side</dt>
+          <dd>
+            {detail.side === "Unsure"
+              ? "Open question — the requester wasn't sure whether this fires client or server side."
+              : detail.side || "—"}
+          </dd>
+          {detail.urgent && (
+            <>
+              <dt>Urgency</dt>
+              <dd>Urgent — {detail.urgency_reason || "no reason recorded"}</dd>
+            </>
+          )}
+        </dl>
+      </div>
+
       {detail.business_value && (
         <div className="panel">
           <div className="panel-title">Why this event</div>
           <p style={{ margin: 0 }}>{detail.business_value}</p>
           {(detail.request_kind === "new_property_on_existing" ||
-            detail.needed_by ||
             (detail.destinations?.length ?? 0) > 0) && (
             <p className="muted" style={{ fontSize: 13, marginBottom: 0 }}>
               {[
                 detail.request_kind === "new_property_on_existing"
                   ? `New property on: ${detail.existing_event || "unspecified"}`
                   : null,
-                detail.needed_by ? `Needed by: ${detail.needed_by}` : null,
                 detail.destinations?.length
                   ? `Destinations: ${detail.destinations.join(", ")}`
                   : null,

@@ -38,6 +38,8 @@ export default function IntakePage() {
   const [submitterTeam, setSubmitterTeam] = useState("");
   const [callType, setCallType] = useState("track");
   const [side, setSide] = useState("Client");
+  const [urgent, setUrgent] = useState(false);
+  const [urgencyReason, setUrgencyReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<RequestDetail | null>(null);
@@ -110,7 +112,7 @@ export default function IntakePage() {
 
         <div className="fields mt-12">
           <label className="field">
-            <span className="field-label">Submitter</span>
+            <span className="field-label">Submitted By *</span>
             <input
               type="text"
               placeholder="Your name"
@@ -144,7 +146,7 @@ export default function IntakePage() {
             </select>
           </label>
           <label className="field">
-            <span className="field-label">Side</span>
+            <span className="field-label">Server Side or Client Side</span>
             <select
               value={side}
               onChange={(e) => setSide(e.target.value)}
@@ -152,13 +154,13 @@ export default function IntakePage() {
             >
               <option value="Client">Client</option>
               <option value="Server">Server</option>
+              <option value="Unsure">I&apos;m not sure</option>
             </select>
           </label>
           <label className="field">
-            <span className="field-label">Needed by</span>
+            <span className="field-label">Date you need this by</span>
             <input
-              type="text"
-              placeholder="Optional, e.g. mid-August launch"
+              type="date"
               value={neededBy}
               onChange={(e) => setNeededBy(e.target.value)}
               disabled={submitting}
@@ -182,6 +184,27 @@ export default function IntakePage() {
             </select>
           </label>
         </div>
+
+        <label className="row mt-12" style={{ gap: 8, fontSize: 14 }}>
+          <input
+            type="checkbox"
+            checked={urgent}
+            onChange={(e) => setUrgent(e.target.checked)}
+            disabled={submitting}
+          />
+          <span>Urgent</span>
+        </label>
+        {urgent && (
+          <label className="field mt-12">
+            <span className="field-label">Why is this urgent? *</span>
+            <textarea
+              value={urgencyReason}
+              onChange={(e) => setUrgencyReason(e.target.value)}
+              rows={2}
+              disabled={submitting}
+            />
+          </label>
+        )}
 
         {requestKind === "new_property_on_existing" && (
           <div className="mt-12">
@@ -213,14 +236,15 @@ export default function IntakePage() {
                     onChange={() => toggleDestination(d)}
                     disabled={submitting}
                   />
-                  <span>{d}</span>
+                  {/* Display only: the submitted value keeps its underscores. */}
+                  <span>{d.replaceAll("_", " ")}</span>
                 </label>
               ))}
             </div>
           </div>
         )}
 
-        <div className="row spread mt-12">
+        <div className="row mt-12">
           <button
             className="btn btn-primary"
             onClick={() =>
@@ -231,6 +255,8 @@ export default function IntakePage() {
                   call_type: callType,
                   side,
                   business_value: businessValue,
+                  urgent,
+                  urgency_reason: urgent ? urgencyReason : null,
                   needed_by: neededBy || null,
                   request_kind: requestKind,
                   existing_event:
@@ -245,26 +271,13 @@ export default function IntakePage() {
               submitting ||
               text.trim().length === 0 ||
               businessValue.trim().length === 0 ||
-              submitterTeam === ""
+              submitterName.trim().length === 0 ||
+              submitterTeam === "" ||
+              (urgent && urgencyReason.trim().length === 0)
             }
           >
-            {submitting ? "Drafting…" : "Submit request"}
+            {submitting ? "Drafting…" : "Draft my request"}
           </button>
-          <div className="row">
-            <span className="muted" style={{ fontSize: 12.5 }}>
-              Try:
-            </span>
-            {NATURAL_LANGUAGE_EXAMPLES.map((ex) => (
-              <button
-                key={ex.key}
-                className="btn btn-ghost"
-                onClick={() => setText(ex.text)}
-                disabled={submitting}
-              >
-                {ex.label}
-              </button>
-            ))}
-          </div>
         </div>
 
         <div className="raw-affordance">
@@ -273,7 +286,28 @@ export default function IntakePage() {
           </button>
           {showRaw && (
             <div className="mt-12">
+              <span className="field-label">Load an example request</span>
               <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>
+                Fills empty form fields with an example. Anything you have already typed
+                is left alone.
+              </p>
+              <div className="row">
+                {NATURAL_LANGUAGE_EXAMPLES.map((ex) => (
+                  <button
+                    key={ex.key}
+                    className="btn btn-ghost"
+                    onClick={() => {
+                      if (text.trim().length === 0) setText(ex.text);
+                      if (businessValue.trim().length === 0)
+                        setBusinessValue(ex.businessValue);
+                    }}
+                    disabled={submitting}
+                  >
+                    {ex.label}
+                  </button>
+                ))}
+              </div>
+              <p className="muted" style={{ fontSize: 13, marginTop: 12 }}>
                 Posts a pre-built definition straight to the rules. Used for violations a
                 faithful model would not author from plain English.
               </p>

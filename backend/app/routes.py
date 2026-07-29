@@ -6,10 +6,11 @@ here. The Anthropic key is not used in this layer.
 
 from __future__ import annotations
 
+import re
 from typing import Literal, Optional
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from .config import get_settings
 from .governance import (
@@ -47,27 +48,52 @@ SubmitterTeam = Literal["Product", "Marketing", "Data", "Engineering"]
 # track only: EventDefinition is track-shaped and rules.py enforces an event-name
 # convention. identify/page/screen need their own shapes and rules (see TASKS.md).
 CallType = Literal["track"]
-Side = Literal["Client", "Server"]
+# "Unsure" is a real answer: it is stored verbatim and surfaced to the approver as
+# an open question rather than forcing a guess at intake.
+Side = Literal["Client", "Server", "Unsure"]
 
 
 RequestKind = Literal["new_event", "new_property_on_existing"]
+
+_ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _validate_needed_by(value: Optional[str]) -> Optional[str]:
+    if value is None or value == "":
+        return None
+    if not _ISO_DATE.match(value):
+        raise ValueError("needed_by must be an ISO date (YYYY-MM-DD)")
+    return value
+
+
+def _validate_urgency(model):
+    if model.urgent and not (model.urgency_reason or "").strip():
+        raise ValueError("urgency_reason is required when urgent is true")
+    return model
 
 
 class IntakeBody(BaseModel):
     raw_intake_text: str
     business_value: str = Field(min_length=1)
-    submitter_name: Optional[str] = None
-    submitter_team: Optional[SubmitterTeam] = None
+    submitter_name: str = Field(min_length=1)
+    submitter_team: SubmitterTeam
     call_type: CallType = "track"
     side: Side = "Client"
+    urgent: bool = False
+    urgency_reason: Optional[str] = None
     needed_by: Optional[str] = None
     request_kind: RequestKind = "new_event"
     # Only meaningful when request_kind is new_property_on_existing.
     existing_event: Optional[str] = None
     destinations: list[str] = Field(default_factory=list)
 
+    _needed_by_iso = field_validator("needed_by")(_validate_needed_by)
+    _urgency = model_validator(mode="after")(_validate_urgency)
+
 
 class RawIntakeBody(BaseModel):
+    # Submitter fields stay optional here, unlike IntakeBody: /requests/raw is the
+    # model-free deterministic demo path and run_examples.py posts to it headlessly.
     definition: dict
     raw_intake_text: Optional[str] = None
     business_value: str = Field(min_length=1)
@@ -75,10 +101,15 @@ class RawIntakeBody(BaseModel):
     submitter_team: Optional[SubmitterTeam] = None
     call_type: CallType = "track"
     side: Side = "Client"
+    urgent: bool = False
+    urgency_reason: Optional[str] = None
     needed_by: Optional[str] = None
     request_kind: RequestKind = "new_event"
     existing_event: Optional[str] = None
     destinations: list[str] = Field(default_factory=list)
+
+    _needed_by_iso = field_validator("needed_by")(_validate_needed_by)
+    _urgency = model_validator(mode="after")(_validate_urgency)
 
 
 class SubmitBody(BaseModel):
@@ -187,6 +218,8 @@ def create_request(body: IntakeBody, request: Request) -> IntakeResponse:
             call_type=body.call_type,
             side=body.side,
             business_value=body.business_value,
+            urgent=body.urgent,
+            urgency_reason=body.urgency_reason,
             needed_by=body.needed_by,
             request_kind=body.request_kind,
             existing_event=body.existing_event,
@@ -222,6 +255,8 @@ def create_request_raw(body: RawIntakeBody) -> IntakeResponse:
         call_type=body.call_type,
         side=body.side,
         business_value=body.business_value,
+        urgent=body.urgent,
+        urgency_reason=body.urgency_reason,
         needed_by=body.needed_by,
         request_kind=body.request_kind,
         existing_event=body.existing_event,
