@@ -6,6 +6,10 @@ import { ReviewFinding, SubmitResolution } from "@/lib/api";
 // The three doors on a duplicate_event finding: agree and withdraw, pass the
 // question to the approver, or say how the existing event won't work and submit.
 // Only the third door requires the textarea.
+//
+// With no findings the panel still appears — the engine's near-duplicate rule gates
+// submission on its own. That case has no finding to agree with, so the withdraw
+// door is absent and only the other two are offered.
 export function DuplicateResolution({
   findings,
   busy,
@@ -43,7 +47,9 @@ export function DuplicateResolution({
       </div>
       <label className="field mt-12">
         <span className="field-label">
-          How won&apos;t {events.join(" or ")} work for you?
+          {events.length > 0
+            ? `How won't ${events.join(" or ")} work for you?`
+            : "Why won't the existing event work for you?"}
         </span>
         <textarea
           value={note}

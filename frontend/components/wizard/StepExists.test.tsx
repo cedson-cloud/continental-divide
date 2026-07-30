@@ -1,6 +1,6 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ReviewFinding } from "@/lib/api";
+import { ReviewFinding, RuleCheck } from "@/lib/api";
 import { StepExists } from "./StepExists";
 
 afterEach(cleanup);
@@ -17,10 +17,30 @@ function finding(overrides: Partial<ReviewFinding>): ReviewFinding {
   };
 }
 
-function renderStep(findings: ReviewFinding[]) {
+const CLEAN_CHECKS: RuleCheck[] = [
+  { rule: "duplicate", passed: true, detail: "not already in the tracking plan" },
+  { rule: "near_duplicate", passed: true, detail: "no near duplicate" },
+];
+
+const NEAR_DUPLICATE_CHECKS: RuleCheck[] = [
+  { rule: "duplicate", passed: true, detail: "not already in the tracking plan" },
+  {
+    rule: "near_duplicate",
+    passed: false,
+    detail: "'Carts Viewed' is the same name as 'Cart Viewed' written differently",
+  },
+];
+
+function renderStep(
+  findings: ReviewFinding[],
+  checks: RuleCheck[] = CLEAN_CHECKS,
+  flags: string[] = [],
+) {
   return render(
     <StepExists
       findings={findings}
+      checks={checks}
+      flags={flags}
       busy={false}
       onWithdraw={vi.fn()}
       onSubmit={vi.fn()}
@@ -56,6 +76,37 @@ describe("StepExists", () => {
       screen.getByText("Nothing in the catalog looks like this yet."),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Next" })).toBeInTheDocument();
+  });
+
+  it("asks for an answer on an engine near-duplicate, with no withdraw door", () => {
+    // The engine writes rule checks, not findings, so there is nothing to agree
+    // with — but submission is still gated, and offering Next here would 422.
+    renderStep([], NEAR_DUPLICATE_CHECKS, [
+      "'Carts Viewed' is the same name as 'Cart Viewed', which already exists in the tracking plan",
+    ]);
+
+    expect(
+      screen.getByText("This is a name you already have, written differently"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "I'm not sure — ask the approver" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Submit request" })).toBeInTheDocument();
+
+    expect(screen.queryByRole("button", { name: "Next" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Use Cart Viewed instead" }),
+    ).toBeNull();
+  });
+
+  it("shows a low-confidence duplicate finding but does not gate on it", () => {
+    renderStep([finding({ confidence: "low" })]);
+
+    expect(
+      screen.getByText("This sounds like an event you already have"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Next" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Submit request" })).toBeNull();
   });
 
   it("renders AgentReview and a Next, without DuplicateResolution, on property_extension-only findings", () => {

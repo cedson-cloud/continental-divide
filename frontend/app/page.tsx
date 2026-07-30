@@ -23,6 +23,8 @@ import { ProposedDefinition } from "@/components/AuditTimeline";
 import { AgentReview } from "@/components/AgentReview";
 import { EventPicker } from "@/components/EventPicker";
 import { DuplicateResolution } from "@/components/DuplicateResolution";
+import { EngineDuplicates } from "@/components/EngineDuplicates";
+import { gatingDuplicateFindings, submissionNeedsAnswer } from "@/lib/gating";
 import { RejectedRecourse } from "@/components/RejectedRecourse";
 import { RuleChecks } from "@/components/RuleChecks";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -374,9 +376,8 @@ function Outcome({ detail }: { detail: RequestDetail }) {
   const isDraft = detail.status === "draft";
   const isRejected = detail.status === "rejected";
   const findings = detail.duplicate_candidates;
-  const duplicateFindings = findings.filter(
-    (f) => (f.kind ?? "duplicate_event") === "duplicate_event",
-  );
+  const duplicateFindings = gatingDuplicateFindings(findings);
+  const needsAnswer = submissionNeedsAnswer(findings, checks);
 
   async function submit(resolution: SubmitResolution = {}) {
     setSubmitting(true);
@@ -539,6 +540,10 @@ function Outcome({ detail }: { detail: RequestDetail }) {
         ) : null}
       </div>
 
+      <div className="mt-16">
+        <EngineDuplicates checks={checks} flags={flags} />
+      </div>
+
       {findings.length > 0 && (
         <div className="mt-16">
           <AgentReview findings={findings} variant="requester" />
@@ -547,7 +552,7 @@ function Outcome({ detail }: { detail: RequestDetail }) {
 
       {isDraft ? (
         <>
-          {duplicateFindings.length > 0 ? (
+          {needsAnswer ? (
             <DuplicateResolution
               findings={duplicateFindings}
               busy={submitting}

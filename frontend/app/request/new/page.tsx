@@ -423,6 +423,14 @@ export default function GuidedRequestPage() {
             </p>
             <StepExists
               findings={detail.duplicate_candidates}
+              checks={
+                ((detail.audit_log.find((e) => e.step === "rules_evaluated")
+                  ?.detail?.checks as RuleCheck[]) || [])
+              }
+              flags={
+                ((detail.audit_log.find((e) => e.step === "rules_evaluated")
+                  ?.detail?.flags as string[]) || [])
+              }
               busy={busy}
               onWithdraw={withdraw}
               onSubmit={submit}

@@ -1,14 +1,16 @@
 import { RuleCheck } from "@/lib/api";
 
-// A PII hit is advisory, always. The engine reports one boolean per check, so a flag
-// arrives as passed:false — but pii.mode is "flag": it routes to approval and a human
-// acknowledges it. Painting it with the same red ✕ as a genuine rejection is why
-// request #11's requester saw two failures and could not tell which one stopped the
-// request. pii.mode "block" is killed in the PRD's anti-scope, so there is no other
-// mode to plumb through — the branch is unconditional on purpose.
+// Rules that report without rejecting. The engine gives one boolean per check, so
+// these arrive as passed:false — but they route to a human rather than ending the
+// request. Painting them with the same red ✕ as a genuine rejection is why request
+// #11's requester saw two failures and could not tell which one stopped the request.
+// Mirrors _NON_BLOCKING_RULES in backend/app/rules.py; see docs/adr/0001 for why no
+// duplicate check of any kind rejects.
+const ADVISORY_RULES = new Set(["pii", "duplicate", "near_duplicate"]);
+
 function checkState(check: RuleCheck): "pass" | "fail" | "advisory" {
-  if (check.rule === "pii") return check.passed ? "pass" : "advisory";
-  return check.passed ? "pass" : "fail";
+  if (check.passed) return "pass";
+  return ADVISORY_RULES.has(check.rule) ? "advisory" : "fail";
 }
 
 const MARKS: Record<"pass" | "fail" | "advisory", string> = {

@@ -46,9 +46,15 @@ export function AgentReview({
                         {name}
                       </span>
                     ))}
-                    {variant === "approver" && (
-                      <span className={`confidence ${finding.confidence}`}>
-                        {finding.confidence} confidence
+                    {/* Shown to both roles now that confidence decides who has to
+                        answer: high asks for a note or an acknowledgment, the rest
+                        are here to be read. See docs/adr/0001. */}
+                    <span className={`confidence ${finding.confidence}`}>
+                      {finding.confidence} confidence
+                    </span>
+                    {(finding.confidence ?? "high") !== "high" && (
+                      <span className="muted" style={{ fontSize: 13 }}>
+                        for your information — this doesn&apos;t hold anything up
                       </span>
                     )}
                   </div>

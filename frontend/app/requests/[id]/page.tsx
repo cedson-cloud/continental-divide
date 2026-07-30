@@ -22,6 +22,8 @@ import { AuditTimeline } from "@/components/AuditTimeline";
 import { DefinitionView } from "@/components/DefinitionView";
 import { AgentReview } from "@/components/AgentReview";
 import { DuplicateResolution } from "@/components/DuplicateResolution";
+import { EngineDuplicates } from "@/components/EngineDuplicates";
+import { gatingDuplicateFindings, submissionNeedsAnswer } from "@/lib/gating";
 import { PublishCards } from "@/components/PublishCards";
 import { RejectedRecourse } from "@/components/RejectedRecourse";
 import { RuleChecks } from "@/components/RuleChecks";
@@ -211,9 +213,7 @@ export default function RequestDetailPage({ params }: { params: { id: string } }
   const supersededById = auditNumber(detail, "superseded_by", "new_request_id");
   const supersedesId = auditNumber(detail, "supersedes", "original_request_id");
   const findings = detail.duplicate_candidates;
-  const duplicateFindings = findings.filter(
-    (f) => (f.kind ?? "duplicate_event") === "duplicate_event",
-  );
+  const duplicateFindings = gatingDuplicateFindings(findings);
   const isRejected = detail.status === "rejected";
   const disputes = detail.audit_log.filter((e) => e.step === "rule_disputed");
   const renameEntry = detail.audit_log.find(
@@ -374,6 +374,8 @@ export default function RequestDetailPage({ params }: { params: { id: string } }
         </div>
       )}
 
+      <EngineDuplicates checks={evaluation.checks} flags={evaluation.flags} />
+
       {findings.length > 0 && (
         <div className="panel">
           <AgentReview
@@ -405,7 +407,7 @@ export default function RequestDetailPage({ params }: { params: { id: string } }
             This draft has not been submitted. It enters the approval queue when you
             submit it.
           </p>
-          {duplicateFindings.length > 0 ? (
+          {submissionNeedsAnswer(findings, evaluation.checks) ? (
             <DuplicateResolution
               findings={duplicateFindings}
               busy={submitting || convertingEvent !== null}
