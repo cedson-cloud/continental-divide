@@ -77,7 +77,7 @@ describe("RejectedRecourse", () => {
 
   it("renders the dispute door and no rename buttons when there are no candidates", () => {
     // "Item Saved for Later" has no compliant repair: the Title-Case fix fails on
-    // tense. This is exactly when the requester most needs the third door.
+    // tense. This is exactly when the requester most needs the dispute door.
     renderRecourse([]);
 
     expect(screen.queryByRole("button", { name: /^Use / })).toBeNull();
