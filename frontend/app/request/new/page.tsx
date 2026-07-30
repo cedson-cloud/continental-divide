@@ -5,9 +5,11 @@ import { useEffect, useReducer, useRef, useState } from "react";
 import {
   RuleCheck,
   SubmitResolution,
+  disputeRule,
   friendlyError,
   getGovernanceProfile,
   getRequest,
+  renameRequest,
   submitIntake,
   submitRequest,
   withdrawRequest,
@@ -20,7 +22,7 @@ import {
   wizardReducer,
 } from "@/lib/wizard";
 import { EventPicker } from "@/components/EventPicker";
-import { RuleChecks } from "@/components/RuleChecks";
+import { RejectedRecourse } from "@/components/RejectedRecourse";
 import { StepExists } from "@/components/wizard/StepExists";
 import { StepReview } from "@/components/wizard/StepReview";
 
@@ -47,7 +49,9 @@ const KIND_CARDS: { kind: DataKind; title: string; hint: string }[] = [
 type Phase =
   | { name: "wizard" }
   | { name: "submitted" }
-  | { name: "withdrawn"; existingEvent: string };
+  | { name: "withdrawn"; existingEvent: string }
+  | { name: "renamed"; newId: number; newName: string }
+  | { name: "disputed"; rule: string };
 
 export default function GuidedRequestPage() {
   const [state, dispatch] = useReducer(wizardReducer, initialWizardState);
@@ -112,6 +116,38 @@ export default function GuidedRequestPage() {
     }
   }
 
+  async function rename(newName: string) {
+    if (inFlight.current || !state.detail) return;
+    inFlight.current = true;
+    setBusy(true);
+    setActionError(null);
+    try {
+      const res = await renameRequest(state.detail.id, newName);
+      setPhase({ name: "renamed", newId: res.id, newName });
+    } catch (err) {
+      setActionError(friendlyError(err));
+    } finally {
+      inFlight.current = false;
+      setBusy(false);
+    }
+  }
+
+  async function dispute(rule: string, note: string) {
+    if (inFlight.current || !state.detail) return;
+    inFlight.current = true;
+    setBusy(true);
+    setActionError(null);
+    try {
+      await disputeRule(state.detail.id, rule, note);
+      setPhase({ name: "disputed", rule });
+    } catch (err) {
+      setActionError(friendlyError(err));
+    } finally {
+      inFlight.current = false;
+      setBusy(false);
+    }
+  }
+
   function set(
     field:
       | "existingEvent"
@@ -135,6 +171,50 @@ export default function GuidedRequestPage() {
           <p style={{ marginTop: 0 }}>
             Request #{state.detail.id} was withdrawn — {phase.existingEvent}{" "}
             already covers it.
+          </p>
+          <div className="row">
+            <Link href={`/requests/${state.detail.id}`}>
+              View request #{state.detail.id} →
+            </Link>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  if (phase.name === "renamed" && state.detail) {
+    return (
+      <main className="container">
+        <div className="panel">
+          <div className="panel-title">Renamed and resubmitted</div>
+          <p style={{ marginTop: 0 }}>
+            Request #{phase.newId} carries your request under the name{" "}
+            {phase.newName}, which your team&apos;s convention accepts. Request #
+            {state.detail.id} stays rejected, and the two are linked.
+          </p>
+          <div className="row">
+            <Link href={`/requests/${phase.newId}`}>
+              View request #{phase.newId} →
+            </Link>
+            <Link href={`/requests/${state.detail.id}`}>
+              View the original #{state.detail.id} →
+            </Link>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  if (phase.name === "disputed" && state.detail) {
+    return (
+      <main className="container">
+        <div className="panel">
+          <div className="panel-title">Sent to the data team</div>
+          <p style={{ marginTop: 0 }}>
+            Your disagreement with {phase.rule} is recorded against request #
+            {state.detail.id}, along with the version of the profile it applies to.
+            Nothing changed: the request stays rejected and the rules stay as they
+            are. Changing a rule happens in the governance profile, by a human.
           </p>
           <div className="row">
             <Link href={`/requests/${state.detail.id}`}>
@@ -353,11 +433,7 @@ export default function GuidedRequestPage() {
 
         {state.step === 4 && detail && rejected && (
           <>
-            <p style={{ marginTop: 0 }}>
-              The rules rejected this draft before it reached anyone. Adjust the
-              description and try again.
-            </p>
-            <RuleChecks
+            <RejectedRecourse
               checks={
                 ((detail.audit_log.find((e) => e.step === "rules_evaluated")
                   ?.detail?.checks as RuleCheck[]) || [])
@@ -366,6 +442,10 @@ export default function GuidedRequestPage() {
                 ((detail.audit_log.find((e) => e.step === "rules_evaluated")
                   ?.detail?.flags as string[]) || [])
               }
+              suggestions={detail.name_suggestions}
+              busy={busy}
+              onRename={rename}
+              onDispute={dispute}
             />
             <div className="row mt-16">
               <Link href={`/requests/${detail.id}`}>

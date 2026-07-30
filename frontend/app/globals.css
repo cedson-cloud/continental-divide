@@ -365,6 +365,12 @@ table.prop-table {
   background: var(--rejected-bg);
   color: var(--rejected-fg);
 }
+/* Advisory, not failed: a PII flag routes to approval for acknowledgment rather than
+   stopping the request. The flagged palette keeps it distinct from a real rejection. */
+.check-mark.advisory {
+  background: var(--flagged-bg);
+  color: var(--flagged-fg);
+}
 .check-rule {
   font-weight: 600;
 }

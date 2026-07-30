@@ -8,9 +8,11 @@ import {
   RequestDetail,
   RuleCheck,
   SubmitResolution,
+  disputeRule,
   friendlyError,
   getGovernanceProfile,
   getRequest,
+  renameRequest,
   submitIntake,
   submitRawDefinition,
   submitRequest,
@@ -21,6 +23,7 @@ import { ProposedDefinition } from "@/components/AuditTimeline";
 import { AgentReview } from "@/components/AgentReview";
 import { EventPicker } from "@/components/EventPicker";
 import { DuplicateResolution } from "@/components/DuplicateResolution";
+import { RejectedRecourse } from "@/components/RejectedRecourse";
 import { RuleChecks } from "@/components/RuleChecks";
 import { StatusBadge } from "@/components/StatusBadge";
 
@@ -352,6 +355,8 @@ function Outcome({ detail }: { detail: RequestDetail }) {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [withdrawnTo, setWithdrawnTo] = useState<string | null>(null);
+  const [renamed, setRenamed] = useState<{ id: number; name: string } | null>(null);
+  const [disputedRule, setDisputedRule] = useState<string | null>(null);
 
   const log = detail.audit_log;
   const modelEntry = findEntry(log, "model_interpreted");
@@ -367,6 +372,7 @@ function Outcome({ detail }: { detail: RequestDetail }) {
   const flags = (rulesEntry?.detail?.flags as string[]) || [];
 
   const isDraft = detail.status === "draft";
+  const isRejected = detail.status === "rejected";
   const findings = detail.duplicate_candidates;
   const duplicateFindings = findings.filter(
     (f) => (f.kind ?? "duplicate_event") === "duplicate_event",
@@ -396,6 +402,67 @@ function Outcome({ detail }: { detail: RequestDetail }) {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  async function rename(newName: string) {
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      const res = await renameRequest(detail.id, newName);
+      setRenamed({ id: res.id, name: newName });
+    } catch (err) {
+      setSubmitError(friendlyError(err));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function dispute(rule: string, note: string) {
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      await disputeRule(detail.id, rule, note);
+      setDisputedRule(rule);
+    } catch (err) {
+      setSubmitError(friendlyError(err));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (renamed) {
+    return (
+      <div className="panel">
+        <div className="panel-title">Renamed and resubmitted</div>
+        <p style={{ marginTop: 0 }}>
+          Request #{renamed.id} carries your request under the name {renamed.name},
+          which your team&apos;s convention accepts. Request #{detail.id} stays
+          rejected, and the two are linked.
+        </p>
+        <div className="row">
+          <Link href={`/requests/${renamed.id}`}>View request #{renamed.id} →</Link>
+          <Link href={`/requests/${detail.id}`}>
+            View the original #{detail.id} →
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (disputedRule) {
+    return (
+      <div className="panel">
+        <div className="panel-title">Sent to the data team</div>
+        <p style={{ marginTop: 0 }}>
+          Your disagreement with {disputedRule} is recorded against request #
+          {detail.id}, along with the version of the profile it applies to. Nothing
+          changed: the request stays rejected and the rules stay as they are.
+        </p>
+        <div className="row">
+          <Link href={`/requests/${detail.id}`}>View request #{detail.id} →</Link>
+        </div>
+      </div>
+    );
   }
 
   if (withdrawnTo) {
@@ -451,7 +518,18 @@ function Outcome({ detail }: { detail: RequestDetail }) {
       )}
 
       <div className="mt-16">
-        {checks.length > 0 ? (
+        {isRejected && checks.length > 0 ? (
+          // Same component the wizard's step 4 and the detail page render, so a
+          // rejection is never a dead end on one screen and a way forward on another.
+          <RejectedRecourse
+            checks={checks}
+            flags={flags}
+            suggestions={detail.name_suggestions}
+            busy={submitting}
+            onRename={rename}
+            onDispute={dispute}
+          />
+        ) : checks.length > 0 ? (
           <RuleChecks checks={checks} flags={flags} />
         ) : schemaRejected ? (
           <div className="msg msg-error">

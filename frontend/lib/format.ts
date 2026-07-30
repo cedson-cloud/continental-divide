@@ -32,6 +32,8 @@ const STEP_LABELS: Record<string, string> = {
   superseded_by: "Superseded by replacement",
   supersedes: "Supersedes original",
   withdrawn: "Withdrawn",
+  renamed_and_resubmitted: "Renamed and resubmitted",
+  rule_disputed: "Rule disputed",
 };
 
 export function stepLabel(step: string): string {

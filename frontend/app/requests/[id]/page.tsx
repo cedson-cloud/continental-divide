@@ -10,8 +10,10 @@ import {
   SubmitResolution,
   convertRequest,
   decideRequest,
+  disputeRule,
   friendlyError,
   getRequest,
+  renameRequest,
   submitRequest,
   withdrawRequest,
 } from "@/lib/api";
@@ -21,6 +23,7 @@ import { DefinitionView } from "@/components/DefinitionView";
 import { AgentReview } from "@/components/AgentReview";
 import { DuplicateResolution } from "@/components/DuplicateResolution";
 import { PublishCards } from "@/components/PublishCards";
+import { RejectedRecourse } from "@/components/RejectedRecourse";
 import { RuleChecks } from "@/components/RuleChecks";
 import { StatusBadge } from "@/components/StatusBadge";
 
@@ -76,6 +79,8 @@ export default function RequestDetailPage({ params }: { params: { id: string } }
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [convertingEvent, setConvertingEvent] = useState<string | null>(null);
   const [convertError, setConvertError] = useState<string | null>(null);
+  const [recourseBusy, setRecourseBusy] = useState(false);
+  const [recourseError, setRecourseError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     getRequest(id)
@@ -122,6 +127,34 @@ export default function RequestDetailPage({ params }: { params: { id: string } }
       setConvertError(friendlyError(err));
       setConvertingEvent(null);
       load();
+    }
+  }
+
+  // Rename lands on the NEW request, the way convert already does — the replacement
+  // is what the requester needs to look at, not the rejection they left behind.
+  async function rename(newName: string) {
+    setRecourseBusy(true);
+    setRecourseError(null);
+    try {
+      const res = await renameRequest(id, newName);
+      router.push(`/requests/${res.id}`);
+    } catch (err) {
+      setRecourseError(friendlyError(err));
+      setRecourseBusy(false);
+      load();
+    }
+  }
+
+  async function dispute(rule: string, note: string) {
+    setRecourseBusy(true);
+    setRecourseError(null);
+    try {
+      await disputeRule(id, rule, note);
+      load();
+    } catch (err) {
+      setRecourseError(friendlyError(err));
+    } finally {
+      setRecourseBusy(false);
     }
   }
 
@@ -181,6 +214,11 @@ export default function RequestDetailPage({ params }: { params: { id: string } }
   const duplicateFindings = findings.filter(
     (f) => (f.kind ?? "duplicate_event") === "duplicate_event",
   );
+  const isRejected = detail.status === "rejected";
+  const disputes = detail.audit_log.filter((e) => e.step === "rule_disputed");
+  const renameEntry = detail.audit_log.find(
+    (e) => e.step === "renamed_and_resubmitted",
+  );
   const isWithdrawn = detail.status === "withdrawn";
   const withdrawnEntry = detail.audit_log.find((e) => e.step === "withdrawn");
   const requesterUnsure =
@@ -203,7 +241,7 @@ export default function RequestDetailPage({ params }: { params: { id: string } }
         {detail.raw_intake_text}
       </p>
 
-      {isSuperseded && (
+      {(isSuperseded || (isRejected && supersededById !== null)) && (
         <div className="msg msg-info">
           This request was replaced by{" "}
           {supersededById !== null ? (
@@ -213,15 +251,33 @@ export default function RequestDetailPage({ params }: { params: { id: string } }
           ) : (
             "a newer request"
           )}
-          , which asks for the same thing as a property on an existing event.
+          ,{" "}
+          {isRejected
+            ? "which asks for the same thing under a name the convention accepts."
+            : "which asks for the same thing as a property on an existing event."}
         </div>
       )}
 
       {supersedesId !== null && (
         <div className="msg msg-info">
           This request replaces{" "}
-          <Link href={`/requests/${supersedesId}`}>request #{supersedesId}</Link>,
-          converted to a property on an existing event.
+          <Link href={`/requests/${supersedesId}`}>request #{supersedesId}</Link>
+          {renameEntry ? (
+            <>
+              , renamed from{" "}
+              {typeof renameEntry.detail?.original_name === "string"
+                ? renameEntry.detail.original_name
+                : "its rejected name"}{" "}
+              by the requester after{" "}
+              {typeof renameEntry.detail?.failed_rule === "string"
+                ? renameEntry.detail.failed_rule
+                : "a rule"}{" "}
+              rejected it. The name was chosen from the set the engine derived, not
+              drafted by the model.
+            </>
+          ) : (
+            ", converted to a property on an existing event."
+          )}
         </div>
       )}
 
@@ -291,7 +347,30 @@ export default function RequestDetailPage({ params }: { params: { id: string } }
       {evaluation.checks.length > 0 && (
         <div className="panel">
           <div className="panel-title">Evaluation</div>
-          <RuleChecks checks={evaluation.checks} flags={evaluation.flags} />
+          {isRejected ? (
+            // The same component the wizard and the single-screen form render: a
+            // rejection offers the compliant name and the dispute door everywhere.
+            <>
+              <RejectedRecourse
+                checks={evaluation.checks}
+                flags={evaluation.flags}
+                suggestions={detail.name_suggestions}
+                busy={recourseBusy}
+                onRename={rename}
+                onDispute={dispute}
+                error={recourseError}
+              />
+              {disputes.length > 0 && (
+                <div className="msg msg-info mt-16">
+                  {disputes.length === 1 ? "A dispute is" : `${disputes.length} disputes are`}{" "}
+                  on record for this request and waiting for the data team. The rules
+                  are unchanged.
+                </div>
+              )}
+            </>
+          ) : (
+            <RuleChecks checks={evaluation.checks} flags={evaluation.flags} />
+          )}
         </div>
       )}
 

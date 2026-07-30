@@ -44,13 +44,73 @@ Three rules, so that never happens again:
 - **`side` now defaults to `Unsure`** with help text, instead of silently guessing `Client`. **`Call type` is a static `track` label**, not a one-option select.
 - **Governance setup wizard, download-only** (`/admin/setup` + `POST /governance/draft`): builds and validates a profile entirely in memory. Verified in code — never writes to disk, runs no git, makes no network or model call. `GovernanceDraftAnswers` is `extra="forbid"` with `Literal` enums and bounded lists. `governance.py` gained `profile_from_dict`; `load_profile` delegates to it as a behaviour-neutral refactor. `test_the_endpoint_writes_nothing` snapshots names and mtimes either side of the call, so the guarantee is asserted rather than commented.
 
+## Shipped — session seven, `905cc73` + `e9e160c`
+
+- `905cc73` is this file's rewrite against the PRD. `e9e160c` is the data dictionary.
+- **Data dictionary** (`GET /catalog` + `/catalog` route, `backend/app/catalog_view.py`): read-time composition of the bundled sample plan and approved/published requests, each entry marked with its source. Composes its own response models and never touches `catalog.py` or `catalog_entries()`, so the review prompt is byte-unchanged — the discipline the rewrite demanded. A `new_event` name collision returns both entries as rival definitions; a `new_property_on_existing` merges into its target with attribution, or surfaces as `unresolved_target` when the target is absent. Array properties reference shared shapes returned once under `CatalogView.shapes`.
+- **Event picker** (`frontend/components/EventPicker.tsx`): replaces the free-text existing-event field in both the wizard and the single-screen form, fed by `GET /catalog`.
+- Leak check at `e9e160c`: all 98 tracked files walked from the loose objects — no `.env`, no `settings.local*`, no `check.sh`, nothing under `backend/data/`; committed `.env.example` holds only `sk-ant-replace-me`. `origin/main` matches local `main`.
+
+---
+
+## Shipped — session eight
+
+- **The naming dead-end is closed.** A rule rejection now offers a compliant name, a
+  one-click resubmit, and a way to disagree — the class behind the very first Notion
+  critique, not just the `Newsletter Signed Up` instance. Three pieces:
+    - `backend/app/naming_repair.py` — `suggest_compliant_names(name, *, profile)`.
+      Derives candidates **structurally from the active profile**, never by parsing the
+      error message, and then re-runs `event_name_error` on every one and drops what
+      still fails. That gate is the whole function: `Item Saved for Later` Title-cases
+      to `Item Saved For Later`, which fails on TENSE, so it returns **empty** rather
+      than handing the requester a second rejection. No model call, ever —
+      `interpreter.py:78` forbids renaming to pass a rule, and a model suggestion
+      would contradict it and add spend.
+    - `backend/app/recourse.py` + two routes. `POST /requests/{id}/rename` re-derives
+      the candidate set server-side and 422s anything else, so a client can never
+      dictate a name past the rule. It supersedes rather than mutates and **reuses the
+      original's `parsed_definition` with only the name replaced** — so a rename is
+      **exactly one model call, the review**, not four. Asserted with a counting stub.
+      `POST /requests/{id}/dispute-rule` records `rule_disputed` with the note and the
+      active profile's **name and digest**, and amends nothing: no file, no profile,
+      no status, no model call. `GET /disputes` + a read-only panel on `/admin`.
+    - `frontend/components/RejectedRecourse.tsx` — one shared component behind wizard
+      step 4, the single-screen outcome, and the detail page, so a rejection cannot be
+      a dead end on one screen and a way forward on another. The dispute door renders
+      **whether or not a compliant name exists**, because no-suggestion is exactly when
+      a requester most needs it.
+  - **`rules.py` was not touched and `test_rules.py` is still byte-identical.** The fix
+    needed no new knob, no connector change, and no new convention: Title-casing the
+    offending word already produces a passing name. `catalog.py`, `models.py`,
+    `pipeline.py`, `interpreter.py`, `storage.py` and every prompt builder are
+    unchanged too — `recourse.py` **imports** `pipeline._route` so a renamed request
+    travels the schema → rules → review → routed tail byte-for-byte the way intake
+    does, rather than reimplementing it and drifting.
+  - Tests: `backend/tests/test_naming_repair.py` (the gate asserted **generically over
+    a table of inputs**, not case by case, plus
+    `test_a_repair_that_would_fail_again_is_not_offered`),
+    `backend/tests/test_rename_and_dispute.py` (both supersede directions, the
+    original unedited, 422 outside the derived set, one-model-call, and the dispute's
+    write-nothing proof snapshotting `governance/` mtimes the way
+    `test_the_endpoint_writes_nothing` does), and
+    `frontend/components/RejectedRecourse.test.tsx`. **291 backend passed / 1 xfailed**
+    (was 238), **32 frontend passed** (was 25), `tsc --noEmit` clean.
+  - One judgment call beyond the brief: a dispute must name a rule that **actually
+    failed** on that request, mirroring `/convert`'s `NoMatchingFinding`, so a dispute
+    is always anchored to a real outcome.
+- **A PII flag no longer renders as a hard failure.** `RuleChecks` gives `rule == "pii"`
+  its own advisory state — flagged palette, `⚑`, and *"this did not stop the request"* —
+  and `decidingFailures()` excludes it, which is also what picks the rule the dispute
+  door offers. Treated as advisory **unconditionally**: `pii.mode: "block"` is killed in
+  PRD §4, so there is no second mode to plumb through.
+
 ---
 
 ## v1 — required for public
 
 ### The two missing ends of the loop — these outrank everything else
 
-- [ ] **Data dictionary / catalog view.** `GET /catalog` plus a browsable route. **The business's output, and the first row of Calvin's own Dream State table.** The data already exists: 28 events with verbatim descriptions and property lists in `catalog.py`, currently surfaced *only* as duplicate evidence inside the agent review. Verified 2026-07-29 — there is no catalog route and no endpoint. This is a surface, not a build.
+- [x] **Data dictionary / catalog view.** Shipped in `e9e160c` — see the session-seven block above. Verified 2026-07-30 against the working tree: `routes.py:230` serves `GET /catalog`, `/catalog` renders it.
 - [ ] 🔴 **APPROVED EVENTS NEVER JOIN THE CATALOG THE DUPLICATE REVIEW READS.** Verified in code 2026-07-29: `catalog_entries()` calls `load_plan()`, which is `json.loads(_PLAN_PATH.read_text())` over the bundled `sample_tracking_plan.json`, and **nothing writes to that file** — `publisher.py` emits an artifact and pushes to Notion, and stops there. So requests **#12 (`Account Signed Out`)** and **#13** are `published` and **invisible to the next review**.
     - **Consequence: the core value proposition degrades the moment someone actually uses the tool.** It can approve a duplicate of an event it approved last week. The demo works only because the catalog is a static fixture.
     - This is the *Configurable catalog source* item under v1.1, but its **severity is far higher than that item conveyed** — it is not a deployment nicety, it is a correctness hole in the one job a model earns its cost on.
@@ -61,16 +121,8 @@ Three rules, so that never happens again:
 
 ### The requester-facing defect — a rejection must never be a dead end
 
-- [ ] **Guided rename-and-resubmit, plus the "this rule looks wrong for us" flag.** Open since before session one; **now the highest-priority requester-facing defect.** Confirmed live on request **#11**: intake *"when someone asks to be emailed if a sold-out product comes back in stock"* drafted `Back in Stock Alert Requested`, `event_naming` failed with *"word 'in' must be Title Case"*, and the audit trail is `rules_evaluated -> routed` **and stops** — no duplicate review, no submit, no way for the requester to disagree.
-    - A naming failure must offer the compliant name, a one-click resubmit, and consent recorded in the audit log.
-    - Plus a third door: *"this rule looks wrong for us"* — records the disagreement against the profile and lands it in a **data-team review queue**. It amends nothing. PRD §3.
-    - **This is the class of the very first Notion critique** (*"why would the tool reject an event name that it came up with itself?"*), which `3495e66` retired as "never open" because the `Newsletter Signed Up` **instance** had been fixed by `915696e`. The instance was fixed; the class never was. `Continental_Divide_Session_2026-07-27c.md` even called this exact dead-end *"a landmine under the queued guided rename-and-resubmit feature"* on 07-27 — and it shipped two days later. Documenting a landmine is not defusing it.
-- [ ] **`verb_position: before_connector / rightmost` as a profile knob.** The structural cause of #11: `_title_case_error` finds the verb as *the word before the first connector*, which is right when the connector links action to target (`Product Added to Wishlist`) and wrong when the preposition sits inside the noun phrase (`Back in Stock Alert Requested`).
-    - **Do not "just add `in` to connectors."** Verified by reading the rule: it makes #11 fail *differently* (`verb_index` becomes 0, so it rejects on *"action verb 'Back' must be past tense"*) **and breaks `User Signed In`**, a valid Segment-spec name that passes today via `particles`, because `word.lower() in connectors` fires *"connector 'In' must be lowercase"*. Strictly worse on both counts.
-    - `rightmost` = walk right-to-left for the first past-tense word, skipping particles. Accepts `Back in Stock Alert Requested`; keeps `Product Added to Wishlist`, `User Signed In`, `Newsletter Signed Up`. **Cost: word order stops being enforced** under that setting.
-    - **Per PRD §3 the rule is law at intake and we do not loosen it behind a data team's back.** The knob lets a team *author* its way there and own the trade-off in its own versioned YAML. `before_connector` stays the default.
-    - ⚠️ **This is the first change that legitimately edits `rules.py`, so `test_rules.py` — the canary, byte-identical since `915696e` — will change.** That is fine if it is deliberate. The deterministic eval tier's 14 name fixtures pin these decisions by claim, which makes this the first real test of whether session four earned its keep. No live tier needed, no API spend.
-- [ ] **A PII `flag` must not render as a hard failure.** `pii.mode` is `flag`, but the rule check returns `passed: false`, so `RuleChecks` paints a red ✕ beside genuine rejections. On request #11 the requester saw two red ✕ and could not tell which one stopped the request. Either give a flag its own visual state or stop modelling it as a failed check.
+- [x] **Guided rename-and-resubmit, plus the "this rule looks wrong for us" flag.** Shipped in session eight — see the block above. The class behind the very first Notion critique is closed, not just the `Newsletter Signed Up` instance: request #11's exact draft now yields `Back In Stock Alert Requested` as a one-click resubmit with the consent in the audit log, and a name with no compliant repair gets the dispute door instead of nothing. Verified 2026-07-30 against the working tree.
+- [x] **A PII `flag` must not render as a hard failure.** Shipped in session eight — `RuleChecks` gives `rule == "pii"` its own advisory state, unconditionally, since PRD §4 kills `pii.mode: block`. Request #11's two red ✕ are now one ✕ and one ⚑.
 
 ### Credibility — this is the hiring artifact
 
@@ -78,7 +130,7 @@ Three rules, so that never happens again:
 - [ ] **`docs/decisions/` — six short ADRs.** Why `evaluate()` is not reused by `vet.py`; why the profile is re-read per request; why the model never computes what the engine can; why the PII blocklist is withheld from the drafting prompt; why governance lives in a versioned file; why the eval harness splits free from live. Highest signal-per-hour item in the plan.
 - [ ] **Cold-clone verification** plus `docs/COLD_CLONE.md`: the exact commands from `git clone` to a working app, derived from the repo as it is. The single thing most likely to embarrass him is a first run that fails.
 - [ ] **Recorded walkthrough + README screenshots.** PRD §5B. ~90 seconds following the 60-second story, droppable into an application, a DM, or a screen-share, plus stills at the four moments that carry the argument: the catalog hit at step 4, the three doors, the snippet, the dictionary entry. **Without this, nothing is showable without a clone — and hosting is killed because there is no auth.**
-- [ ] **Finish the frontend test coverage** — `StepReview`, `AgentReview` across the three finding kinds and both variants plus the empty case, the draft-versus-approver branch on the detail page, and the wizard page's own wiring (that the POST fires at step 3 and not earlier, and that BACK re-drafts). Prompt already written.
+- [ ] **Finish the frontend test coverage** — `StepReview`, `AgentReview` across the three finding kinds and both variants plus the empty case, the draft-versus-approver branch on the detail page, and the wizard page's own wiring (that the POST fires at step 3 and not earlier, and that BACK re-drafts). Prompt already written. *(`RejectedRecourse` and the advisory PII render arrived with their own tests in session eight; the list above is what is still missing.)*
 - [ ] **Make `check.sh` run the suite**, not `--collect-only`. It has been reporting collection as though it were execution for the whole project. ⚠️ `check.sh` contains `git` commands and `git` is denied to Claude Code, so **Claude Code cannot run it to test its own edit** — it must edit blind and Calvin runs it. `check.sh` is gitignored; it is a local tool, not a committed artifact.
 - [ ] **Confirm the governance templates stay generic** before flipping visibility. A client's conventions, PII list, or destination list must never be committed here.
 - [ ] **Confirm the README and the code match** before flipping visibility.
@@ -87,7 +139,7 @@ Three rules, so that never happens again:
 
 - [ ] **Governance wizard: accept free-form PII entries.** Seven curated additions is not a real PII list. **The "no free-form input" rule was over-applied here** — it exists to forbid user-supplied *naming regex*, which compiles and matches. A PII entry is a lowercase token substring-matched against property names: no regex, no compile step, no injection surface. Free-form PII is safe; free-form naming regex is not. PRD §4.
 - [ ] **Governance wizard: show the inherited 14-entry PII blocklist** as read-only chips above the additions. Calvin: *"Why have the PII checkboxes and yet have the Yaml hold even more? What's the point?"* The output currently surprises you. *(Not a bug — `build_profile_yaml` appends only what was selected, verified in code.)* Together with the item above, these are what stand between the wizard and *"I'd be embarrassed to put this in front of a data team."*
-- [ ] **Event picker / autocomplete** for the existing-event field, replacing free text. `page.tsx` already admits *"a picker arrives with the event catalog."* Nearly free once `GET /catalog` exists.
+- [x] **Event picker / autocomplete** for the existing-event field, replacing free text. Shipped in `e9e160c` — wired into both the wizard and the single-screen form, verified 2026-07-30.
 
 ---
 
@@ -102,6 +154,11 @@ Grouped, not ranked. Nothing here blocks the walkthrough or the ADRs.
 
 **Closing the human loop**
 
+- [ ] **`verb_position: before_connector / rightmost` as a profile knob.** **No longer load-bearing.** It was listed here as "the structural cause of #11," but session eight closed #11 without it: `_title_case_error` finds the verb as *the word before the first connector*, which is right when the connector links action to target (`Product Added to Wishlist`) and wrong when the preposition sits inside the noun phrase (`Back in Stock Alert Requested`) — and Title-casing the offending word produces a passing name anyway, so the requester has a way forward under the rule as written. What remains is an *authoring* want: a team that thinks word order should not be enforced can say so in its own YAML. **Moved to v1.1 on 2026-07-30** under rule 3 (it makes neither the walkthrough better nor the ADRs truer now that the dead end is closed). Detail kept for whoever picks it up:
+    - **Do not "just add `in` to connectors."** Verified by reading the rule: it makes #11 fail *differently* (`verb_index` becomes 0, so it rejects on *"action verb 'Back' must be past tense"*) **and breaks `User Signed In`**, a valid Segment-spec name that passes today via `particles`, because `word.lower() in connectors` fires *"connector 'In' must be lowercase"*. Strictly worse on both counts.
+    - `rightmost` = walk right-to-left for the first past-tense word, skipping particles. Accepts `Back in Stock Alert Requested`; keeps `Product Added to Wishlist`, `User Signed In`, `Newsletter Signed Up`. **Cost: word order stops being enforced** under that setting.
+    - **Per PRD §3 the rule is law at intake and we do not loosen it behind a data team's back.** The knob lets a team *author* its way there and own the trade-off in its own versioned YAML. `before_connector` stays the default.
+    - ⚠️ **This is the first change that legitimately edits `rules.py`, so `test_rules.py` — the canary, byte-identical since `915696e` — will change.** That is fine if it is deliberate. The deterministic eval tier's 14 name fixtures pin these decisions by claim, which makes this the first real test of whether session four earned its keep. No live tier needed, no API spend.
 - [ ] **The approver cannot act on `duplicate_unsure` — only approve or reject.** Confirmed on request **#10**: the requester chose *"I'm not sure — ask the approver"*, it reached `pending_approval` with `duplicate_unsure: true`, and rejection was the only available move, which is what the audit log records. `/convert` is requester-only, so an approver cannot express *"this should be a property on X."* Needs an approver-side convert or a send-back-to-requester state. **The `"Unsure"` client-vs-server answer has the same hole** and the same fix.
 - [ ] **Starter-plan batch intake** — the resurrected version of "generate a first tracking plan from scratch." **Not the tool authoring a plan:** N proposed events, each labelled as proposed, each entering the *same* intake → rules → agent review → human approval loop, each individually approvable with its own audit trail. `source: requested / suggested` extends from properties to whole events. Demo: *"it proposed fourteen events, the rules rejected two, a human approved nine."* Deferred on scope, recorded here so it cannot return later as a scope violation. PRD §6.
 - [ ] **Canonical-name allowlist per platform spec, checked before the convention.** Request **#12**: Calvin asked for a sign-out event and got `Account Signed Out`, because `title_case_object_action` mandates an Object while Segment's own spec uses `Signed In` / `Signed Out` with none. Calvin: *"Where are we getting the logic for these events? It seems like I need to build a skill."*
@@ -166,6 +223,9 @@ Do not reopen these without changing the PRD's anti-scope first. Closing them as
 - **`backend/data/` is blanket-gitignored.** Nothing there is a committed artifact.
 - **`.claude/settings.local.json` and `check.sh` are gitignored** and machine-specific.
 - **The `duplicate_check_absent` xfail is `strict=True` on purpose.** It is designed to turn red when the work is done.
+- **`recourse.py` imports `pipeline._route` on purpose.** A renamed request must travel the schema → rules → review → routed tail *byte-for-byte* the way intake does. Reimplementing it in a second module is how the two drift. Do not "fix" the private import by copying the body.
+- **`name_suggestions` is derived at read time and never stored.** `GET /requests/{id}` computes it with the same function `POST /rename` validates against, which is why the set the UI offers and the set the endpoint accepts cannot diverge. Do not add a column for it.
+- **A rename never mutates the original.** It stays `rejected` with its original `parsed_definition`; the link is an append-only `superseded_by` entry. Its status is deliberately *not* `superseded` — unlike `/convert`, the rejection is a real outcome worth keeping legible.
 - **Request #9 is the proof, not a test fixture.** `withdrawn`, audit trail `intake_received -> model_interpreted -> schema_parsed -> rules_evaluated -> duplicate_review -> routed -> withdrawn`. An event that was never created, and a record of why.
 
 ## Verified complete

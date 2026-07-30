@@ -95,6 +95,21 @@ export type RequestDetail = {
   created_at: string;
   updated_at: string;
   audit_log: AuditEntry[];
+  // Derived server-side at read time from the stored name and the active profile:
+  // names the engine itself accepts. Empty when the request was not name-rejected,
+  // or when no purely structural repair of the name passes.
+  name_suggestions: string[];
+};
+
+export type Dispute = {
+  request_id: number;
+  event_name: string | null;
+  request_status: string;
+  rule: string;
+  note: string;
+  profile: string;
+  profile_digest: string;
+  created_at: string;
 };
 
 export type CatalogViewProperty = {
@@ -289,6 +304,34 @@ export function withdrawRequest(
     method: "POST",
     body: JSON.stringify({ existing_event: existingEvent, reason: reason || null }),
   });
+}
+
+// The name must be one the server itself derived for this request — see
+// RequestDetail.name_suggestions. A name from anywhere else comes back 422.
+export function renameRequest(
+  id: number,
+  newName: string,
+): Promise<{ id: number; status: string }> {
+  return request(`/requests/${id}/rename`, {
+    method: "POST",
+    body: JSON.stringify({ new_name: newName }),
+  });
+}
+
+// Records the disagreement and amends nothing — no profile change, no status change.
+export function disputeRule(
+  id: number,
+  rule: string,
+  note: string,
+): Promise<{ id: number; status: string }> {
+  return request(`/requests/${id}/dispute-rule`, {
+    method: "POST",
+    body: JSON.stringify({ rule, note }),
+  });
+}
+
+export function listDisputes(): Promise<Dispute[]> {
+  return request("/disputes");
 }
 
 export function convertRequest(

@@ -3,19 +3,26 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
+  Dispute,
   GovernanceProfileInfo,
   friendlyError,
   getGovernanceProfile,
+  listDisputes,
 } from "@/lib/api";
 
 export default function AdminPage() {
   const [profile, setProfile] = useState<GovernanceProfileInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [disputes, setDisputes] = useState<Dispute[]>([]);
 
   useEffect(() => {
     getGovernanceProfile()
       .then(setProfile)
       .catch((err) => setError(friendlyError(err)));
+    // A failure here must not take down the profile view beside it.
+    listDisputes()
+      .then(setDisputes)
+      .catch(() => setDisputes([]));
   }, []);
 
   return (
@@ -131,6 +138,49 @@ export default function AdminPage() {
                   ))}
                 </div>
               </>
+            )}
+          </div>
+
+          <div className="panel">
+            <div className="panel-title">Rule disputes</div>
+            <p className="muted" style={{ fontSize: 13.5, marginTop: 0 }}>
+              Requesters who think a rule is wrong for this team. Read-only, and
+              deliberately not a workflow: nothing here amends a rule. Changing a
+              convention happens in the governance profile, by a human, in a
+              versioned file.
+            </p>
+            {disputes.length === 0 ? (
+              <p className="muted" style={{ fontSize: 13.5, marginBottom: 0 }}>
+                No disputes on record.
+              </p>
+            ) : (
+              <div className="checks">
+                {disputes.map((dispute) => (
+                  <div
+                    className="check"
+                    key={`${dispute.request_id}-${dispute.created_at}`}
+                  >
+                    <span className="check-mark advisory" aria-label="advisory">
+                      ⚑
+                    </span>
+                    <span>
+                      <span className="check-rule mono">{dispute.rule}</span>
+                      <span className="check-detail">
+                        {" "}
+                        — {dispute.note}
+                      </span>
+                      <div className="muted" style={{ fontSize: 13, marginTop: 2 }}>
+                        <Link href={`/requests/${dispute.request_id}`}>
+                          request #{dispute.request_id}
+                        </Link>
+                        {dispute.event_name ? ` · ${dispute.event_name}` : ""} ·{" "}
+                        {dispute.request_status} · profile {dispute.profile}{" "}
+                        <span className="mono">{dispute.profile_digest}</span>
+                      </div>
+                    </span>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
 

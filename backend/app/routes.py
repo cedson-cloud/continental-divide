@@ -43,6 +43,14 @@ from .pipeline import (
 )
 from .publisher import get_publisher
 from .rate_limit import RateLimiter
+from .recourse import (
+    NameNotOffered,
+    RuleNotFailing,
+    name_suggestions,
+    open_disputes,
+    record_rule_dispute,
+    rename_and_resubmit,
+)
 from .rules import effective_categories, event_name_error
 from .storage import get_storage
 
@@ -132,6 +140,17 @@ class ConvertBody(BaseModel):
 class WithdrawBody(BaseModel):
     existing_event: str = Field(min_length=1)
     reason: Optional[str] = None
+
+
+class RenameBody(BaseModel):
+    new_name: str = Field(min_length=1)
+
+
+class DisputeBody(BaseModel):
+    rule: str = Field(min_length=1)
+    # A dispute with no argument in it is not a governance record, so the note is
+    # required here and not only in the UI.
+    note: str = Field(min_length=1)
 
 
 class DecisionBody(BaseModel):
@@ -374,6 +393,10 @@ def get_request(request_id: int) -> dict:
         request.get("duplicate_candidates") or []
     )
     request["audit_log"] = storage.get_audit_log(request_id)
+    # Derived at read time, never stored: a rejected name's compliant alternatives,
+    # computed by the same function POST /rename validates against, so what the UI
+    # offers and what the endpoint accepts cannot drift.
+    request["name_suggestions"] = name_suggestions(request, storage)
     return request
 
 
@@ -413,6 +436,52 @@ def withdraw_request_route(request_id: int, body: WithdrawBody) -> dict:
 
     saved = storage.get_request(request_id)
     return {"id": request_id, "status": saved["status"]}
+
+
+@router.post("/requests/{request_id}/rename")
+def rename_request(request_id: int, body: RenameBody, request: Request) -> dict:
+    # A rename costs one model call — the catalog review on the new request — so it
+    # draws on the same rate-limit budget as intake and convert.
+    client = request.client.host if request.client else "unknown"
+    if not _limiter.allow(client):
+        raise HTTPException(status_code=429, detail="rate limit exceeded")
+
+    storage = get_storage()
+    try:
+        new_request_id = rename_and_resubmit(request_id, body.new_name, storage)
+    except RequestNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except InvalidTransition as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except NameNotOffered as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    saved = storage.get_request(new_request_id)
+    return {"id": new_request_id, "status": saved["status"]}
+
+
+@router.post("/requests/{request_id}/dispute-rule")
+def dispute_rule(request_id: int, body: DisputeBody) -> dict:
+    """Record that a rule looks wrong for this team. Amends nothing: no profile
+    change, no file write, no status change, no model call — and therefore no rate
+    limit. Authoring a convention happens in the governance wizard; this route only
+    files the disagreement for the data team to read."""
+    storage = get_storage()
+    try:
+        detail = record_rule_dispute(request_id, body.rule, body.note, storage)
+    except RequestNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except RuleNotFailing as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    saved = storage.get_request(request_id)
+    return {"id": request_id, "status": saved["status"], "dispute": detail}
+
+
+@router.get("/disputes")
+def list_disputes() -> list:
+    """Read-only: every dispute a requester has filed, for the data team."""
+    return open_disputes(get_storage())
 
 
 @router.post("/requests/{request_id}/convert")
