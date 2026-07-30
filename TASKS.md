@@ -37,19 +37,19 @@ Three rules, so that never happens again:
 
 ---
 
-## Shipped since the last Done sweep — session six, `63eb20d` + `0c4ff50`
+## Shipped since the last Done sweep — session six, `85f553e` + `265d9f8`
 
 - **Guided intake wizard** (`/request/new`): five steps over a pure reducer in `frontend/lib/wizard.ts`. `submitIntake` fires on the step-3 CTA, so the requester sees *does this already exist* at step 4 before a drafted name at step 5. A UI reorder, not a new prompt — `review_against_catalog` untouched, no new model call. `StepExists` early-returns with the three doors and no Next on a `duplicate_event` finding, because a step-5 submit would 422 on `DuplicateNoteRequired`. `BACK` from step 4 clears the draft. Closes **R2** (criteria above the textareas), **R3** (what-to-track first), **R4** (guide rather than a blank form), and the misread `" today: "` line from R1. The single-screen form survives as the expert path.
 - **First frontend tests in the project**: vitest + RTL, 16 passing, wired into CI. Five dev dependencies, not one.
 - **`side` now defaults to `Unsure`** with help text, instead of silently guessing `Client`. **`Call type` is a static `track` label**, not a one-option select.
 - **Governance setup wizard, download-only** (`/admin/setup` + `POST /governance/draft`): builds and validates a profile entirely in memory. Verified in code — never writes to disk, runs no git, makes no network or model call. `GovernanceDraftAnswers` is `extra="forbid"` with `Literal` enums and bounded lists. `governance.py` gained `profile_from_dict`; `load_profile` delegates to it as a behaviour-neutral refactor. `test_the_endpoint_writes_nothing` snapshots names and mtimes either side of the call, so the guarantee is asserted rather than commented.
 
-## Shipped — session seven, `905cc73` + `e9e160c`
+## Shipped — session seven, `645ddd2` + `ba13ccd`
 
-- `905cc73` is this file's rewrite against the PRD. `e9e160c` is the data dictionary.
+- `645ddd2` is this file's rewrite against the PRD. `ba13ccd` is the data dictionary.
 - **Data dictionary** (`GET /catalog` + `/catalog` route, `backend/app/catalog_view.py`): read-time composition of the bundled sample plan and approved/published requests, each entry marked with its source. Composes its own response models and never touches `catalog.py` or `catalog_entries()`, so the review prompt is byte-unchanged — the discipline the rewrite demanded. A `new_event` name collision returns both entries as rival definitions; a `new_property_on_existing` merges into its target with attribution, or surfaces as `unresolved_target` when the target is absent. Array properties reference shared shapes returned once under `CatalogView.shapes`.
 - **Event picker** (`frontend/components/EventPicker.tsx`): replaces the free-text existing-event field in both the wizard and the single-screen form, fed by `GET /catalog`.
-- Leak check at `e9e160c`: all 98 tracked files walked from the loose objects — no `.env`, no `settings.local*`, no `check.sh`, nothing under `backend/data/`; committed `.env.example` holds only `sk-ant-replace-me`. `origin/main` matches local `main`.
+- Leak check at `ba13ccd`: all 98 tracked files walked from the loose objects — no `.env`, no `settings.local*`, no `check.sh`, nothing under `backend/data/`; committed `.env.example` holds only `sk-ant-replace-me`. `origin/main` matches local `main`.
 
 ---
 
@@ -110,7 +110,7 @@ Three rules, so that never happens again:
 
 ### The two missing ends of the loop — these outrank everything else
 
-- [x] **Data dictionary / catalog view.** Shipped in `e9e160c` — see the session-seven block above. Verified 2026-07-30 against the working tree: `routes.py:230` serves `GET /catalog`, `/catalog` renders it.
+- [x] **Data dictionary / catalog view.** Shipped in `ba13ccd` — see the session-seven block above. Verified 2026-07-30 against the working tree: `routes.py:230` serves `GET /catalog`, `/catalog` renders it.
 - [ ] 🔴 **APPROVED EVENTS NEVER JOIN THE CATALOG THE DUPLICATE REVIEW READS.** Verified in code 2026-07-29: `catalog_entries()` calls `load_plan()`, which is `json.loads(_PLAN_PATH.read_text())` over the bundled `sample_tracking_plan.json`, and **nothing writes to that file** — `publisher.py` emits an artifact and pushes to Notion, and stops there. So requests **#12 (`Account Signed Out`)** and **#13** are `published` and **invisible to the next review**.
     - **Consequence: the core value proposition degrades the moment someone actually uses the tool.** It can approve a duplicate of an event it approved last week. The demo works only because the catalog is a static fixture.
     - This is the *Configurable catalog source* item under v1.1, but its **severity is far higher than that item conveyed** — it is not a deployment nicety, it is a correctness hole in the one job a model earns its cost on.
@@ -139,7 +139,7 @@ Three rules, so that never happens again:
 
 - [ ] **Governance wizard: accept free-form PII entries.** Seven curated additions is not a real PII list. **The "no free-form input" rule was over-applied here** — it exists to forbid user-supplied *naming regex*, which compiles and matches. A PII entry is a lowercase token substring-matched against property names: no regex, no compile step, no injection surface. Free-form PII is safe; free-form naming regex is not. [PRD → Anti-scope](docs/PRD.md#anti-scope).
 - [ ] **Governance wizard: show the inherited 14-entry PII blocklist** as read-only chips above the additions. *"Why have the PII checkboxes and yet have the Yaml hold even more? What's the point?"* The output surprised me. *(Not a bug — `build_profile_yaml` appends only what was selected, verified in code.)* Together with the item above, these are what stand between the wizard and *"I'd be embarrassed to put this in front of a data team."*
-- [x] **Event picker / autocomplete** for the existing-event field, replacing free text. Shipped in `e9e160c` — wired into both the wizard and the single-screen form, verified 2026-07-30.
+- [x] **Event picker / autocomplete** for the existing-event field, replacing free text. Shipped in `ba13ccd` — wired into both the wizard and the single-screen form, verified 2026-07-30.
 
 ---
 
@@ -168,7 +168,7 @@ Grouped, not ranked. Nothing here blocks the walkthrough or the ADRs.
     - ⚠️ **Separately: `verb_index` can stop early and silently pass.** `Report Filtered by Date Selected` returns `None` — `verb_index` lands on `Filtered`, which is past tense, so the rule approves and never looks at the trailing `Selected`. **This is a pre-existing weakness in the heuristic, not a consequence of the connector set**: any name whose first-connector position precedes a past-tense word hits it, and a wider connector set only exposes it more often. A silent wrong-verb pass is worse than a confusing rejection, and `rightmost` would close it. Whoever picks up this item should treat it as part of the same problem.
     - `rightmost` = walk right-to-left for the first past-tense word, skipping particles. Accepts `Back in Stock Alert Requested`; keeps `Product Added to Wishlist`, `User Signed In`, `Newsletter Signed Up`. **Cost: word order stops being enforced** under that setting.
     - **Per [PRD → Enforce or author — the seam](docs/PRD.md#enforce-or-author--the-seam) the rule is law at intake and we do not loosen it behind a data team's back.** The knob lets a team *author* its way there and own the trade-off in its own versioned YAML. `before_connector` stays the default.
-    - ⚠️ **This is the first change that legitimately edits `rules.py`, so `test_rules.py` — the canary, byte-identical since `915696e` — will change.** That is fine if it is deliberate. The deterministic eval tier's 14 name fixtures pin these decisions by claim, which makes this the first real test of whether session four earned its keep. No live tier needed, no API spend.
+    - ⚠️ **This is the first change that legitimately edits `rules.py`, so `test_rules.py` — the canary, byte-identical since `c22f067` — will change.** That is fine if it is deliberate. The deterministic eval tier's 14 name fixtures pin these decisions by claim, which makes this the first real test of whether session four earned its keep. No live tier needed, no API spend.
 - [ ] **The approver cannot act on `duplicate_unsure` — only approve or reject.** Confirmed on request **#10**: the requester chose *"I'm not sure — ask the approver"*, it reached `pending_approval` with `duplicate_unsure: true`, and rejection was the only available move, which is what the audit log records. `/convert` is requester-only, so an approver cannot express *"this should be a property on X."* Needs an approver-side convert or a send-back-to-requester state. **The `"Unsure"` client-vs-server answer has the same hole** and the same fix.
 - [ ] **Starter-plan batch intake** — the resurrected version of "generate a first tracking plan from scratch." **Not the tool authoring a plan:** N proposed events, each labelled as proposed, each entering the *same* intake → rules → agent review → human approval loop, each individually approvable with its own audit trail. `source: requested / suggested` extends from properties to whole events. Demo: *"it proposed fourteen events, the rules rejected two, a human approved nine."* Deferred on scope, recorded here so it cannot return later as a scope violation. [PRD → Deferred, not killed — starter plan generation](docs/PRD.md#deferred-not-killed--starter-plan-generation).
 - [ ] **Canonical-name allowlist per platform spec, checked before the convention.** Request **#12**: I asked for a sign-out event and got `Account Signed Out`, because `title_case_object_action` mandates an Object while Segment's own spec uses `Signed In` / `Signed Out` with none. *"Where are we getting the logic for these events? It seems like I need to build a skill."*
@@ -242,4 +242,4 @@ Do not reopen these without changing the PRD's anti-scope first. Closing them as
 
 - [x] Full git history reviewed for credentials, tokens, key files, and client references.
 - [x] `backend/.env` confirmed never committed.
-- [x] Leak check at `468e117`: all 91 tracked files walked — no `.env`, no `settings.local*`, no `check.sh`, nothing under `backend/data/`.
+- [x] Leak check at `5cde6b8`: all 91 tracked files walked — no `.env`, no `settings.local*`, no `check.sh`, nothing under `backend/data/`.

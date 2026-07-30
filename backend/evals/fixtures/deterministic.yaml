@@ -4,7 +4,7 @@
 
 names:
   - id: phrasal_signed_up
-    note: "The 915696e fix: a trailing particle shifts the verb left, so Newsletter Signed Up is valid."
+    note: "The c22f067 fix: a trailing particle shifts the verb left, so Newsletter Signed Up is valid."
     profile: templates/segment-ecommerce.yaml
     name: Newsletter Signed Up
     expect_valid: true
