@@ -25,15 +25,15 @@ Working roadmap for the build. Keep this clean: it travels with the repo, and th
 
 ## How to use this file
 
-**`claude/Continental_Divide_PRD.md` is the authority on scope. This file is the authority on work.** Rewritten against the PRD on 2026-07-29, after six sessions of appending turned ~75 open items into the feeling that the project was "moving forward with no direction now and just adding things."
+**`docs/PRD.md` is the authority on scope. This file is the authority on work.** Rewritten against the PRD on 2026-07-29, after six sessions of appending turned ~75 open items into the feeling that the project was "moving forward with no direction now and just adding things."
 
 Three rules, so that never happens again:
 
-1. **A new critique must survive the PRD's §4 anti-scope before it becomes an item here.** If it contradicts §4, close it with a pointer to §4 rather than leaving it open, where it reads as neglect.
+1. **A new critique must survive [PRD → Anti-scope](docs/PRD.md#anti-scope) before it becomes an item here.** If it contradicts [PRD → Anti-scope](docs/PRD.md#anti-scope), close it with a pointer to [PRD → Anti-scope](docs/PRD.md#anti-scope) rather than leaving it open, where it reads as neglect.
 2. **The two ends of the loop outrank the middle** until both exist. Six sessions all deepened the middle — the requester form and the approval gate. Engineering's output (code snippets) and the business's output (a data dictionary) were never started.
 3. **Every v1 item answers "does this make the walkthrough better, or the ADRs truer?"** If neither, it is v1.1.
 
-`v1 = done` is defined in PRD §5. It is **not** "no critiques left," which is unreachable.
+`v1 = done` is defined in [PRD → v1 = done](docs/PRD.md#v1--done). It is **not** "no critiques left," which is unreachable.
 
 ---
 
@@ -102,7 +102,7 @@ Three rules, so that never happens again:
   its own advisory state — flagged palette, `⚑`, and *"this did not stop the request"* —
   and `decidingFailures()` excludes it, which is also what picks the rule the dispute
   door offers. Treated as advisory **unconditionally**: `pii.mode: "block"` is killed in
-  PRD §4, so there is no second mode to plumb through.
+  [PRD → Killed, with reasons](docs/PRD.md#killed-with-reasons), so there is no second mode to plumb through.
 
 ---
 
@@ -122,14 +122,14 @@ Three rules, so that never happens again:
 ### The requester-facing defect — a rejection must never be a dead end
 
 - [x] **Guided rename-and-resubmit, plus the "this rule looks wrong for us" flag.** Shipped in session eight — see the block above. The class behind the very first Notion critique is closed, not just the `Newsletter Signed Up` instance: request #11's exact draft now yields `Back In Stock Alert Requested` as a one-click resubmit with the consent in the audit log, and a name with no compliant repair gets the dispute door instead of nothing. Verified 2026-07-30 against the working tree.
-- [x] **A PII `flag` must not render as a hard failure.** Shipped in session eight — `RuleChecks` gives `rule == "pii"` its own advisory state, unconditionally, since PRD §4 kills `pii.mode: block`. Request #11's two red ✕ are now one ✕ and one ⚑.
+- [x] **A PII `flag` must not render as a hard failure.** Shipped in session eight — `RuleChecks` gives `rule == "pii"` its own advisory state, unconditionally, since [PRD → Killed, with reasons](docs/PRD.md#killed-with-reasons) kills `pii.mode: block`. Request #11's two red ✕ are now one ✕ and one ⚑.
 
 ### Credibility — this is the hiring artifact
 
-- [ ] **README rewrite.** First line is PRD §1. It currently describes neither governance profiles, nor the vetting agent, nor either wizard. Must also state plainly: no auth, no multi-tenancy, localhost only.
-- [ ] **`docs/decisions/` — six short ADRs.** Why `evaluate()` is not reused by `vet.py`; why the profile is re-read per request; why the model never computes what the engine can; why the PII blocklist is withheld from the drafting prompt; why governance lives in a versioned file; why the eval harness splits free from live. Highest signal-per-hour item in the plan.
+- [ ] **README rewrite.** First line is [PRD → What it is](docs/PRD.md#what-it-is). It currently describes neither governance profiles, nor the vetting agent, nor either wizard. Must also state plainly: no auth, no multi-tenancy, localhost only.
+- [ ] **`docs/adr/` — six short ADRs.** Why `evaluate()` is not reused by `vet.py`; why the profile is re-read per request; why the model never computes what the engine can (**shipped as `0001-three-tiers-of-duplicate-detection.md`**); why the PII blocklist is withheld from the drafting prompt; why governance lives in a versioned file; why the eval harness splits free from live. Highest signal-per-hour item in the plan. `0002-the-duplicate-corpus-is-the-bundled-plan.md` also shipped and is a seventh, not one of these six — it records the corpus boundary this list never anticipated.
 - [ ] **Cold-clone verification** plus `docs/COLD_CLONE.md`: the exact commands from `git clone` to a working app, derived from the repo as it is. The single thing most likely to embarrass him is a first run that fails.
-- [ ] **Recorded walkthrough + README screenshots.** PRD §5B. ~90 seconds following the 60-second story, droppable into an application, a DM, or a screen-share, plus stills at the four moments that carry the argument: the catalog hit at step 4, the three doors, the snippet, the dictionary entry. **Without this, nothing is showable without a clone — and hosting is killed because there is no auth.**
+- [ ] **Recorded walkthrough + README screenshots.** [PRD → v1 = done](docs/PRD.md#v1--done). ~90 seconds following the 60-second story, droppable into an application, a DM, or a screen-share, plus stills at the four moments that carry the argument: the catalog hit at step 4, the three doors, the snippet, the dictionary entry. **Without this, nothing is showable without a clone — and hosting is killed because there is no auth.**
 - [ ] **Finish the frontend test coverage** — `StepReview`, `AgentReview` across the three finding kinds and both variants plus the empty case, the draft-versus-approver branch on the detail page, and the wizard page's own wiring (that the POST fires at step 3 and not earlier, and that BACK re-drafts). Prompt already written. *(`RejectedRecourse` and the advisory PII render arrived with their own tests in session eight; the list above is what is still missing.)*
 - [ ] **Make `check.sh` run the suite**, not `--collect-only`. It has been reporting collection as though it were execution for the whole project. ⚠️ `check.sh` contains `git` commands and `git` is denied to Claude Code, so **Claude Code cannot run it to test its own edit** — it must edit blind and Calvin runs it. `check.sh` is gitignored; it is a local tool, not a committed artifact.
 - [ ] **Confirm the governance templates stay generic** before flipping visibility. A client's conventions, PII list, or destination list must never be committed here.
@@ -137,7 +137,7 @@ Three rules, so that never happens again:
 
 ### Polish that the walkthrough depends on
 
-- [ ] **Governance wizard: accept free-form PII entries.** Seven curated additions is not a real PII list. **The "no free-form input" rule was over-applied here** — it exists to forbid user-supplied *naming regex*, which compiles and matches. A PII entry is a lowercase token substring-matched against property names: no regex, no compile step, no injection surface. Free-form PII is safe; free-form naming regex is not. PRD §4.
+- [ ] **Governance wizard: accept free-form PII entries.** Seven curated additions is not a real PII list. **The "no free-form input" rule was over-applied here** — it exists to forbid user-supplied *naming regex*, which compiles and matches. A PII entry is a lowercase token substring-matched against property names: no regex, no compile step, no injection surface. Free-form PII is safe; free-form naming regex is not. [PRD → Anti-scope](docs/PRD.md#anti-scope).
 - [ ] **Governance wizard: show the inherited 14-entry PII blocklist** as read-only chips above the additions. Calvin: *"Why have the PII checkboxes and yet have the Yaml hold even more? What's the point?"* The output currently surprises you. *(Not a bug — `build_profile_yaml` appends only what was selected, verified in code.)* Together with the item above, these are what stand between the wizard and *"I'd be embarrassed to put this in front of a data team."*
 - [x] **Event picker / autocomplete** for the existing-event field, replacing free text. Shipped in `e9e160c` — wired into both the wizard and the single-screen form, verified 2026-07-30.
 
@@ -157,10 +157,10 @@ Grouped, not ranked. Nothing here blocks the walkthrough or the ADRs.
 - [ ] **`verb_position: before_connector / rightmost` as a profile knob.** **No longer load-bearing.** It was listed here as "the structural cause of #11," but session eight closed #11 without it: `_title_case_error` finds the verb as *the word before the first connector*, which is right when the connector links action to target (`Product Added to Wishlist`) and wrong when the preposition sits inside the noun phrase (`Back in Stock Alert Requested`) — and Title-casing the offending word produces a passing name anyway, so the requester has a way forward under the rule as written. What remains is an *authoring* want: a team that thinks word order should not be enforced can say so in its own YAML. **Moved to v1.1 on 2026-07-30** under rule 3 (it makes neither the walkthrough better nor the ADRs truer now that the dead end is closed). Detail kept for whoever picks it up:
     - **Do not "just add `in` to connectors."** Verified by reading the rule: it makes #11 fail *differently* (`verb_index` becomes 0, so it rejects on *"action verb 'Back' must be past tense"*) **and breaks `User Signed In`**, a valid Segment-spec name that passes today via `particles`, because `word.lower() in connectors` fires *"connector 'In' must be lowercase"*. Strictly worse on both counts.
     - `rightmost` = walk right-to-left for the first past-tense word, skipping particles. Accepts `Back in Stock Alert Requested`; keeps `Product Added to Wishlist`, `User Signed In`, `Newsletter Signed Up`. **Cost: word order stops being enforced** under that setting.
-    - **Per PRD §3 the rule is law at intake and we do not loosen it behind a data team's back.** The knob lets a team *author* its way there and own the trade-off in its own versioned YAML. `before_connector` stays the default.
+    - **Per [PRD → Enforce or author — the seam](docs/PRD.md#enforce-or-author--the-seam) the rule is law at intake and we do not loosen it behind a data team's back.** The knob lets a team *author* its way there and own the trade-off in its own versioned YAML. `before_connector` stays the default.
     - ⚠️ **This is the first change that legitimately edits `rules.py`, so `test_rules.py` — the canary, byte-identical since `915696e` — will change.** That is fine if it is deliberate. The deterministic eval tier's 14 name fixtures pin these decisions by claim, which makes this the first real test of whether session four earned its keep. No live tier needed, no API spend.
 - [ ] **The approver cannot act on `duplicate_unsure` — only approve or reject.** Confirmed on request **#10**: the requester chose *"I'm not sure — ask the approver"*, it reached `pending_approval` with `duplicate_unsure: true`, and rejection was the only available move, which is what the audit log records. `/convert` is requester-only, so an approver cannot express *"this should be a property on X."* Needs an approver-side convert or a send-back-to-requester state. **The `"Unsure"` client-vs-server answer has the same hole** and the same fix.
-- [ ] **Starter-plan batch intake** — the resurrected version of "generate a first tracking plan from scratch." **Not the tool authoring a plan:** N proposed events, each labelled as proposed, each entering the *same* intake → rules → agent review → human approval loop, each individually approvable with its own audit trail. `source: requested / suggested` extends from properties to whole events. Demo: *"it proposed fourteen events, the rules rejected two, a human approved nine."* Deferred on scope, recorded here so it cannot return later as a scope violation. PRD §6.
+- [ ] **Starter-plan batch intake** — the resurrected version of "generate a first tracking plan from scratch." **Not the tool authoring a plan:** N proposed events, each labelled as proposed, each entering the *same* intake → rules → agent review → human approval loop, each individually approvable with its own audit trail. `source: requested / suggested` extends from properties to whole events. Demo: *"it proposed fourteen events, the rules rejected two, a human approved nine."* Deferred on scope, recorded here so it cannot return later as a scope violation. [PRD → Deferred, not killed — starter plan generation](docs/PRD.md#deferred-not-killed--starter-plan-generation).
 - [ ] **Canonical-name allowlist per platform spec, checked before the convention.** Request **#12**: Calvin asked for a sign-out event and got `Account Signed Out`, because `title_case_object_action` mandates an Object while Segment's own spec uses `Signed In` / `Signed Out` with none. Calvin: *"Where are we getting the logic for these events? It seems like I need to build a skill."*
 - [ ] **`in` cannot be both a lowercase connector and a capitalized particle.** The schema forces one, English needs both (`Product Added to Wishlist` / `User Signed In` / `Back in Stock`). Whoever implements `verb_position` decides whether the two lists stay disjoint.
 - [ ] **Re-vet on rule change.** When a profile changes, report which existing events no longer comply. Pairs with the "this rule looks wrong" queue.
@@ -176,7 +176,7 @@ Grouped, not ranked. Nothing here blocks the walkthrough or the ADRs.
 
 **Correctness and hardening**
 
-- [ ] **`duplicate` appears as a `RuleCheck` only on the exemption branch.** A genuine duplicate is flagged with no check explaining it, which is backwards. Always emit it — passing when novel or exempted, failing when real. Pinned by the `duplicate_check_absent` **`strict=True` xfail**, which turns red the day this is fixed, forcing its own removal.
+- [x] **`duplicate` appears as a `RuleCheck` only on the exemption branch.** ~~A genuine duplicate is flagged with no check explaining it, which is backwards.~~ **Done.** `evaluate()` now always emits `duplicate`, and a second `near_duplicate` check alongside it — passing when novel or exempted, failing when real. The `duplicate_check_absent` xfail fixture was removed in the same change, as its `strict=True` marker intended. Note for whoever reads the history: it was deleted in the same edit that fixed the behaviour, so nobody ever watched it turn red. The verification was the new fixtures, not the marker.
 - [ ] **Harden `POST /requests/raw`** with the rate limit and size cap the model-backed route already has. **List in the README's known issues until then.**
 - [ ] **`/requests/raw` no longer pushes to Notion.** It skips `draft`, so it never passes through `submit_request`, and the board goes silently incomplete.
 - [ ] **`run_examples.py` publishes to the live Notion approval board when `NOTION_TOKEN` is set** — one page per example, every run. A footgun for anyone who clones with a token set. **README known issues.**
@@ -200,7 +200,7 @@ Grouped, not ranked. Nothing here blocks the walkthrough or the ADRs.
 
 ---
 
-## Killed, with reasons — PRD §4
+## Killed, with reasons — [PRD → Killed, with reasons](docs/PRD.md#killed-with-reasons)
 
 Do not reopen these without changing the PRD's anti-scope first. Closing them as out-of-scope is the point: an item that sits open forever reads as neglect.
 
@@ -212,7 +212,7 @@ Do not reopen these without changing the PRD's anti-scope first. Closing them as
 | **Screenshot-driven event design** | Unbounded scope plus an image-input surface, and starter-plan batch intake buys the same demo beat far more cheaply |
 | **Governance wizard writing to git server-side, or opening a PR** | Turns an unauthenticated endpoint into a write path into the repo; the PR variant also parks a repo-write token in it. Download-only is safer *and* better — the client commits the file and thereby owns their governance |
 | **`pii.mode: block`** | Reserved in the schema, never needed. Flag-and-acknowledge is the designed behaviour and the whole point of the PII decision |
-| **Chasing an empty critique list** | Not a definition of done. PRD §5 is |
+| **Chasing an empty critique list** | Not a definition of done. [PRD → v1 = done](docs/PRD.md#v1--done) is |
 | **"Generate a first tracking plan from scratch," as originally written** | Violated *does not design your plan*. **Resurrected in a form that does not** — see starter-plan batch intake under v1.1 |
 
 ---
@@ -222,7 +222,7 @@ Do not reopen these without changing the PRD's anti-scope first. Closing them as
 - **`DATABASE_PATH` is not a cold-clone risk.** `config.py:16` and `.env.example:14` already default to `backend/data/continental_divide.db`, which a clone creates on first run. Only Calvin's *local* `backend/.env` points at the legacy `data/tracking_guardian.db` — which is where request #9, the demo artifact, lives. 🔴 **Matching the default silently orphans it.** This was wrongly called a risk in three documents.
 - **`backend/data/` is blanket-gitignored.** Nothing there is a committed artifact.
 - **`.claude/settings.local.json` and `check.sh` are gitignored** and machine-specific.
-- **The `duplicate_check_absent` xfail is `strict=True` on purpose.** It is designed to turn red when the work is done.
+- ~~**The `duplicate_check_absent` xfail is `strict=True` on purpose.**~~ Removed with the fix it was guarding. The pattern stands for future use: a `strict=True` xfail fixture is how a known gap gets pinned so closing it forces the marker's own removal.
 - **`recourse.py` imports `pipeline._route` on purpose.** A renamed request must travel the schema → rules → review → routed tail *byte-for-byte* the way intake does. Reimplementing it in a second module is how the two drift. Do not "fix" the private import by copying the body.
 - **`name_suggestions` is derived at read time and never stored.** `GET /requests/{id}` computes it with the same function `POST /rename` validates against, which is why the set the UI offers and the set the endpoint accepts cannot diverge. Do not add a column for it.
 - **A rename never mutates the original.** It stays `rejected` with its original `parsed_definition`; the link is an append-only `superseded_by` entry. Its status is deliberately *not* `superseded` — unlike `/convert`, the rejection is a real outcome worth keeping legible.

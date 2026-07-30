@@ -56,7 +56,7 @@ continental-divide/
 - A request comes in: plain language through the model, or `POST /requests/raw`, which bypasses the model for deterministic rule demos.
 - The model drafts a structured event definition.
 - Deterministic rules govern it: naming, PII (flagged and gated on acknowledgment, not auto-rejected), category, duplicate.
-- A non-rejected request from the model path stops at `draft`. The requester reviews it and submits; only then does it enter the approval queue and push one-way to the Notion approval board. When the semantic review left duplicate candidates, submission requires a written note saying why the draft is not a duplicate.
+- A non-rejected request from the model path stops at `draft`. The requester reviews it and submits; only then does it enter the approval queue and push one-way to the Notion approval board. Submission requires a written note when the engine found a near duplicate, or the semantic review left a *high-confidence* duplicate candidate. Lower-confidence findings are shown and cost the requester nothing.
 - The model-free `POST /requests/raw` path skips confirmation and routes straight to `pending_approval`.
 - A human approves or rejects. Status moves `draft` → `pending_approval` → `approved` → `published`, or → `rejected`.
 - On approval, MockPublisher publishes.
@@ -69,7 +69,7 @@ Naming convention: the sample plan follows Segment's public Ecommerce V2 spec. E
 These are settled. Raise them with me before changing any of them.
 
 - **`rules.py` is deterministic and non-LLM by design.** Naming, PII, category and mechanical duplicate checks are regex and set membership. Never put a model call in it.
-- **The engine reports mechanical duplicates as fact; the agent reports semantic ones as inference.** Semantic duplicate review lives in `catalog.py`, is advisory only, and can never reject a request.
+- **Duplicate detection has three tiers, and no tier rejects.** The engine reports an exact name match as fact and a near duplicate — the same name in different case, separators, or a plural — as deterministic judgment. The agent reports semantic ones as inference. Semantic review lives in `catalog.py`, is advisory only, and can never reject a request. Nothing reaches `published` without a human acknowledging any tier that fired. See `docs/adr/0001` and `CONTEXT.md` for the vocabulary.
 - **An advisory model call must never be able to block intake.** If a review raises, record the failure and route normally.
 - **Status and Decision are separate.** `Decision` is the routing outcome. Statuses include values that are not `Decision` members — `draft`, `approved`, `published`. Don't add values to the `Decision` enum.
 - **The model captures, it does not enforce.** If a requester specifies an event name, record it verbatim and let the engine reject it. Never silently correct a request.

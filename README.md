@@ -9,6 +9,10 @@ I kept rebuilding. Continental Divide takes a plain-language request for a new t
 turns it into a typed and validated definition, routes it for approval, and on approval
 publishes the documentation and opens a ticket. Every step is recorded.
 
+The shape is simple: define once what a correct event looks like, let a model do the
+drafting, and keep every decision with deterministic rules and a human. The model is fast
+and useful and occasionally wrong, so it is never the thing that decides.
+
 The name is the idea. A continental divide is the line that decides which way the water
 flows. This tool is the line a tracking request has to cross, and it decides what gets through.
 
@@ -17,10 +21,15 @@ flows. This tool is the line a tracking request has to cross, and it decides wha
 1. **Intake:** someone describes the event they want to track, in plain language.
 2. **Draft and validate:** a model turns that into a structured event definition. It
    conforms to the schema or fails loudly, with the reasons shown. The model only drafts —
-   deterministic rules then check naming, block PII, and catch duplicates against the
+   deterministic rules then check naming, flag PII, and catch duplicates against the
    tracking plan, and the model cannot talk its way past them.
-3. **Approve:** a clean request routes to a human for one-click approval or rejection.
-4. **Publish:** on approval, the tool publishes the event documentation and opens a
+3. **Confirm:** the requester sees what was drafted and what the tool found before anyone
+   else does. If it looks like something that already exists, they can take the existing
+   event instead, pass the question to the approver, or say in writing why it won't work
+   for them. Nothing enters the approval queue until they say so.
+4. **Approve:** the request routes to a human, who must acknowledge any duplicate or PII
+   flag by name before approving.
+5. **Publish:** on approval, the tool publishes the event documentation and opens a
    tracking ticket. Out of the box this uses a mock publisher, so the whole flow runs
    with no external accounts.
 
@@ -97,13 +106,52 @@ depending on what the model writes.
   it publishes a mock Confluence doc and Jira ticket. The happy path, end to end.
 - **Natural language, PII** — "track when someone subscribes to our newsletter and
   capture their email address". The model faithfully proposes an `email` property, and the
-  PII rule rejects it. The point: the model drafts what was asked for, the rules govern.
+  PII rule flags it. It is *not* auto-rejected: the request routes to approval, and the
+  approver cannot approve it without acknowledging the PII on the record. The point: the
+  model drafts what was asked for, the rules govern, and a human puts their name on the
+  exception.
 - **Raw naming violation** — a pre-built `add_to_cart` definition. The naming rule
   rejects it for not being Object Action, Title Case. A well-behaved model won't author a
   malformed name from plain English, so this path skips the model to exercise the rule.
 - **Raw duplicate** — a pre-built `Order Completed` definition, which already exists in
   the tracking plan. It's flagged as a duplicate and routed to a human rather than
   auto-rejected.
+
+### Three kinds of duplicate
+
+Duplicate detection is the part worth reading the code for, because the three kinds are
+not the same kind of claim and the tool refuses to pretend they are.
+
+| Kind | What it is | Who decides |
+| --- | --- | --- |
+| **Exact** | The name is already in the plan, character for character | Fact. The approver acknowledges it. |
+| **Near** | The same name written differently — case, separators, or a plural, with the same action verb | Deterministic judgment. The requester answers first. |
+| **Semantic** | A model's argument that two differently-named events mean the same thing | Inference. High-confidence findings ask the requester; the rest are shown and cost nobody an action. |
+
+None of the three can reject a request. The engine states facts, the model makes arguments
+a human can disagree with, and nothing reaches published without someone acknowledging
+what fired. [`docs/adr/0001`](docs/adr/0001-three-tiers-of-duplicate-detection.md) records
+why the seam sits there — including a similarity threshold that got measured, produced two
+false positives against Segment's own curated spec, and was thrown out.
+
+## How this was built
+
+I directed this build with Claude Code. I read code and make the product and data calls; I
+don't write the Python by hand. That makes the specification the real work, and it is all
+in the repo:
+
+- [`CLAUDE.md`](CLAUDE.md) — the standing instructions the agent works under. Architecture
+  rules that require my sign-off to change, a frozen backward-compatibility test it may not
+  edit, and the constraint that `rules.py` may never contain a model call.
+- [`CONTEXT.md`](CONTEXT.md) — the glossary. What each term means and which synonyms to
+  avoid, so the code, the docs, and the UI say the same word for the same thing.
+- [`docs/adr/`](docs/adr/) — why each decision was made and what it ruled out.
+- [`TASKS.md`](TASKS.md) — what's done, what's next, and what was deliberately cut.
+
+The interesting constraint is that an agent will happily agree with you. Most of what's
+written down exists to stop that: rules the model cannot reach, a test it cannot edit, and
+decisions recorded with the evidence that produced them, so a later session cannot quietly
+reverse one.
 
 Open any request's detail page and read the audit timeline. That timeline is the point of
 the tool: it reconstructs exactly what happened and why, in order, and the audit rows
@@ -131,11 +179,20 @@ a datastore for the audit log and request history.
 ## Status
 
 The full flow works end to end: plain-language intake, model drafting, deterministic
-rules, human approval with PII acknowledgment, mock publishing, and a one-way push of
-pending requests to a Notion approval board — all recorded in the append-only audit log.
-A pytest suite covers the rules, the pipeline, the HTTP flow, and the Notion mapping,
-and CI runs the suite plus a frontend type-check and build on every push. Not deployed
-anywhere yet; see the deploy notes above.
+rules, requester confirmation, human approval with PII and duplicate acknowledgment, mock
+publishing, and a one-way push of pending requests to a Notion approval board — all
+recorded in the append-only audit log. A pytest suite covers the rules, the pipeline, the
+HTTP flow, and the Notion mapping, and CI runs the suite plus a frontend type-check and
+build on every push. Not deployed anywhere yet; see the deploy notes above.
+
+**Known limits, stated rather than discovered.** Duplicate detection compares against the
+bundled sample plan only — it does not yet see events this tool has published, or requests
+sitting in its own queue, so it cannot catch a duplicate of something it approved last
+week. That boundary and its consequences are written up in
+[`docs/adr/0002`](docs/adr/0002-the-duplicate-corpus-is-the-bundled-plan.md); closing it is
+the next substantial piece of work. Separately, nothing yet tests that the model respects
+the line between what it should report and what the engine already caught — that needs an
+eval tier, not a unit test.
 
 ## Clean room
 
@@ -145,8 +202,6 @@ uses generic example data; the naming convention follows Segment's public Track 
 Everything here is safe to publish. Secrets live in environment variables only and are
 never committed.
 
-## About
+---
 
-Continental Divide is a Bristlecone Echo asset. Bristlecone Echo helps organizations build
-better data foundations: cleaner tracking, clearer governance, and customer and operational
-insight they can act on. Roots before branches.
+Built by Calvin Edson. A Bristlecone Echo asset — roots before branches.
