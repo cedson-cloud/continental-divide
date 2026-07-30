@@ -19,6 +19,7 @@ import {
   toIntakePayload,
   wizardReducer,
 } from "@/lib/wizard";
+import { EventPicker } from "@/components/EventPicker";
 import { RuleChecks } from "@/components/RuleChecks";
 import { StepExists } from "@/components/wizard/StepExists";
 import { StepReview } from "@/components/wizard/StepReview";
@@ -199,11 +200,9 @@ export default function GuidedRequestPage() {
             {state.kind === "existing_event_detail" && (
               <label className="field mt-16">
                 <span className="field-label">Which event are we adding to?</span>
-                <input
-                  type="text"
-                  placeholder="e.g. Order Completed"
+                <EventPicker
                   value={state.existingEvent}
-                  onChange={(e) => set("existingEvent", e.target.value)}
+                  onChange={(value) => set("existingEvent", value)}
                 />
               </label>
             )}

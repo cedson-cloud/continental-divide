@@ -19,6 +19,7 @@ import {
 import { NATURAL_LANGUAGE_EXAMPLES, RAW_EXAMPLES } from "@/lib/examples";
 import { ProposedDefinition } from "@/components/AuditTimeline";
 import { AgentReview } from "@/components/AgentReview";
+import { EventPicker } from "@/components/EventPicker";
 import { DuplicateResolution } from "@/components/DuplicateResolution";
 import { RuleChecks } from "@/components/RuleChecks";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -216,16 +217,14 @@ export default function IntakePage() {
           <div className="mt-12">
             <label className="field">
               <span className="field-label">Existing event name</span>
-              <input
-                type="text"
-                placeholder="e.g. Order Completed"
+              <EventPicker
                 value={existingEvent}
-                onChange={(e) => setExistingEvent(e.target.value)}
+                onChange={setExistingEvent}
                 disabled={submitting}
               />
             </label>
             <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>
-              Free text for now — a picker arrives with the event catalog.
+              Pick from the catalog, or type a name it doesn&apos;t have yet.
             </p>
           </div>
         )}

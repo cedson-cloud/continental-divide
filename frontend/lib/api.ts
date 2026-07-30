@@ -97,6 +97,47 @@ export type RequestDetail = {
   audit_log: AuditEntry[];
 };
 
+export type CatalogViewProperty = {
+  name: string;
+  type: string;
+  // For array properties, the shared shape its items follow. The shape itself
+  // is returned once under CatalogView.shapes, never inlined per event.
+  shape: string | null;
+  source: "sample_plan" | "approved_request";
+  request_id: number | null;
+  // Requests that asked for this property when the event already carried it.
+  also_requested_by: number[];
+};
+
+export type CatalogViewEvent = {
+  name: string;
+  category: string;
+  description: string;
+  properties: CatalogViewProperty[];
+  source: "sample_plan" | "approved_request";
+  request_id: number | null;
+  approved_at: string | null;
+  // A property addition whose target event is nowhere in the catalog.
+  unresolved_target: boolean;
+};
+
+export type SharedShape = {
+  description: string;
+  properties: { name: string; type: string }[];
+};
+
+export type CatalogView = {
+  events: CatalogViewEvent[];
+  shapes: Record<string, SharedShape>;
+  counts: {
+    total: number;
+    from_sample_plan: number;
+    new_events_from_requests: number;
+    property_additions_merged: number;
+    unresolved_targets: number;
+  };
+};
+
 export type GovernanceExample = {
   name: string;
   passes: boolean;
@@ -207,6 +248,10 @@ export function draftGovernanceProfile(
     method: "POST",
     body: JSON.stringify(answers),
   });
+}
+
+export function getCatalog(): Promise<CatalogView> {
+  return request("/catalog");
 }
 
 export function listRequests(): Promise<QueueItem[]> {

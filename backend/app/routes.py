@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from .catalog import catalog_entries
+from .catalog_view import CatalogView, build_catalog_view
 from .config import get_settings
 from .governance import (
     EXAMPLE_EVENT_NAMES,
@@ -224,6 +225,14 @@ def governance_draft(body: GovernanceDraftAnswers, request: Request) -> dict:
     yaml_text = build_profile_yaml(body)
     errors = validate_profile_yaml(yaml_text)
     return {"yaml": yaml_text, "valid": not errors, "errors": errors}
+
+
+@router.get("/catalog", response_model=CatalogView)
+def get_catalog() -> CatalogView:
+    """The data dictionary: sample-plan events plus approved requests, each marked
+    with its source. Read-only — no writes, no model call, no Notion. This view is
+    NOT what the duplicate review reads; that stays catalog_entries() by design."""
+    return build_catalog_view(get_storage())
 
 
 @router.post("/requests", response_model=IntakeResponse)
