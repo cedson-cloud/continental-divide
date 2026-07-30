@@ -101,4 +101,16 @@ These are settled. Raise them with me before changing any of them.
 - The Anthropic SDK path is the one place dev work costs money. Use it deliberately and flag anything that would loop API calls.
 - `run_examples.py` publishes to the live Notion approval board when `NOTION_TOKEN` is set.
 - There is no auth on the app, and `POST /requests/raw` has no rate limit or size cap. Both are fine on localhost and blocking before anything is hosted.
-- `TASKS.md` holds what's next.
+
+## Agent skills
+
+### Domain docs
+
+Single-context: one `CONTEXT.md` and `docs/adr/` at the repo root, both created lazily rather than upfront. See `docs/agents/domain.md`.
+
+Division of labor, one authority per question:
+
+- **`CLAUDE.md`** — the rules an agent works under. Points to `CONTEXT.md` rather than restating it.
+- **`CONTEXT.md`** — vocabulary only. What a domain term means, and which synonyms to avoid.
+- **`docs/adr/`** — why a decision was made, and what it ruled out.
+- **`TASKS.md`** — what work remains.
