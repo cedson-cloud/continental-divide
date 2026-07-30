@@ -35,9 +35,9 @@ A drafted event whose name is already in the corpus, character for character. Fa
 _Avoid_: Mechanical duplicate, hard duplicate
 
 **Near duplicate**:
-A drafted event whose name matches one in the corpus once case and non-alphanumerics are
-stripped, or sits at or above the similarity threshold. Deterministic, but a judgment —
-the threshold is a choice.
+A drafted event whose name is one already in the corpus, written differently — differing
+only in case, separators, or a plural, and sharing the same action verb. Deterministic,
+but a judgment: where the line falls is a choice.
 _Avoid_: Lexical duplicate, fuzzy match, near-miss
 
 **Semantic duplicate**:

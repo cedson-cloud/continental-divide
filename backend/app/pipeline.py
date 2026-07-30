@@ -197,6 +197,18 @@ def _gating_findings(findings: list, kinds: Optional[set] = None) -> list:
     ]
 
 
+ENGINE_DUPLICATE_LABELS = {
+    "duplicate": "a name that already exists in the tracking plan",
+    "near_duplicate": "a name an existing event already uses, written differently",
+}
+
+
+def _engine_labels(rules: set) -> list:
+    """Name the engine duplicates actually present, in a fixed order. One authority for
+    the wording, so the submit gate, the approve gate, and the audit entry cannot drift."""
+    return [label for rule, label in ENGINE_DUPLICATE_LABELS.items() if rule in rules]
+
+
 def _engine_duplicates(request_id: int, storage: Storage) -> set:
     """Which deterministic duplicate rules failed, recovered from the audit log.
 
@@ -498,7 +510,7 @@ def submit_request(
     )
     reasons = []
     if "near_duplicate" in _engine_duplicates(request_id, storage):
-        reasons.append("a name an existing event already uses, written differently")
+        reasons.append(ENGINE_DUPLICATE_LABELS["near_duplicate"])
     if duplicate_findings:
         reasons.append(
             f"{len(duplicate_findings)} possible semantic duplicate(s)"
@@ -677,12 +689,12 @@ def decide(
     """Apply a human approve/reject decision and write the audit trail.
 
     Only a request currently pending approval or flagged as a duplicate can be decided.
-    Approving a PII-flagged request requires ``pii_acknowledged``. Approving one whose
-    name exactly matches an existing event, or that carries high-confidence agent
-    findings, requires ``findings_acknowledged`` — the exact match holds on every
-    intake path, including ``POST /requests/raw``, which skips requester confirmation
-    and so has no earlier point at which anyone sees the collision. Approve publishes
-    and moves to ``published``; reject moves to ``rejected``. Raises
+    Approving a PII-flagged request requires ``pii_acknowledged``. Approving one the
+    engine flagged as any kind of duplicate, or that carries high-confidence agent
+    findings, requires ``findings_acknowledged``. That holds on every intake path,
+    including ``POST /requests/raw``, which skips requester confirmation and so has no
+    earlier point at which anyone sees the collision. Approve publishes and moves to
+    ``published``; reject moves to ``rejected``. Raises
     :class:`RequestNotFound`, :class:`InvalidTransition`,
     :class:`PiiAcknowledgmentRequired`, or :class:`DuplicateAcknowledgmentRequired` for
     the caller to map to HTTP.
@@ -700,11 +712,12 @@ def decide(
             "acknowledgment is required to approve"
         )
     findings = _gating_findings(request.get("duplicate_candidates") or [])
-    exact_duplicate = "duplicate" in _engine_duplicates(request_id, storage)
-    if decision == "approve" and (findings or exact_duplicate) and not findings_acknowledged:
-        reasons = []
-        if exact_duplicate:
-            reasons.append("a name that already exists in the tracking plan")
+    # Every tier, not just the exact one. A near duplicate reaching approval unremarked
+    # is the same hole as an exact one: on the raw path there is no requester step, so
+    # the approver is the only human who ever sees it.
+    engine_duplicates = _engine_duplicates(request_id, storage)
+    if decision == "approve" and (findings or engine_duplicates) and not findings_acknowledged:
+        reasons = _engine_labels(engine_duplicates)
         if findings:
             reasons.append(
                 f"{len(findings)} agent finding(s) ({_finding_labels(findings)})"
@@ -730,10 +743,9 @@ def decide(
                     "pii_details": request["pii_details"],
                 },
             )
-        if findings or exact_duplicate:
+        if findings or engine_duplicates:
             acknowledged = [_finding_labels(findings)] if findings else []
-            if exact_duplicate:
-                acknowledged.append("an exact name match in the tracking plan")
+            acknowledged += _engine_labels(engine_duplicates)
             storage.add_audit_entry(
                 request_id,
                 "findings_acknowledged",

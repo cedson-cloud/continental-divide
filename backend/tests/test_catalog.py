@@ -347,7 +347,40 @@ def test_an_exact_duplicate_cannot_be_approved_unacknowledged_on_the_raw_path(
     )
     assert approved.status_code == 200
     entry = _entry(storage, rid, "findings_acknowledged")
-    assert "an exact name match in the tracking plan" in entry["detail"]["message"]
+    assert "already exists in the tracking plan" in entry["detail"]["message"]
+
+
+def test_a_near_duplicate_cannot_be_approved_unacknowledged_on_the_raw_path(
+    client, storage
+):
+    # The raw path has no requester step, so the note gate in submit_request never runs
+    # and the approver is the only human who sees the collision. Gating only the exact
+    # tier here left the near tier silent — a deterministic duplicate published with
+    # nobody on record, which is the inversion ADR 0001 exists to forbid.
+    near = {**BOOKMARKED, "name": "Products Added", "category": "Core Ordering"}
+    created = client.post(
+        "/requests/raw", json={"definition": near, "business_value": "counts adds"}
+    )
+    rid = created.json()["id"]
+    assert created.json()["status"] == "flagged_duplicate"
+
+    refused = client.post(
+        f"/requests/{rid}/decision", json={"decision": "approve", "approver_name": "Sam"}
+    )
+    assert refused.status_code == 422
+    assert "written differently" in refused.json()["detail"]
+
+    approved = client.post(
+        f"/requests/{rid}/decision",
+        json={
+            "decision": "approve",
+            "approver_name": "Sam",
+            "findings_acknowledged": True,
+        },
+    )
+    assert approved.status_code == 200
+    entry = _entry(storage, rid, "findings_acknowledged")
+    assert "written differently" in entry["detail"]["message"]
 
 
 def test_a_near_duplicate_name_gates_submission_on_a_note(storage):

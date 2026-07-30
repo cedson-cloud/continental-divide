@@ -235,8 +235,10 @@ def pii_hit(
 # --- duplicates --------------------------------------------------------------------
 
 # Rules that report a condition without rejecting. A human decides what to do about
-# each; only naming, category, and property naming end a request.
-_NON_BLOCKING_RULES = {"pii", "duplicate", "near_duplicate"}
+# each; only naming, category, and property naming end a request. Mirrored by
+# ADVISORY_RULES in frontend/components/RuleChecks.tsx, which paints these with a flag
+# rather than the ✕ reserved for a real rejection.
+_ADVISORY_RULES = {"pii", "duplicate", "near_duplicate"}
 
 _CAMEL_BOUNDARY = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
 _SEPARATORS = re.compile(r"[^a-z0-9]+")
@@ -291,12 +293,20 @@ def evaluate(
     """Run all deterministic rules over a parsed definition and return a decision.
 
     Returns a structured per-rule report. A failure on a hard rule (naming, category,
-    property naming) rejects. PII is a non-blocking flag: a flagged definition still
-    routes to approval, where a human must acknowledge the PII before approving. A clean
-    definition whose name already exists in the plan is flagged as a duplicate and routed
-    to approval. A clean, novel definition is routed to approval as ``pending_approval``.
+    property naming) rejects. The rest are advisory: they report a condition and route
+    to a human rather than ending the request.
 
-    ``request_kind`` and ``existing_event`` qualify the duplicate check: a
+    PII is advisory — a flagged definition still routes to approval, where a human must
+    acknowledge it. So are both duplicate rules. ``duplicate`` fails when the name is
+    already in the plan character for character; ``near_duplicate`` fails when the name
+    is one a plan event already uses, written differently (see
+    :func:`near_duplicate_of`). Either flags and routes as ``flagged_duplicate``; an
+    exact match suppresses the near flag, being the stronger claim about the same
+    collision. Both checks are always emitted, whatever they found — silence would look
+    the same as the check not running. A clean, novel definition routes as
+    ``pending_approval``.
+
+    ``request_kind`` and ``existing_event`` qualify the duplicate checks: a
     ``new_property_on_existing`` request drafts against the event it names, so its
     name matching ``existing_event`` is expected, recorded as a passing ``duplicate``
     check rather than flagged. A match against any other plan event still flags.
@@ -386,9 +396,9 @@ def evaluate(
     )
 
     # PII does not reject; only the naming, category, and property-naming rules do.
-    # The duplicate rules are appended below and are non-blocking for the same reason,
-    # so the exclusion is a set rather than a single name.
-    hard_failed = any(not c.passed for c in checks if c.rule not in _NON_BLOCKING_RULES)
+    # The duplicate rules are appended below and are advisory for the same reason, so
+    # the exclusion is a set rather than a single name.
+    hard_failed = any(not c.passed for c in checks if c.rule not in _ADVISORY_RULES)
 
     # A property request drafts against the event it names, so its name matching
     # that event is expected, not a duplicate.

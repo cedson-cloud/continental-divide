@@ -11,18 +11,31 @@ is allowed to demand of a human.
 
 ## The tiers
 
-| Tier | Authority | May reject | Demands of a human |
-| --- | --- | --- | --- |
-| Exact | Fact — the name is in the corpus | No | Approver must acknowledge before approving |
-| Near | Deterministic judgment — same name after normalization, or the same name inflected | No | Requester must give a note, or pass the question to the approver |
-| Semantic | Inference — a model's argument | No | Same as near, but only for high-confidence findings |
+| Tier | Authority | May reject | Requester answers | Approver acknowledges |
+| --- | --- | --- | --- | --- |
+| Exact | Fact — the name is in the corpus | No | Nothing to argue | Yes |
+| Near | Deterministic judgment — same name after normalization, or the same name inflected | No | Note, or pass to the approver | Yes |
+| Semantic, high confidence | Inference — a model's argument | No | Note, or pass to the approver | Yes |
+| Semantic, below high | Inference | No | No | No |
 
 **No tier rejects.** Rejection stays with the rules that admit no argument: event naming,
 category membership, and property naming. A duplicate check can delay a request and put a
 human on the record; it can never end one on its own.
 
-**The ordering never inverts.** Whatever a lower tier demands, a higher tier demands at
-least as much. Certainty must never be quieter than a hunch.
+Two invariants govern the table, and they are deliberately about *different* questions —
+an earlier draft of this ADR tried to state a single "a higher tier always demands at
+least as much" rule, which no implementation can satisfy, because the tiers do not differ
+in how much they demand but in *what there is to say*.
+
+**Nothing published silently.** No duplicate signal of any tier reaches `published`
+without a human acknowledging it on the record. This is the one that must hold on every
+intake path, because `POST /requests/raw` has no requester step at all — the approver is
+the only human who ever sees the collision there.
+
+**A note is owed where there is something to argue.** A near or semantic match is a claim
+the requester can rebut, so they answer first. An exact match is not a claim; the name is
+in the plan. Asking the requester to justify a fact would manufacture a governance record
+out of nothing, so exact goes straight to the approver.
 
 ## Why three, and why the middle one is deterministic
 
@@ -122,10 +135,10 @@ affordable.
   tool published, or requests sitting in its own queue. That boundary is a separate
   decision — see ADR 0002 — and it limits what this one delivers.
 
-## Current state
+## Status of the implementation
 
-The decision is accepted; the implementation follows it in steps. As of this writing the
-exact tier flags but gates nothing, the near tier does not exist on the intake path, the
-semantic tier gates every finding regardless of confidence, `confidence` is inert, and the
-reviewer sees neither `raw_intake_text` nor business value. Delete this section when the
-tiers ship.
+All three tiers, both gates, and the confidence split are implemented. What remains is
+scoped elsewhere and named here so a reader does not assume otherwise: the corpus is still
+the bundled sample plan (ADR 0002), and nothing yet tests that the engine/model boundary
+holds against a live model — the prompt tells the model to skip what the engine catches,
+and only an eval tier can show whether it obeys.
