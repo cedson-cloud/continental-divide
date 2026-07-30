@@ -203,20 +203,48 @@ definitions:
         - {name: product_id, type: string}
     expect:
       decision: flagged_duplicate
-      failed_rules: []
+      failed_rules: [duplicate]
       flags_present: true
+      duplicate_check_present: true
 
-  - id: duplicate_check_absent
-    note: "A genuine duplicate should carry a duplicate check explaining the flag, not just the flag."
+  - id: near_duplicate_inflection
+    note: "The same name with a plural noun is a near duplicate: flagged, not rejected."
     profile: templates/segment-ecommerce.yaml
     definition:
-      name: Product Added
+      name: Products Added
       category: Core Ordering
       properties:
         - {name: product_id, type: string}
     expect:
-      duplicate_check_present: true
-    xfail_reason: "TASKS.md item 1 — a genuine duplicate is flagged with no check explaining it. Remove this marker when the check is always emitted."
+      decision: flagged_duplicate
+      failed_rules: [near_duplicate]
+      flags_present: true
+
+  - id: near_duplicate_across_conventions
+    note: "A snake_case name matching a Title Case plan event is the same name written differently."
+    profile: templates/posthog-snake-case.yaml
+    definition:
+      name: coupon_applied
+      category: Coupons
+      properties:
+        - {name: coupon_id, type: string}
+    expect:
+      decision: flagged_duplicate
+      failed_rules: [near_duplicate]
+      flags_present: true
+
+  - id: near_duplicate_ignores_differing_verb
+    note: "A differing action verb is a differing event, however close the names look: 'Product Reviewed' and 'Product Viewed' are both in the plan."
+    profile: templates/segment-ecommerce.yaml
+    definition:
+      name: Product Rated
+      category: Browsing
+      properties:
+        - {name: product_id, type: string}
+    expect:
+      decision: pending_approval
+      failed_rules: []
+      flags_present: false
 
   - id: property_request_exempt
     note: "A property request matching its target event is expected, not a duplicate — and the check is recorded, not silent."
@@ -245,7 +273,7 @@ definitions:
     existing_event: Coupon Applied
     expect:
       decision: flagged_duplicate
-      failed_rules: []
+      failed_rules: [duplicate]
 
   - id: dictated_name_verbatim
     note: "The engine rejects a dictated name; the model never corrects it."
@@ -260,10 +288,10 @@ definitions:
       failed_rules: [event_naming]
 
   - id: posthog_clean
-    note: "A snake_case definition passes end to end under the posthog template."
+    note: "A snake_case definition passes end to end under the posthog template. The name is novel as well as well-formed — 'coupon_applied' would collide with the plan's 'Coupon Applied'."
     profile: templates/posthog-snake-case.yaml
     definition:
-      name: coupon_applied
+      name: coupon_shared
       category: Coupons
       properties:
         - {name: coupon_id, type: string}

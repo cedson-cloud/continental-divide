@@ -232,6 +232,53 @@ def pii_hit(
     return None
 
 
+# --- duplicates --------------------------------------------------------------------
+
+# Rules that report a condition without rejecting. A human decides what to do about
+# each; only naming, category, and property naming end a request.
+_NON_BLOCKING_RULES = {"pii", "duplicate", "near_duplicate"}
+
+_CAMEL_BOUNDARY = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
+_SEPARATORS = re.compile(r"[^a-z0-9]+")
+
+
+def name_tokens(name: str) -> list[str]:
+    """Split a name into comparable lowercase tokens, treating separators and camelCase
+    boundaries alike, so "Order Completed", "order_completed" and "orderCompleted" all
+    give ``["order", "completed"]``. Convention-agnostic on purpose: a profile can set
+    either convention, and the comparison has to hold across both."""
+    return [t for t in _SEPARATORS.split(_CAMEL_BOUNDARY.sub(" ", name).lower()) if t]
+
+
+def _singular(token: str) -> str:
+    return token[:-1] if token.endswith("s") and not token.endswith("ss") else token
+
+
+def near_duplicate_of(name: str, known: Collection[str]) -> str | None:
+    """Return the known name ``name`` is a near duplicate of, or ``None``.
+
+    Near means the same name written differently: identical tokens once case and
+    separators are normalized, or identical once simple plurals are removed. The final
+    token — the action verb — must match exactly, because a differing verb is a
+    differing event. That condition is what keeps the check usable: character similarity
+    rates "Product Reviewed" and "Product Viewed" at 0.93, and they are not the same
+    event. Candidates are scanned in sorted order so the reported match is stable.
+    """
+    tokens = name_tokens(name)
+    if not tokens:
+        return None
+    stemmed = [_singular(t) for t in tokens]
+    for candidate in sorted(known):
+        if candidate == name:
+            continue
+        other = name_tokens(candidate)
+        if len(other) != len(tokens) or other[-1] != tokens[-1]:
+            continue
+        if other == tokens or [_singular(t) for t in other] == stemmed:
+            return candidate
+    return None
+
+
 # --- evaluation ------------------------------------------------------------------
 
 def evaluate(
@@ -339,32 +386,69 @@ def evaluate(
     )
 
     # PII does not reject; only the naming, category, and property-naming rules do.
-    hard_failed = any(not c.passed for c in checks if c.rule != "pii")
+    # The duplicate rules are appended below and are non-blocking for the same reason,
+    # so the exclusion is a set rather than a single name.
+    hard_failed = any(not c.passed for c in checks if c.rule not in _NON_BLOCKING_RULES)
 
     # A property request drafts against the event it names, so its name matching
-    # that event is expected, not a duplicate. The check still runs and its result
-    # is recorded — silence would look the same as the check not running.
+    # that event is expected, not a duplicate.
     expected_match = (
         request_kind == "new_property_on_existing"
         and existing_event is not None
         and event.name.strip() == existing_event.strip()
     )
-    if expected_match and not hard_failed:
-        checks.append(
-            RuleCheck(
-                rule="duplicate",
-                passed=True,
-                detail=(
-                    f"'{event.name}' matches the event this property is being "
-                    "added to; expected, not a duplicate"
-                ),
-            )
-        )
-    flags = (
-        [f"'{event.name}' already exists in the tracking plan"]
-        if not hard_failed and not expected_match and event.name in known_event_names()
-        else []
+    exact_match = (
+        not hard_failed
+        and not expected_match
+        and event.name in known_event_names()
     )
+    # Both duplicate checks are always recorded, whatever they found: silence would
+    # look the same as the check not running.
+    if hard_failed:
+        duplicate_detail = "not checked: the definition was rejected before this rule"
+    elif expected_match:
+        duplicate_detail = (
+            f"'{event.name}' matches the event this property is being "
+            "added to; expected, not a duplicate"
+        )
+    elif exact_match:
+        duplicate_detail = f"'{event.name}' already exists in the tracking plan"
+    else:
+        duplicate_detail = f"'{event.name}' is not already in the tracking plan"
+    checks.append(
+        RuleCheck(rule="duplicate", passed=not exact_match, detail=duplicate_detail)
+    )
+
+    near_match = (
+        near_duplicate_of(event.name, known_event_names())
+        if not hard_failed and not expected_match and not exact_match
+        else None
+    )
+    if hard_failed:
+        near_detail = "not checked: the definition was rejected before this rule"
+    elif expected_match or exact_match:
+        near_detail = "not checked: an exact match already answers the question"
+    elif near_match:
+        near_detail = (
+            f"'{event.name}' is the same name as '{near_match}' written differently"
+        )
+    else:
+        near_detail = "no near duplicate in the tracking plan"
+    checks.append(
+        RuleCheck(rule="near_duplicate", passed=near_match is None, detail=near_detail)
+    )
+
+    # An exact match suppresses the near flag: it is the stronger claim about the
+    # same collision, and two flags would describe one problem.
+    if exact_match:
+        flags = [f"'{event.name}' already exists in the tracking plan"]
+    elif near_match:
+        flags = [
+            f"'{event.name}' is the same name as '{near_match}', which already "
+            "exists in the tracking plan"
+        ]
+    else:
+        flags = []
     if hard_failed:
         decision, routed = Decision.rejected, False
     elif flags:
