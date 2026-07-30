@@ -3,8 +3,9 @@
 A request-and-governance tool for analytics event tracking. Anyone can ask for a new
 event to be tracked. Nothing gets published until it passes the rules and a human signs off.
 
-I built the first version of this pattern for a client and wanted a clean, open version
-I could share. Continental Divide takes a plain-language request for a new tracking event,
+Every company I've worked with has the same failure: the tracking plan and production
+drift apart, and the plan becomes a lie. This is a clean, open implementation of the pattern
+I kept rebuilding. Continental Divide takes a plain-language request for a new tracking event,
 turns it into a typed and validated definition, routes it for approval, and on approval
 publishes the documentation and opens a ticket. Every step is recorded.
 
