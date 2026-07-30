@@ -148,7 +148,7 @@ in the repo:
 - [`docs/adr/`](docs/adr/) — why each decision was made and what it ruled out.
 - [`TASKS.md`](TASKS.md) — what's done, what's next, and what was deliberately cut.
 
-The interesting constraint is that an agent will happily agree with you. Most of what's
+The interesting constraint is that an agent will happily agree with whoever is driving it. Most of what's
 written down exists to stop that: rules the model cannot reach, a test it cannot edit, and
 decisions recorded with the evidence that produced them, so a later session cannot quietly
 reverse one.
@@ -185,6 +185,11 @@ recorded in the append-only audit log. A pytest suite covers the rules, the pipe
 HTTP flow, and the Notion mapping, and CI runs the suite plus a frontend type-check and
 build on every push. Not deployed anywhere yet; see the deploy notes above.
 
+**The bundled sample plan.** `backend/app/sample_tracking_plan.json` holds 28 events whose
+names and descriptions are reproduced verbatim from Segment's public Ecommerce V2 spec
+(<https://segment.com/docs/connections/spec/ecommerce/v2/>), used here as reference
+material and credited to Segment.
+
 **Known limits, stated rather than discovered.** Duplicate detection compares against the
 bundled sample plan only — it does not yet see events this tool has published, or requests
 sitting in its own queue, so it cannot catch a duplicate of something it approved last
@@ -192,15 +197,19 @@ week. That boundary and its consequences are written up in
 [`docs/adr/0002`](docs/adr/0002-the-duplicate-corpus-is-the-bundled-plan.md); closing it is
 the next substantial piece of work. Separately, nothing yet tests that the model respects
 the line between what it should report and what the engine already caught — that needs an
-eval tier, not a unit test.
+eval tier, not a unit test. And the PII rule matches tokens, so it only catches the names
+it knows: `Product Shared` and `Cart Shared` in the bundled plan carry a `recipient`
+property, which in practice holds an email address or a phone number and passes the check
+clean. That is faithful to Segment's spec rather than a transcription error, which is the
+point — a blocklist governs the words on the list, and a plan copied from a good public
+spec can still hand you an unflagged identifier.
 
 ## Clean room
 
 This is a clean-room rebuild. It carries no client code, data, names, or rules from any
 prior engagement. The sample tracking plan follows Segment's public Ecommerce V2 spec and
 uses generic example data; the naming convention follows Segment's public Track spec.
-Everything here is safe to publish. Secrets live in environment variables only and are
-never committed.
+Secrets live in environment variables only and are never committed.
 
 ---
 

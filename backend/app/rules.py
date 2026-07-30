@@ -125,7 +125,7 @@ def event_name_error(
     governance profile can swap the convention and the word lists.
 
     title_case_object_action: two or more Title-Case words, single-spaced, with the
-    action verb (the word before a ``to``/``from`` connector, or the final word
+    action verb (the word before the first connector, or the final word
     otherwise) in past tense. A phrasal-verb particle ("Newsletter Signed Up")
     shifts the verb one word left. All-caps acronyms ("SKU Added") count as Title
     Case words. Connectors are lowercase. Underscores, camelCase, and all-lowercase

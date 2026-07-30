@@ -1,4 +1,6 @@
 {
+  "attribution": "Event names and descriptions are reproduced verbatim from Segment's public Ecommerce V2 spec and are credited to Segment. Reference material only; no client data.",
+  "source_url": "https://segment.com/docs/connections/spec/ecommerce/v2/",
   "spec": "Segment Ecommerce V2 (public spec)",
   "naming_convention": "Object Action, Title Case (Segment Track spec)",
   "notes": "Sample, generic tracking plan. Property names are snake_case. Collection events reference the shared 'product_item' shape via array properties to reduce repetition; single-product events carry the product fields inline as Segment flattens them onto the event. Event descriptions are transcribed verbatim from the public Segment V2 Ecommerce spec.",
