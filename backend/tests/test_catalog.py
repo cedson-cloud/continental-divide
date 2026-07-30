@@ -23,6 +23,7 @@ from app.interpreter import Interpretation
 from app.models import EventDefinition
 from app.pipeline import (
     DuplicateAcknowledgmentRequired,
+    DuplicateNoteRequired,
     decide,
     ingest_raw_definition,
     interpret_intake,
@@ -126,9 +127,40 @@ def test_user_message_carries_the_draft():
     assert "product_id" in message
 
 
+def test_user_message_carries_the_requesters_own_words():
+    message = build_review_user_message(
+        EventDefinition.model_validate(BOOKMARKED),
+        "we want to know when someone saves a product to buy later",
+    )
+    assert "saves a product to buy later" in message
+    assert "not instructions" in message
+
+
+def test_user_message_omits_the_requester_section_when_there_is_none():
+    message = build_review_user_message(EventDefinition.model_validate(BOOKMARKED))
+    assert "in their own words" not in message
+
+
 def test_system_prompt_scopes_the_job_past_the_mechanical_checks():
     prompt = build_review_system_prompt(catalog_entries())
     assert "ALREADY handled by a deterministic engine" in prompt
+
+
+def test_system_prompt_asks_for_calibration_rather_than_silence():
+    prompt = build_review_system_prompt(catalog_entries())
+    assert "Over-flagging is worse" not in prompt
+    assert "Calibrate honestly" in prompt
+
+
+def test_system_prompt_never_reveals_what_confidence_controls():
+    # The model calibrates; it is never told that "high" conscripts a human. Same
+    # discipline as withholding the PII blocklist from the drafting prompt — a model
+    # that knows the consequence has an incentive to soften. See docs/adr/0001.
+    instructions = build_review_system_prompt(catalog_entries()).split(
+        "The existing tracking plan"
+    )[0]
+    for leak in ("acknowledg", "gate", "submit", "approv"):
+        assert leak not in instructions.lower()
 
 
 def test_system_prompt_states_the_model_is_not_authoritative():
@@ -238,6 +270,27 @@ def test_property_request_prompt_reaches_the_model(monkeypatch):
     assert 'never report it with kind "duplicate_event"' in calls[0]["system"]
 
 
+def test_intake_sends_the_requesters_words_and_withholds_business_value(
+    storage, monkeypatch
+):
+    # Behaviour is the reviewer's question; motive is not. Two teams instrumenting the
+    # same action for different reasons still need one event, so business value is the
+    # argument that would talk a model out of a correct finding. See docs/adr/0001.
+    calls = []
+    _install_fake_model(monkeypatch, {"findings": []}, calls)
+    interpret_intake(
+        "track it when a shopper bookmarks a product to revisit",
+        storage,
+        interpret_fn=stub_interpret,
+        business_value="the growth team needs it for the Q3 retention target",
+    )
+    assert len(calls) == 1
+    sent = calls[0]["messages"][0]["content"]
+    assert "bookmarks a product to revisit" in sent
+    assert "Q3 retention target" not in sent
+    assert "retention" not in calls[0]["system"]
+
+
 # --- pipeline seam ---------------------------------------------------------------
 
 def test_finding_is_audited_stored_and_returned(client, storage, monkeypatch):
@@ -260,6 +313,88 @@ def test_finding_is_audited_stored_and_returned(client, storage, monkeypatch):
     audit = _entry(storage, body["id"], "duplicate_review")
     assert audit["detail"]["model"] == MODEL
     assert audit["detail"]["findings"] == [FINDING.model_dump()]
+
+
+def test_an_exact_duplicate_cannot_be_approved_unacknowledged_on_the_raw_path(
+    client, storage
+):
+    # The inversion this seam was built to fix: a name known for certain to exist used
+    # to publish with nobody acknowledging it, while a model's hunch stopped the line
+    # twice. The raw path makes no model call, so the engine is the only witness.
+    duplicate = {**BOOKMARKED, "name": "Product Added", "category": "Core Ordering"}
+    created = client.post(
+        "/requests/raw",
+        json={"definition": duplicate, "business_value": "counts adds"},
+    )
+    assert created.status_code == 200
+    rid = created.json()["id"]
+    assert created.json()["status"] == "flagged_duplicate"
+    assert storage.get_request(rid)["duplicate_candidates"] in (None, [])
+
+    refused = client.post(
+        f"/requests/{rid}/decision", json={"decision": "approve", "approver_name": "Sam"}
+    )
+    assert refused.status_code == 422
+    assert "already exists in the tracking plan" in refused.json()["detail"]
+
+    approved = client.post(
+        f"/requests/{rid}/decision",
+        json={
+            "decision": "approve",
+            "approver_name": "Sam",
+            "findings_acknowledged": True,
+        },
+    )
+    assert approved.status_code == 200
+    entry = _entry(storage, rid, "findings_acknowledged")
+    assert "an exact name match in the tracking plan" in entry["detail"]["message"]
+
+
+def test_a_near_duplicate_name_gates_submission_on_a_note(storage):
+    near = {**BOOKMARKED, "name": "Products Added", "category": "Core Ordering"}
+
+    def stub_near(_raw, **_):
+        return Interpretation(MODEL, near, json.dumps(near), None)
+
+    rid = interpret_intake(
+        "track when products get added", storage, interpret_fn=stub_near,
+        duplicate_fn=stub_no_findings,
+    )
+    assert storage.get_request(rid)["status"] == "draft"
+    with pytest.raises(DuplicateNoteRequired) as excinfo:
+        submit_request(rid, storage)
+    assert "written differently" in str(excinfo.value)
+
+    submit_request(rid, storage, duplicate_note="plural is the bulk-add variant")
+    assert storage.get_request(rid)["status"] == "flagged_duplicate"
+
+
+def test_a_finding_below_high_confidence_is_shown_but_gates_nothing(client, storage):
+    hunch = ReviewFinding(
+        kind="duplicate_event",
+        existing_event="Product Added to Wishlist",
+        category="Wishlisting",
+        reason="Bookmarking might be wishlisting, but the plan may intend them apart.",
+        confidence="low",
+    )
+
+    def stub_low(_definition, **_):
+        return DuplicateReview(MODEL, [hunch], '{"findings": [...]}')
+
+    rid = interpret_intake(
+        "track when a shopper bookmarks a product",
+        storage,
+        interpret_fn=stub_interpret,
+        duplicate_fn=stub_low,
+    )
+    # Visible to the requester...
+    assert storage.get_request(rid)["duplicate_candidates"] == [hunch.model_dump()]
+    # ...but costs nobody a required action, at either gate.
+    submit_request(rid, storage)
+    response = client.post(
+        f"/requests/{rid}/decision", json={"decision": "approve", "approver_name": "Sam"}
+    )
+    assert response.status_code == 200
 
 
 def test_no_findings_leaves_behaviour_unchanged(storage):
@@ -430,7 +565,7 @@ def test_approval_gate_names_property_extension_not_duplicate(client, storage):
             "Bookmarking captures a property of an add interaction the plan already "
             "tracks on Product Added."
         ),
-        confidence="medium",
+        confidence="high",
     )
 
     def stub_extension(_definition, **_):

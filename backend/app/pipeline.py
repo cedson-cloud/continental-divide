@@ -143,13 +143,15 @@ def _route(
     # Advisory semantic catalog review — inference, never a rejection. A draft the
     # rules rejected is not worth a model call, and a review failure must never take
     # down intake: record it and route normally. The review's question depends on
-    # what was asked for, so it gets the request kind and named event off the row.
+    # what was asked for, so it gets the request kind and named event off the row,
+    # plus the requester's own wording as evidence of the behaviour being tracked.
     if duplicate_fn is not None and evaluation.decision is not Decision.rejected:
         try:
             review = duplicate_fn(
                 parsed,
                 request_kind=request.get("request_kind"),
                 existing_event=request.get("existing_event"),
+                raw_intake_text=request.get("raw_intake_text"),
             )
         except Exception as exc:
             storage.add_audit_entry(
@@ -181,6 +183,43 @@ def _route(
             "flags": evaluation.flags,
         },
     )
+
+
+# Only a high-confidence finding costs a human a required action. The rest are shown
+# and cost nothing — see docs/adr/0001. Findings written before confidence was acted on
+# are treated as high, which is what they were gated as at the time.
+def _gating_findings(findings: list, kinds: Optional[set] = None) -> list:
+    return [
+        f
+        for f in findings
+        if f.get("confidence", "high") == "high"
+        and (kinds is None or f.get("kind", "duplicate_event") in kinds)
+    ]
+
+
+def _engine_duplicates(request_id: int, storage: Storage) -> set:
+    """Which deterministic duplicate rules failed, recovered from the audit log.
+
+    The engine's duplicate findings are not stored on the request row —
+    ``duplicate_candidates`` is the model's output alone — so ``rules_evaluated`` is
+    the record. Same pattern :func:`submit_request` uses to recover its decision from
+    the ``routed`` entry: the audit log stays the one source of truth.
+    """
+    entry = next(
+        (
+            e
+            for e in reversed(storage.get_audit_log(request_id))
+            if e["step"] == "rules_evaluated"
+        ),
+        None,
+    )
+    if entry is None:
+        return set()
+    return {
+        check["rule"]
+        for check in entry["detail"].get("checks", [])
+        if check["rule"] in ("duplicate", "near_duplicate") and not check["passed"]
+    }
 
 
 def _push_if_pending(request_id: int, storage: Storage) -> None:
@@ -428,12 +467,17 @@ def submit_request(
 
     Only a request currently at ``draft`` can be submitted. The routed decision is
     recovered from the ``routed`` audit entry, so the audit log stays the one source
-    of truth for it. A draft with stored ``duplicate_event`` findings requires either
-    ``duplicate_note`` — the requester's statement of why the existing event won't
-    work for them — or ``duplicate_unsure``, which passes the question to the
-    approver instead of forcing the requester to fabricate a difference. The
-    ``submitted`` entry records whichever was used. Other finding kinds are
-    information, not an accusation, and never gate submission. Raises
+    of truth for it.
+
+    Two things require the requester to say something: a near-duplicate name found by
+    the engine, and a high-confidence ``duplicate_event`` finding from the semantic
+    review. Either takes ``duplicate_note`` — the requester's statement of why the
+    existing event won't work for them — or ``duplicate_unsure``, which passes the
+    question to the approver instead of forcing them to fabricate a difference. The
+    ``submitted`` entry records whichever was used. An exact name match is the
+    approver's to acknowledge, not the requester's, because there is nothing to
+    argue. Other finding kinds, and findings below high confidence, are information
+    rather than an accusation and never gate submission. Raises
     :class:`RequestNotFound`, :class:`InvalidTransition`, or
     :class:`DuplicateNoteRequired` for the caller to map to HTTP.
     """
@@ -449,17 +493,21 @@ def submit_request(
     )
     decision = routed["detail"]["decision"]
     # Rows written before findings carried a kind are all duplicate candidates.
-    duplicate_findings = [
-        f
-        for f in request.get("duplicate_candidates") or []
-        if f.get("kind", "duplicate_event") == "duplicate_event"
-    ]
-    if duplicate_findings and not duplicate_note and not duplicate_unsure:
+    duplicate_findings = _gating_findings(
+        request.get("duplicate_candidates") or [], {"duplicate_event"}
+    )
+    reasons = []
+    if "near_duplicate" in _engine_duplicates(request_id, storage):
+        reasons.append("a name an existing event already uses, written differently")
+    if duplicate_findings:
+        reasons.append(
+            f"{len(duplicate_findings)} possible semantic duplicate(s)"
+        )
+    if reasons and not duplicate_note and not duplicate_unsure:
         raise DuplicateNoteRequired(
-            f"request {request_id} has {len(duplicate_findings)} possible semantic "
-            "duplicate(s); a note stating why the existing event won't work — or "
-            "duplicate_unsure, passing the question to the approver — is required "
-            "to submit"
+            f"request {request_id} has {' and '.join(reasons)}; a note stating why "
+            "the existing event won't work — or duplicate_unsure, passing the "
+            "question to the approver — is required to submit"
         )
 
     storage.add_audit_entry(
@@ -629,8 +677,11 @@ def decide(
     """Apply a human approve/reject decision and write the audit trail.
 
     Only a request currently pending approval or flagged as a duplicate can be decided.
-    Approving a PII-flagged request requires ``pii_acknowledged``; approving one with
-    stored agent findings requires ``findings_acknowledged``. Approve publishes
+    Approving a PII-flagged request requires ``pii_acknowledged``. Approving one whose
+    name exactly matches an existing event, or that carries high-confidence agent
+    findings, requires ``findings_acknowledged`` — the exact match holds on every
+    intake path, including ``POST /requests/raw``, which skips requester confirmation
+    and so has no earlier point at which anyone sees the collision. Approve publishes
     and moves to ``published``; reject moves to ``rejected``. Raises
     :class:`RequestNotFound`, :class:`InvalidTransition`,
     :class:`PiiAcknowledgmentRequired`, or :class:`DuplicateAcknowledgmentRequired` for
@@ -648,11 +699,19 @@ def decide(
             f"request {request_id} is PII-flagged ({request['pii_details']}); "
             "acknowledgment is required to approve"
         )
-    findings = request.get("duplicate_candidates") or []
-    if decision == "approve" and findings and not findings_acknowledged:
+    findings = _gating_findings(request.get("duplicate_candidates") or [])
+    exact_duplicate = "duplicate" in _engine_duplicates(request_id, storage)
+    if decision == "approve" and (findings or exact_duplicate) and not findings_acknowledged:
+        reasons = []
+        if exact_duplicate:
+            reasons.append("a name that already exists in the tracking plan")
+        if findings:
+            reasons.append(
+                f"{len(findings)} agent finding(s) ({_finding_labels(findings)})"
+            )
         raise DuplicateAcknowledgmentRequired(
-            f"request {request_id} has {len(findings)} agent finding(s) "
-            f"({_finding_labels(findings)}); acknowledgment is required to approve"
+            f"request {request_id} has {' and '.join(reasons)}; acknowledgment is "
+            "required to approve"
         )
 
     storage.add_audit_entry(
@@ -671,13 +730,16 @@ def decide(
                     "pii_details": request["pii_details"],
                 },
             )
-        if findings:
+        if findings or exact_duplicate:
+            acknowledged = [_finding_labels(findings)] if findings else []
+            if exact_duplicate:
+                acknowledged.append("an exact name match in the tracking plan")
             storage.add_audit_entry(
                 request_id,
                 "findings_acknowledged",
                 {
                     "message": (
-                        f"{_finding_labels(findings)} acknowledged by "
+                        f"{', '.join(acknowledged)} acknowledged by "
                         f"{approver_name or 'unknown'}"
                     ),
                     "candidates": [f["existing_event"] for f in findings],
