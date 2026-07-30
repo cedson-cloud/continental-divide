@@ -99,7 +99,7 @@ These are settled. Raise them with me before changing any of them.
 - Env vars include `ANTHROPIC_API_KEY`, the model name, `NOTION_TOKEN`, and `NOTION_APPROVAL_DB_ID`. Don't echo, log, or write any of them to disk.
 - The model is pinned in `backend/.env`. Don't change it without asking.
 - The Anthropic SDK path is the one place dev work costs money. Use it deliberately and flag anything that would loop API calls.
-- `run_examples.py` publishes to the live Notion approval board when `NOTION_TOKEN` is set.
+- `run_examples.py` does not reach Notion — it calls `ingest()`, and the push fires only from `submit_request`. It does call `reset_storage()`, which deletes the SQLite file: running it destroys the local request history and audit log.
 - There is no auth on the app, and `POST /requests/raw` has no rate limit or size cap. Both are fine on localhost and blocking before anything is hosted.
 
 ## Agent skills

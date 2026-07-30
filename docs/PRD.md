@@ -9,6 +9,12 @@
 The README's first line must be that sentence. A section of this document that
 doesn't serve it is wrong.
 
+Amended 2026-07-30: the README opens with the sentence **minus its final clause**,
+because "gives each role the artifact it actually needs" is not true while
+engineering's output does not exist — see the role table below. Restoring that
+clause to the README's first line is part of done for the snippet work, and is the
+check that the four-role claim has been earned rather than asserted.
+
 ## The loop and its four roles
 
 This is a loop with four roles, and each role has an output.
@@ -133,14 +139,15 @@ Every clause is a demo beat. One of them does not exist yet: engineering's code.
 
 Live eval tier · `source: requested | suggested` properties · the structured event
 display · approver-side convert or send-back for `duplicate_unsure` · canonical-name
-allowlist · starter-plan batch intake (see *Deferred, not killed — starter plan generation*) ·
+allowlist · starter-plan batch intake (see [Deferred, not killed — starter plan
+generation](#deferred-not-killed--starter-plan-generation)) ·
 MCP server · PostHog publish and reconcile · admin profile history · re-vet on rule
 change · agent-review prose tightening.
 
 ### Deferred, not killed — starter plan generation
 
-Generating a first base tracking plan from scratch looks like a violation of *it
-does not design your tracking plan*. It isn't, in one specific form.
+Generating a first base tracking plan from scratch looks like a violation of [it
+does not design your tracking plan](#anti-scope). It isn't, in one specific form.
 
 A starter plan is not the tool authoring a plan. It is the tool **making a batch of
 requests on the organization's behalf** — N proposed events, each labelled as
@@ -161,7 +168,7 @@ so it can't return later as a scope violation.
 | `identify` / `page` / `screen` support | Triples the rules surface, zero demo payoff |
 | Hosting the app anywhere | No auth. Say so in the README instead of half-solving it |
 | Embeddings for duplicate detection | Wrong below roughly 500 events |
-| Screenshot-driven event design | Unbounded scope, adds an image-input surface, and batch intake gets the same demo beat more cheaply |
+| Screenshot-driven event design | Unbounded scope, adds an image-input surface, and [batch intake](#deferred-not-killed--starter-plan-generation) gets the same demo beat more cheaply |
 | Governance wizard writing to git server-side, or opening a PR | An unauthenticated write path into a repo. Download-only is safer *and* better — the data team commits the file and thereby owns it |
 | `pii.mode: block` | Reserved in schema, never needed. Flag-and-acknowledge is the designed behaviour |
 | Chasing an empty critique list | Not a definition of done |
