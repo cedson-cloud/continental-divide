@@ -2,8 +2,8 @@
 
 ## What it is
 
-> Continental Divide turns "I need to know something about our users" — asked in
-> plain English by anyone in a business — into a spec-compliant, human-approved,
+> Continental Divide turns "I need to know something about our users" (asked in
+> plain English by anyone in a business) into a spec-compliant, human-approved,
 > documented tracked event, and gives each role the artifact it actually needs.
 
 The README's first line must be that sentence. A section of this document that

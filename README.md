@@ -209,8 +209,8 @@ publishing, the `/catalog` data dictionary, and a one-way push of pending reques
 Notion approval board, all recorded in the append-only audit log. A pytest suite covers
 the rules, the pipeline, the HTTP flow, and the Notion mapping, alongside a deterministic
 eval tier whose fixtures pin engine decisions one claim at a time; CI runs all of it plus
-a frontend type-check and build on every push. Not deployed anywhere yet; see the deploy
-notes above.
+a frontend type-check, test suite, and build on every push. Not deployed anywhere yet;
+see the deploy notes above.
 
 **The bundled sample plan.** `backend/app/sample_tracking_plan.json` holds 28 events whose
 names and descriptions are reproduced verbatim from Segment's public Ecommerce V2 spec
