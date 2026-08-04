@@ -41,6 +41,10 @@ flows. This tool is the line a tracking request has to cross, and it decides wha
    the rest of the business needs, and it is a page rather than a spreadsheet nobody
    maintains.
 
+![The intake form: anyone in the business describes the event they want in plain language, with the business-value field required before it can be drafted.](docs/images/ui-intake.png)
+
+![A guided five-step wizard for requesters who don't know what an event is, offered as an alternative to the free-text form.](docs/images/ui-guided-request.png)
+
 A timestamped, append-only audit log records every step: what was requested, what the
 model proposed, which rules passed or failed, and who decided.
 
@@ -132,6 +136,12 @@ depending on what the model writes.
   the tracking plan. It's flagged as a duplicate and routed to a human rather than
   auto-rejected.
 
+![A clean request at pending approval: all six rule checks pass, two low-confidence advisory findings are shown without gating anything.](docs/images/ui-clean-approval.png)
+
+![A request held at approval with an unacknowledged PII finding. The approver cannot approve until they acknowledge the email property on the record.](docs/images/ui-approval-pii.png)
+
+![An exact duplicate flagged against the tracking plan and routed to a human rather than auto-rejected.](docs/images/ui-duplicate.png)
+
 ### Three kinds of duplicate
 
 Duplicate detection is the part worth reading the code for, because the three kinds are
@@ -157,6 +167,8 @@ law and the model has no vote. A team that disagrees amends the profile in the s
 wizard, commits the file, and `git log` is the history: never the same screen, or the
 same moment, as the request it would have let through.
 
+![The active governance profile: naming convention, PII blocklist, categories, and allowed destinations, read from a versioned YAML file.](docs/images/ui-governance.png)
+
 ## How this was built
 
 I directed this build with Claude Code. I read code and make the product and data calls; I
@@ -179,6 +191,8 @@ reverse one.
 Open any request's detail page and read the audit timeline. That timeline is the point of
 the tool: it reconstructs exactly what happened and why, in order, and the audit rows
 cannot be edited or deleted.
+
+![The audit timeline for a single request: intake, model draft, each rule result, routing, the approver's decision and PII acknowledgment, and publication with the mock Confluence and Jira artifacts.](docs/images/ui-audit-timeline.png)
 
 ## Deploy notes
 
@@ -211,6 +225,8 @@ the rules, the pipeline, the HTTP flow, and the Notion mapping, alongside a dete
 eval tier whose fixtures pin engine decisions one claim at a time; CI runs all of it plus
 a frontend type-check, test suite, and build on every push. Not deployed anywhere yet;
 see the deploy notes above.
+
+![The /catalog data dictionary: every approved event, what it means, and the properties it carries.](docs/images/ui-catalog.png)
 
 **The bundled sample plan.** `backend/app/sample_tracking_plan.json` holds 28 events whose
 names and descriptions are reproduced verbatim from Segment's public Ecommerce V2 spec
