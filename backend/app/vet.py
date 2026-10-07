@@ -112,7 +112,7 @@ def _vet_event(event: dict, index: int, profile: GovernanceProfile) -> dict:
         )
         properties = []
 
-    bad_props = []
+    prop_errors = []
     pii_hits = []
     for prop_index, prop in enumerate(properties):
         if not isinstance(prop, dict):
@@ -127,8 +127,11 @@ def _vet_event(event: dict, index: int, profile: GovernanceProfile) -> dict:
                 f"property at index {prop_index} has a missing or empty name"
             )
             continue
-        if property_name_error(prop_name, convention=profile.property_naming.convention):
-            bad_props.append(prop_name)
+        prop_error = property_name_error(
+            prop_name, convention=profile.property_naming.convention
+        )
+        if prop_error:
+            prop_errors.append(prop_error)
         hit = pii_hit(prop_name, blocklist=profile.pii.blocklist)
         if hit:
             pii_hits.append(f"{prop_name} -> {hit}")
@@ -177,11 +180,11 @@ def _vet_event(event: dict, index: int, profile: GovernanceProfile) -> dict:
     checks.append(
         {
             "rule": "property_naming",
-            "passed": not bad_props,
+            "passed": not prop_errors,
             "detail": (
-                f"all property names are {prop_convention}"
-                if not bad_props
-                else f"not {prop_convention}: {', '.join(bad_props)}"
+                "; ".join(prop_errors)
+                if prop_errors
+                else f"all property names are {prop_convention}"
             ),
         }
     )
