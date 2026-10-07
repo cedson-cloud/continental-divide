@@ -53,6 +53,18 @@ _PII_BLOCKLIST = [
 # A Title Case word: capitalized ("Cart") or an all-caps acronym ("SKU").
 _TITLE_WORD = re.compile(r"^[A-Z](?:[a-z0-9]*|[A-Z0-9]+)$")
 _SNAKE_CASE = re.compile(r"^[a-z0-9]+(_[a-z0-9]+)*$")
+# Names use plain ASCII characters only; case is judged separately, by the convention.
+_TITLE_CASE_CHARS = re.compile(r"[A-Za-z0-9 _]")
+_SNAKE_CASE_CHARS = re.compile(r"[A-Za-z0-9_]")
+
+
+def _disallowed_characters(name: str, allowed: re.Pattern) -> str | None:
+    """The characters ``name`` may not use, in order of first appearance, ready to
+    quote back to the requester; ``None`` when every character is allowed."""
+    found = dict.fromkeys(c for c in name if not allowed.fullmatch(c))
+    if not found:
+        return None
+    return ", ".join("a space" if c == " " else f"'{c}'" for c in found)
 
 
 @lru_cache
@@ -150,6 +162,12 @@ def _title_case_error(
         return "name must be single-spaced with no leading/trailing whitespace"
     if "_" in name:
         return "name must not contain underscores (use Object Action, Title Case)"
+    found = _disallowed_characters(name, _TITLE_CASE_CHARS)
+    if found:
+        return (
+            "Title Case names may only use letters A–Z, numbers and spaces "
+            f"(found {found})"
+        )
 
     words = name.split(" ")
     if len(words) < 2:
@@ -180,6 +198,12 @@ def _title_case_error(
 def _snake_case_error(
     name: str, connectors: set, particles: set, irregular_past: set
 ) -> str | None:
+    found = _disallowed_characters(name, _SNAKE_CASE_CHARS)
+    if found:
+        return (
+            "snake_case names may only use lowercase letters a–z, numbers and "
+            f"underscores (found {found})"
+        )
     if not _SNAKE_CASE.match(name):
         return "name must be lowercase snake_case (object_action)"
 
@@ -205,6 +229,12 @@ def _snake_case_error(
 def property_name_error(name: str, *, convention: str = "snake_case") -> str | None:
     if convention != "snake_case":
         raise ValueError(f"unknown property naming convention '{convention}'")
+    found = _disallowed_characters(name, _SNAKE_CASE_CHARS)
+    if found:
+        return (
+            f"property '{name}' must be snake_case: lowercase letters a–z, numbers "
+            f"and underscores only (found {found})"
+        )
     if not _SNAKE_CASE.match(name):
         return f"property '{name}' must be snake_case"
     return None
@@ -358,19 +388,19 @@ def evaluate(
     )
 
     prop_convention = profile.property_naming.convention
-    bad_props = [
-        p.name
+    prop_errors = [
+        error
         for p in event.properties
-        if property_name_error(p.name, convention=prop_convention)
+        if (error := property_name_error(p.name, convention=prop_convention))
     ]
     checks.append(
         RuleCheck(
             rule="property_naming",
-            passed=not bad_props,
+            passed=not prop_errors,
             detail=(
-                f"all property names are {prop_convention}"
-                if not bad_props
-                else f"not {prop_convention}: {', '.join(bad_props)}"
+                "; ".join(prop_errors)
+                if prop_errors
+                else f"all property names are {prop_convention}"
             ),
         )
     )
