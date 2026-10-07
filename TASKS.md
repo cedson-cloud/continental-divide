@@ -106,6 +106,49 @@ Three rules, so that never happens again:
 
 ---
 
+## Next phase: first hosted instance
+
+In build order, and the order is also the cut order: whatever is unfinished when time runs out is the least important. Scope changes behind this section are recorded in ADRs 0003–0008. Older entries this section absorbs carry a pointer here and are not worked separately.
+
+**Foundations**
+
+- [x] **0. Private-terms check.** A gitignored script greps the tracked tree for a list of private terms and comes back empty before any commit. The term list lives outside the repo. Once it exists, `CLAUDE.md`'s working agreements name it. Done: `privacy_check.sh` (gitignored) checks every committable file as whole words; CLAUDE.md names it.
+- [x] **1. A publish failure on approve writes an audit entry and leaves a recoverable state,** instead of stranding the request at `approved`. Done: `publish_failed` entry, request stays `approved`, the decision route returns 502, and `POST /requests/{id}/publish` (`pipeline.publish_approved`) retries. Not done: no retry button in the UI yet, and two retries fired at the same moment are not guarded.
+- [x] **2. Concurrent decisions on one request:** compare-and-swap on status, so only one decision wins. Done: `Storage.transition()`; `decide()` claims the request before writing anything, and the loser gets a 409 with no audit entries. Submit, withdraw, and convert still check-then-write and are not covered.
+- [x] **2a. Verified identity, local adapter first.** Every audit entry records who acted and how that identity was verified; the local adapter is used only when explicitly configured and marks every entry it makes. Pulled ahead of hosting so localhost entries carry the marker from the start. The token-checking adapter lands with item 17. [ADR 0004](docs/adr/0004-a-hosted-single-organization-instance.md). Done: `app/identity.py` (`get_verifier`, `LocalDevVerifier`); `AUTH_MODE` unset or unknown rejects every route but `/health` with a 401; storage refuses an audit entry until `acting_as()` binds an actor, recorded as `detail.actor` = email, method, verified. Not done: entries written before this have no actor; the audit timeline shows the actor as raw JSON; `approver_name` is still typed.
+- [ ] **3. `vet.py`: a non-list `properties` fails the structure check** instead of passing silently.
+- [ ] **4. `vet.py`: `$`-prefixed system events are reported separately,** never as naming failures.
+- [ ] **5. `identify` and `group` call types end to end** — model, rules, intake, catalog — with the trait PII policy: every PII hit needs a written reason from the requester and an approver's acknowledgment, on every call type. Nothing rejects on PII. The governance wizard's "something about a user" card stops being a dead end. [ADR 0003](docs/adr/0003-identify-and-group-join-track.md).
+- [ ] **6. Justification on every event and property request:** why (required, with a meaningful minimum length), the question or decision it answers (required), and impact (a curated choice: business-wide or team-level). The model may suggest the first two and the requester confirms; the model never sets impact. Impact never blocks.
+- [ ] **7. Property requests reach parity with event requests:** both intake modes, the justification fields, and a duplicate-property check.
+- [ ] **8. Profile versions:** audited saves on an admin page, a version stamp on every request, and an engine-only drift report. Approved events are never changed automatically. Profile saves belong to no request, so this item adds the second append-only table for instance-level entries, with the same triggers and an actor on every entry. [ADR 0006](docs/adr/0006-governance-profiles-are-versioned-and-edited-in-the-app.md).
+- [ ] **9. A third naming convention:** PostHog's published `category:object_action` — lowercase, present tense — as a curated choice. No free-form regex.
+
+**Corpus**
+
+- [ ] **10. Live eval tier.** Out of CI, run deliberately, on the development key. Spends money: each run needs an explicit go-ahead. Make eval fixture ids unique first.
+- [ ] **11. The corpus grows with approved events.** A per-instance seed that may be empty; approved and published events join; drafts don't; a proposal batch is checked against itself; the process-lifetime caches go. With an empty seed, categories come from the profile, never the sample plan. Lands after item 10, because it changes the review prompt. [ADR 0005](docs/adr/0005-the-duplicate-corpus-grows-with-approved-events.md).
+
+**Output and intake**
+
+- [ ] **12. Snippet generator:** browser SDK, server SDK (Node and Python), and raw HTTP. No model. Names and values encoded, keys as placeholders, parse-tested, SDK signatures checked against the docs with the date recorded. Extra platform files loadable from an instance directory. [ADR 0008](docs/adr/0008-snippets-are-deterministic-and-per-surface.md).
+- [ ] **13. Plan export, CSV and XLSX,** with a "how this plan is wired" section (canonical ID, how the ID arrives, autocapture status, the group analytics caveat), plus drift and self-approval markers and a link from each event to its audit trail.
+- [ ] **14. "Show me" screenshot intake:** frames plus an optional note, a capped batch, one draft per proposed event, frame hashes in the audit log, on-screen text treated as untrusted data. Spends money: needs an explicit go-ahead to run against the model. [ADR 0007](docs/adr/0007-screenshot-intake-proposes-people-decide.md).
+- [ ] **15. Instance configuration outside the repo:** governance, platform files, database, and frames read from an instance directory. The Notion push can be switched off per instance.
+
+**Hosting**
+
+- [ ] **16. Update `next` from 14.2.5 to the latest 14.2.x.**
+- [ ] **17. Hosting:** edge auth plus in-app token verification, a role allowlist in deployment config, a per-user rate limit covering every model path and `POST /requests/raw`, one hostname with `/api` forwarding, verified identity in audit entries, and the self-approval marker. A test proves a bare email header is not trusted. Decide whether `/docs` and `/openapi.json` stay reachable without a token: they expose the API's shape, not its data. [ADR 0004](docs/adr/0004-a-hosted-single-organization-instance.md).
+- [ ] **18. Admin backup download** (a consistent copy, audited) and a recorded entry after a restore.
+
+**Closing out**
+
+- [ ] **19. Public sample fixtures for the new surfaces:** Segment's public Video spec and B2B SaaS spec (attributed), and fictional mock frames.
+- [ ] **20. Decide the public claim before calling this phase done.** Deliberately held until there is real use to describe. Once hosting is real, rewrite the README's localhost-only copy in the same pass, to state the controls that exist and the limits that remain.
+
+---
+
 ## v1 — required for public
 
 ### The two missing ends of the loop — these outrank everything else
@@ -115,9 +158,9 @@ Three rules, so that never happens again:
     - **Consequence: the core value proposition degrades the moment someone actually uses the tool.** It can approve a duplicate of an event it approved last week. The demo works only because the catalog is a static fixture.
     - This is the *Configurable catalog source* item under v1.1, but its **severity is far higher than that item conveyed** — it is not a deployment nicety, it is a correctness hole in the one job a model earns its cost on.
     - ⚠️ **`CatalogEntry`'s four fields are rendered verbatim into the review system prompt** (`catalog.py`: `f"- {e.name} / {e.category} / {e.description} / properties: …"`). Widening `CatalogEntry` or changing `catalog_entries()` **changes the prompt**, which changes model behaviour — and the live eval tier does not exist yet. Any catalog work must compose its own response model at read time and leave both untouched, the same discipline that kept `catalog.py` byte-identical through session five.
-    - **Decided scope for the dictionary work:** the endpoint composes bundled plan + published requests and marks the source of each. Whether the *review* should also see published events is a separate call that changes a prompt, so it waits for the live eval tier. Until then the gap is stated in the UI and explained in an ADR.
-- [ ] **Platform specs as data** (`platforms/*.yaml`): call shape, identity model, and source URL for Segment, PostHog, and Hightouch. The three SDKs differ structurally, not cosmetically, so one template with a swapped function name will not work. The app, the agent, and any skill must read one file or they will drift. **Was "Later"; it is a prerequisite for snippets and for canonical names, so it is now required.**
-- [ ] **Code snippets per SDK**, generated from those specs and syntax-checked in CI. **Engineering's output, and half the thesis.** A wrong snippet is worse than no snippet, because it gets shipped — which is why CI syntax-checks them.
+    - **Decided scope for the dictionary work:** the endpoint composes bundled plan + published requests and marks the source of each. Whether the *review* should also see published events is a separate call that changes a prompt, so it waits for the live eval tier. Until then the gap is stated in the UI and explained in an ADR. **→ Moved to [Next phase](#next-phase-first-hosted-instance), item 11.**
+- [ ] **Platform specs as data** (`platforms/*.yaml`): call shape, identity model, and source URL for Segment, PostHog, and Hightouch. The three SDKs differ structurally, not cosmetically, so one template with a swapped function name will not work. The app, the agent, and any skill must read one file or they will drift. **Was "Later"; it is a prerequisite for snippets and for canonical names, so it is now required.** **→ Moved to [Next phase](#next-phase-first-hosted-instance), item 12.**
+- [ ] **Code snippets per SDK**, generated from those specs and syntax-checked in CI. **Engineering's output, and half the thesis.** A wrong snippet is worse than no snippet, because it gets shipped — which is why CI syntax-checks them. **→ Moved to [Next phase](#next-phase-first-hosted-instance), item 12.**
 
 ### The requester-facing defect — a rejection must never be a dead end
 
@@ -150,8 +193,8 @@ Grouped, not ranked. Nothing here blocks the walkthrough or the ADRs.
 
 **The model-behaviour guard**
 
-- [ ] **Eval harness, live tier.** 12 fixtures, ~$0.018 each, ~$0.21 per run, manual baseline promotion. Reuse `live_ab.py`'s execution path and label filter; rebuild the rest — it has no expectations, it diffs two probes *within* one run rather than one fixture *across* runs, and it never calls `review_against_catalog`. Score name shape, dictated names verbatim, category, property-name sets, decision, failed-rule names, and the `(kind, existing_event)` pairs the review returns. Record and diff the drafted description; never score it. Gitignored JSONL plus a committed `baseline.json` of scores and digests only — **never raw model prose, which would land permanently in a public repo's history.** Provenance per line: digests of the *rendered* system prompts, the profile, the model id, `git_head`, a fixture digest. Out of CI; `--live` required to spend; hard `--max-calls` that prints what it skipped.
-- [ ] **Eval fixture ids are unique per list, not globally.** `posthog_clean` and `posthog_rejects_title` appear under both `names:` and `definitions:`. The live tier keys results on fixture id, so a cross-run delta would silently join two different fixtures. Rename before the delta printer exists.
+- [ ] **Eval harness, live tier.** 12 fixtures, ~$0.018 each, ~$0.21 per run, manual baseline promotion. Reuse `live_ab.py`'s execution path and label filter; rebuild the rest — it has no expectations, it diffs two probes *within* one run rather than one fixture *across* runs, and it never calls `review_against_catalog`. Score name shape, dictated names verbatim, category, property-name sets, decision, failed-rule names, and the `(kind, existing_event)` pairs the review returns. Record and diff the drafted description; never score it. Gitignored JSONL plus a committed `baseline.json` of scores and digests only — **never raw model prose, which would land permanently in a public repo's history.** Provenance per line: digests of the *rendered* system prompts, the profile, the model id, `git_head`, a fixture digest. Out of CI; `--live` required to spend; hard `--max-calls` that prints what it skipped. **→ Moved to [Next phase](#next-phase-first-hosted-instance), item 10.**
+- [ ] **Eval fixture ids are unique per list, not globally.** `posthog_clean` and `posthog_rejects_title` appear under both `names:` and `definitions:`. The live tier keys results on fixture id, so a cross-run delta would silently join two different fixtures. Rename before the delta printer exists. **→ Moved to [Next phase](#next-phase-first-hosted-instance), item 10.**
 
 **Closing the human loop**
 
@@ -171,11 +214,11 @@ Grouped, not ranked. Nothing here blocks the walkthrough or the ADRs.
     - **Per [PRD → Enforce or author — the seam](docs/PRD.md#enforce-or-author--the-seam) the rule is law at intake and we do not loosen it behind a data team's back.** The knob lets a team *author* its way there and own the trade-off in its own versioned YAML. `before_connector` stays the default.
     - ⚠️ **This is the first change that legitimately edits `rules.py`, so `test_rules.py` — the canary, byte-identical since `c22f067` — will change.** That is fine if it is deliberate. The deterministic eval tier's 14 name fixtures pin these decisions by claim, which makes this the first real test of whether session four earned its keep. No live tier needed, no API spend.
 - [ ] **The approver cannot act on `duplicate_unsure` — only approve or reject.** Confirmed on request **#10**: the requester chose *"I'm not sure — ask the approver"*, it reached `pending_approval` with `duplicate_unsure: true`, and rejection was the only available move, which is what the audit log records. `/convert` is requester-only, so an approver cannot express *"this should be a property on X."* Needs an approver-side convert or a send-back-to-requester state. **The `"Unsure"` client-vs-server answer has the same hole** and the same fix.
-- [ ] **Starter-plan batch intake** — the resurrected version of "generate a first tracking plan from scratch." **Not the tool authoring a plan:** N proposed events, each labelled as proposed, each entering the *same* intake → rules → agent review → human approval loop, each individually approvable with its own audit trail. `source: requested / suggested` extends from properties to whole events. Demo: *"it proposed fourteen events, the rules rejected two, a human approved nine."* Deferred on scope, recorded here so it cannot return later as a scope violation. [PRD → Deferred, not killed — starter plan generation](docs/PRD.md#deferred-not-killed--starter-plan-generation).
+- [ ] **Starter-plan batch intake** — the resurrected version of "generate a first tracking plan from scratch." **Not the tool authoring a plan:** N proposed events, each labelled as proposed, each entering the *same* intake → rules → agent review → human approval loop, each individually approvable with its own audit trail. `source: requested / suggested` extends from properties to whole events. Demo: *"it proposed fourteen events, the rules rejected two, a human approved nine."* Deferred on scope, recorded here so it cannot return later as a scope violation. [PRD → Deferred, not killed — starter plan generation](docs/PRD.md#deferred-not-killed--starter-plan-generation). **→ Moved to [Next phase](#next-phase-first-hosted-instance), item 14.**
 - [ ] **Canonical-name allowlist per platform spec, checked before the convention.** Request **#12**: I asked for a sign-out event and got `Account Signed Out`, because `title_case_object_action` mandates an Object while Segment's own spec uses `Signed In` / `Signed Out` with none. *"Where are we getting the logic for these events? It seems like I need to build a skill."*
 - [ ] **`in` cannot be both a lowercase connector and a capitalized particle.** The schema forces one, English needs both (`Product Added to Wishlist` / `User Signed In` / `Back in Stock`). Whoever implements `verb_position` decides whether the two lists stay disjoint.
-- [ ] **Re-vet on rule change.** When a profile changes, report which existing events no longer comply. Pairs with the "this rule looks wrong" queue.
-- [ ] **Admin view of the active profile — the history half.** The page already renders the active profile, its source link, and examples checked live against the rule (`GET /governance/profile`). Only history is missing, and `git log governance/` supplies it at no cost. *(This item sat under "Later" for weeks describing work that had already shipped.)*
+- [ ] **Re-vet on rule change.** When a profile changes, report which existing events no longer comply. Pairs with the "this rule looks wrong" queue. **→ Moved to [Next phase](#next-phase-first-hosted-instance), item 8.**
+- [ ] **Admin view of the active profile — the history half.** The page already renders the active profile, its source link, and examples checked live against the rule (`GET /governance/profile`). Only history is missing, and `git log governance/` supplies it at no cost. *(This item sat under "Later" for weeks describing work that had already shipped.)* **→ Moved to [Next phase](#next-phase-first-hosted-instance), item 8.**
 
 **Making the evidence legible**
 
@@ -188,17 +231,17 @@ Grouped, not ranked. Nothing here blocks the walkthrough or the ADRs.
 **Correctness and hardening**
 
 - [x] **`duplicate` appears as a `RuleCheck` only on the exemption branch.** ~~A genuine duplicate is flagged with no check explaining it, which is backwards.~~ **Done.** `evaluate()` now always emits `duplicate`, and a second `near_duplicate` check alongside it — passing when novel or exempted, failing when real. The `duplicate_check_absent` xfail fixture was removed in the same change, as its `strict=True` marker intended. Note for whoever reads the history: it was deleted in the same edit that fixed the behaviour, so nobody ever watched it turn red. The verification was the new fixtures, not the marker.
-- [ ] **Harden `POST /requests/raw`** with the rate limit and size cap the model-backed route already has. **List in the README's known issues until then.**
+- [ ] **Harden `POST /requests/raw`** with the rate limit and size cap the model-backed route already has. **List in the README's known issues until then.** **→ Moved to [Next phase](#next-phase-first-hosted-instance), item 17.**
 - [ ] **`/requests/raw` no longer pushes to Notion.** It skips `draft`, so it never passes through `submit_request`, and the board goes silently incomplete.
 - [x] **`run_examples.py` does *not* push to Notion**, contrary to what this line and `CLAUDE.md` both claimed until 2026-07-30. It calls `ingest()`, and `_push_if_pending` is reached only from `submit_request` (`pipeline.py:539`), which `ingest()` never calls — the same consequence of moving the push to submission that the `/requests/raw` item above records. Both documents corrected. **The real footgun in that file is `reset_storage()`** (`run_examples.py:22`), which unlinks the SQLite file and recreates the tables, so a run wipes the local request history and audit log. Now in the README's known limits.
-- [ ] **Publish failure handling.** A publisher error on the approve path should record a `publish_failed` audit entry instead of stranding the request at `approved`.
-- [ ] **Concurrent-decision guard.** Compare-and-swap on status so a request cannot be decided twice.
+- [ ] **Publish failure handling.** A publisher error on the approve path should record a `publish_failed` audit entry instead of stranding the request at `approved`. **→ Moved to [Next phase](#next-phase-first-hosted-instance), item 1.**
+- [ ] **Concurrent-decision guard.** Compare-and-swap on status so a request cannot be decided twice. **→ Moved to [Next phase](#next-phase-first-hosted-instance), item 2.**
 - [ ] **`interpret(profile=None)` calls `load_active_profile()` unguarded.** Third bare call site of a class already fixed once. The API path is safe via `_active_profile()`; a direct caller with a malformed `active.yaml` is not.
-- [ ] **Configurable catalog source for the duplicate review.** `catalog_entries()` reads the bundled sample plan; a real deployment reads the customer's own. Required the day someone uses this on their own plan; not required for v1, where the walkthrough uses the sample.
-- [ ] **Categories in one place.** `evaluate()` reads them from `sample_tracking_plan.json`, `vet.py` from the profile. A fixture should not also be configuration.
+- [ ] **Configurable catalog source for the duplicate review.** `catalog_entries()` reads the bundled sample plan; a real deployment reads the customer's own. Required the day someone uses this on their own plan; not required for v1, where the walkthrough uses the sample. **→ Moved to [Next phase](#next-phase-first-hosted-instance), item 11.**
+- [ ] **Categories in one place.** `evaluate()` reads them from `sample_tracking_plan.json`, `vet.py` from the profile. A fixture should not also be configuration. **→ Moved to [Next phase](#next-phase-first-hosted-instance), item 11.**
 - [ ] **No governance template declares categories**, so both hit the sample-plan fallback and the profile-categories path is proven only by an in-memory test.
 - [ ] **`EXAMPLE_EVENT_NAMES` is tuned for Title Case.** Under `posthog-snake-case.yaml` the prompt renders 2 PASS and 7 FAIL, five with an identical message — thin, repetitive few-shot material. Grow the example list; do not hand-write verdicts.
-- [ ] **`properties` as a non-list is silently skipped in `vet.py`**, and the event then reports all property names snake_case — a passing check on properties nobody examined.
+- [ ] **`properties` as a non-list is silently skipped in `vet.py`**, and the event then reports all property names snake_case — a passing check on properties nobody examined. **→ Moved to [Next phase](#next-phase-first-hosted-instance), item 3.**
 - [ ] **Notion board has no properties for business value, request kind, existing event, `urgent`, `urgency_reason`, or the date-typed `needed_by`.** All captured at intake, none reach the board. **Notion board categories also drift** from the sample plan; nothing breaks, the demo just looks inconsistent.
 
 **Ride-alongs — minutes each, attach to any session**
@@ -217,11 +260,11 @@ Do not reopen these without changing the PRD's anti-scope first. Closing them as
 
 | Item | Reason |
 | :--- | :--- |
-| **`identify` / `page` / `screen` support** | v1 is `track` only. Triples the rules surface, zero demo payoff. The wizard's "something about a user" card stays an honest dead end **and says so** |
-| **Hosting the app anywhere** | No auth, no rate limit on every reachable route, and a server-side Anthropic key. Say so loudly in the README instead of half-solving it. The walkthrough replaces the need |
+| **`page` / `screen` support** | *`identify` and `group` were revived in [ADR 0003](docs/adr/0003-identify-and-group-join-track.md).* Original reason: v1 is `track` only. Triples the rules surface, zero demo payoff. The wizard's "something about a user" card stays an honest dead end **and says so** |
+| ~~**Hosting the app anywhere**~~ | **Revived in [ADR 0004](docs/adr/0004-a-hosted-single-organization-instance.md)**, which supplies the auth this row was waiting for — [Next phase](#next-phase-first-hosted-instance), item 17. Original reason: no auth, no rate limit on every reachable route, and a server-side Anthropic key. Say so loudly in the README instead of half-solving it. The walkthrough replaces the need |
 | **Embeddings for duplicate detection** | One model call against 28 events is correct. Embeddings win past ~500 — that is a migration path, not a start |
-| **Screenshot-driven event design** | Unbounded scope plus an image-input surface, and starter-plan batch intake buys the same demo beat far more cheaply |
-| **Governance wizard writing to git server-side, or opening a PR** | Turns an unauthenticated endpoint into a write path into the repo; the PR variant also parks a repo-write token in it. Download-only is safer *and* better — the client commits the file and thereby owns their governance |
+| ~~**Screenshot-driven event design**~~ | **Revived in a bounded form in [ADR 0007](docs/adr/0007-screenshot-intake-proposes-people-decide.md)** — [Next phase](#next-phase-first-hosted-instance), item 14. Original reason: unbounded scope plus an image-input surface, and starter-plan batch intake buys the same demo beat far more cheaply |
+| **Governance wizard writing to git server-side, or opening a PR** | Turns an unauthenticated endpoint into a write path into the repo; the PR variant also parks a repo-write token in it. Download-only is safer *and* better — the client commits the file and thereby owns their governance. *Still killed: [ADR 0006](docs/adr/0006-governance-profiles-are-versioned-and-edited-in-the-app.md) saves profile versions to the instance's database, never to git* |
 | **`pii.mode: block`** | Reserved in the schema, never needed. Flag-and-acknowledge is the designed behaviour and the whole point of the PII decision |
 | **Chasing an empty critique list** | Not a definition of done. [PRD → v1 = done](docs/PRD.md#v1--done) is |
 | **"Generate a first tracking plan from scratch," as originally written** | Violated *does not design your plan*. **Resurrected in a form that does not** — see starter-plan batch intake under v1.1 |

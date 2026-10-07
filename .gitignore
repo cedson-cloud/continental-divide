@@ -40,3 +40,6 @@ yarn-error.log*
 
 # Local repo-state check (personal workflow tool)
 check.sh
+
+# Pre-commit private-terms check (term list lives outside the repo)
+privacy_check.sh

@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from typing import Literal, Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from .catalog import catalog_entries
@@ -21,6 +21,7 @@ from .governance import (
     GovernanceProfile,
     load_active_profile,
 )
+from .identity import Identity, Unauthenticated, get_verifier
 from .governance_draft import (
     GovernanceDraftAnswers,
     build_profile_yaml,
@@ -33,11 +34,13 @@ from .pipeline import (
     InvalidTransition,
     NoMatchingFinding,
     PiiAcknowledgmentRequired,
+    PublishFailed,
     RequestNotFound,
     convert_to_property_request,
     decide,
     ingest_raw_definition,
     interpret_intake,
+    publish_approved,
     submit_request,
     withdraw_request,
 )
@@ -52,9 +55,23 @@ from .recourse import (
     rename_and_resubmit,
 )
 from .rules import effective_categories, event_name_error
-from .storage import get_storage
+from .storage import Storage, get_storage
 
-router = APIRouter()
+
+def current_identity(request: Request) -> Identity:
+    """Every route but /health runs behind this. Read per request, so it fails closed
+    the moment AUTH_MODE is unset."""
+    try:
+        return get_verifier(get_settings()).verify(request.headers)
+    except Unauthenticated as exc:
+        raise HTTPException(status_code=401, detail=str(exc))
+
+
+def acting_storage(identity: Identity = Depends(current_identity)) -> Storage:
+    return get_storage().acting_as(identity)
+
+
+router = APIRouter(dependencies=[Depends(current_identity)])
 
 _settings = get_settings()
 _limiter = RateLimiter(_settings.rate_limit_max, _settings.rate_limit_window_seconds)
@@ -247,15 +264,17 @@ def governance_draft(body: GovernanceDraftAnswers, request: Request) -> dict:
 
 
 @router.get("/catalog", response_model=CatalogView)
-def get_catalog() -> CatalogView:
+def get_catalog(storage: Storage = Depends(acting_storage)) -> CatalogView:
     """The data dictionary: sample-plan events plus approved requests, each marked
     with its source. Read-only — no writes, no model call, no Notion. This view is
     NOT what the duplicate review reads; that stays catalog_entries() by design."""
-    return build_catalog_view(get_storage())
+    return build_catalog_view(storage)
 
 
 @router.post("/requests", response_model=IntakeResponse)
-def create_request(body: IntakeBody, request: Request) -> IntakeResponse:
+def create_request(
+    body: IntakeBody, request: Request, storage: Storage = Depends(acting_storage)
+) -> IntakeResponse:
     client = request.client.host if request.client else "unknown"
     if not _limiter.allow(client):
         raise HTTPException(status_code=429, detail="rate limit exceeded")
@@ -268,7 +287,6 @@ def create_request(body: IntakeBody, request: Request) -> IntakeResponse:
 
     profile = _active_profile()
     _validate_destinations(body.destinations, profile)
-    storage = get_storage()
     try:
         request_id = interpret_intake(
             body.raw_intake_text,
@@ -296,7 +314,9 @@ def create_request(body: IntakeBody, request: Request) -> IntakeResponse:
 
 
 @router.post("/requests/raw", response_model=IntakeResponse)
-def create_request_raw(body: RawIntakeBody) -> IntakeResponse:
+def create_request_raw(
+    body: RawIntakeBody, storage: Storage = Depends(acting_storage)
+) -> IntakeResponse:
     raw_intake_text = (
         body.raw_intake_text
         or body.definition.get("description")
@@ -305,7 +325,6 @@ def create_request_raw(body: RawIntakeBody) -> IntakeResponse:
     )
     profile = _active_profile()
     _validate_destinations(body.destinations, profile)
-    storage = get_storage()
     request_id = ingest_raw_definition(
         raw_intake_text,
         body.definition,
@@ -345,8 +364,7 @@ def _intake_response(storage, request_id: int) -> IntakeResponse:
 
 
 @router.get("/requests")
-def list_requests() -> list:
-    storage = get_storage()
+def list_requests(storage: Storage = Depends(acting_storage)) -> list:
     rows = storage.list_requests()
     # A draft is not in anyone's queue yet, a superseded request left the queue for
     # its replacement, and a withdrawn one never entered it; all stay reachable by id.
@@ -384,8 +402,7 @@ def _with_catalog_evidence(findings: list) -> list:
 
 
 @router.get("/requests/{request_id}")
-def get_request(request_id: int) -> dict:
-    storage = get_storage()
+def get_request(request_id: int, storage: Storage = Depends(acting_storage)) -> dict:
     request = storage.get_request(request_id)
     if request is None:
         raise HTTPException(status_code=404, detail=f"request {request_id} not found")
@@ -401,8 +418,11 @@ def get_request(request_id: int) -> dict:
 
 
 @router.post("/requests/{request_id}/submit")
-def submit_request_route(request_id: int, body: Optional[SubmitBody] = None) -> dict:
-    storage = get_storage()
+def submit_request_route(
+    request_id: int,
+    body: Optional[SubmitBody] = None,
+    storage: Storage = Depends(acting_storage),
+) -> dict:
     try:
         submit_request(
             request_id,
@@ -422,9 +442,10 @@ def submit_request_route(request_id: int, body: Optional[SubmitBody] = None) -> 
 
 
 @router.post("/requests/{request_id}/withdraw")
-def withdraw_request_route(request_id: int, body: WithdrawBody) -> dict:
+def withdraw_request_route(
+    request_id: int, body: WithdrawBody, storage: Storage = Depends(acting_storage)
+) -> dict:
     # No rate limit: withdrawing makes no model call and no Notion push.
-    storage = get_storage()
     try:
         withdraw_request(request_id, body.existing_event, body.reason, storage)
     except RequestNotFound as exc:
@@ -439,14 +460,18 @@ def withdraw_request_route(request_id: int, body: WithdrawBody) -> dict:
 
 
 @router.post("/requests/{request_id}/rename")
-def rename_request(request_id: int, body: RenameBody, request: Request) -> dict:
+def rename_request(
+    request_id: int,
+    body: RenameBody,
+    request: Request,
+    storage: Storage = Depends(acting_storage),
+) -> dict:
     # A rename costs one model call — the catalog review on the new request — so it
     # draws on the same rate-limit budget as intake and convert.
     client = request.client.host if request.client else "unknown"
     if not _limiter.allow(client):
         raise HTTPException(status_code=429, detail="rate limit exceeded")
 
-    storage = get_storage()
     try:
         new_request_id = rename_and_resubmit(request_id, body.new_name, storage)
     except RequestNotFound as exc:
@@ -461,12 +486,13 @@ def rename_request(request_id: int, body: RenameBody, request: Request) -> dict:
 
 
 @router.post("/requests/{request_id}/dispute-rule")
-def dispute_rule(request_id: int, body: DisputeBody) -> dict:
+def dispute_rule(
+    request_id: int, body: DisputeBody, storage: Storage = Depends(acting_storage)
+) -> dict:
     """Record that a rule looks wrong for this team. Amends nothing: no profile
     change, no file write, no status change, no model call — and therefore no rate
     limit. Authoring a convention happens in the governance wizard; this route only
     files the disagreement for the data team to read."""
-    storage = get_storage()
     try:
         detail = record_rule_dispute(request_id, body.rule, body.note, storage)
     except RequestNotFound as exc:
@@ -479,20 +505,24 @@ def dispute_rule(request_id: int, body: DisputeBody) -> dict:
 
 
 @router.get("/disputes")
-def list_disputes() -> list:
+def list_disputes(storage: Storage = Depends(acting_storage)) -> list:
     """Read-only: every dispute a requester has filed, for the data team."""
-    return open_disputes(get_storage())
+    return open_disputes(storage)
 
 
 @router.post("/requests/{request_id}/convert")
-def convert_request(request_id: int, body: ConvertBody, request: Request) -> dict:
+def convert_request(
+    request_id: int,
+    body: ConvertBody,
+    request: Request,
+    storage: Storage = Depends(acting_storage),
+) -> dict:
     # A convert re-runs full model intake — a drafting call plus a catalog review —
     # so it draws on the same rate-limit budget as POST /requests.
     client = request.client.host if request.client else "unknown"
     if not _limiter.allow(client):
         raise HTTPException(status_code=429, detail="rate limit exceeded")
 
-    storage = get_storage()
     try:
         new_request_id = convert_to_property_request(
             request_id, body.existing_event, storage
@@ -514,8 +544,9 @@ def convert_request(request_id: int, body: ConvertBody, request: Request) -> dic
 
 
 @router.post("/requests/{request_id}/decision")
-def decide_request(request_id: int, body: DecisionBody) -> dict:
-    storage = get_storage()
+def decide_request(
+    request_id: int, body: DecisionBody, storage: Storage = Depends(acting_storage)
+) -> dict:
     try:
         result = decide(
             request_id,
@@ -535,10 +566,32 @@ def decide_request(request_id: int, body: DecisionBody) -> dict:
         raise HTTPException(status_code=422, detail=str(exc))
     except DuplicateAcknowledgmentRequired as exc:
         raise HTTPException(status_code=422, detail=str(exc))
+    except PublishFailed as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
 
     saved = storage.get_request(request_id)
     return {
         "id": request_id,
         "status": saved["status"],
         "published_artifact": result.model_dump() if result else None,
+    }
+
+
+@router.post("/requests/{request_id}/publish")
+def publish_request(
+    request_id: int, storage: Storage = Depends(acting_storage)
+) -> dict:
+    try:
+        result = publish_approved(request_id, storage, get_publisher())
+    except RequestNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except InvalidTransition as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except PublishFailed as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    return {
+        "id": request_id,
+        "status": storage.get_request(request_id)["status"],
+        "published_artifact": result.model_dump(),
     }

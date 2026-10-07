@@ -4,18 +4,25 @@ The rest of the app talks to a :class:`Storage` instance and never writes SQL in
 so a Postgres-backed implementation can replace :class:`SqliteStorage` later without
 touching callers. The audit log is append-only: there are read and append helpers and
 no update or delete, and database triggers reject any attempt to mutate audit rows.
+
+Every audit entry names its actor. A storage writes entries only once it has been bound to
+the acting identity with :meth:`Storage.acting_as`; the actor is recorded inside each
+entry's detail, so the audit_log table itself is unchanged.
 """
 
 from __future__ import annotations
 
+import copy
 import json
 import sqlite3
 from abc import ABC, abstractmethod
+from dataclasses import asdict
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Collection, Optional
 
 from .config import get_settings
+from .identity import Identity
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -93,7 +100,16 @@ def _ensure_columns(conn: sqlite3.Connection) -> None:
         conn.execute(clause)
 
 
+class UnattributedAuditEntry(Exception):
+    """An audit entry was written with no actor bound to the storage."""
+
+
 class Storage(ABC):
+    @abstractmethod
+    def acting_as(self, identity: Identity) -> "Storage":
+        """The same storage, recording ``identity`` as the actor of every audit entry."""
+        ...
+
     @abstractmethod
     def create_request(
         self,
@@ -125,6 +141,14 @@ class Storage(ABC):
 
     @abstractmethod
     def update_request_status(self, request_id: int, status: str) -> None:
+        ...
+
+    @abstractmethod
+    def transition(
+        self, request_id: int, from_statuses: Collection[str], to_status: str
+    ) -> bool:
+        """Move the request to ``to_status`` only if its status is still one of
+        ``from_statuses``, as one atomic step. False means someone else moved it first."""
         ...
 
     @abstractmethod
@@ -163,8 +187,14 @@ class Storage(ABC):
 class SqliteStorage(Storage):
     def __init__(self, db_path: Path) -> None:
         self.db_path = db_path
+        self._actor: Optional[Identity] = None
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
+
+    def acting_as(self, identity: Identity) -> "SqliteStorage":
+        bound = copy.copy(self)
+        bound._actor = identity
+        return bound
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path)
@@ -245,6 +275,19 @@ class SqliteStorage(Storage):
                 (status, request_id),
             )
 
+    def transition(
+        self, request_id: int, from_statuses: Collection[str], to_status: str
+    ) -> bool:
+        expected = list(from_statuses)
+        placeholders = ", ".join("?" for _ in expected)
+        with self._connect() as conn:
+            cursor = conn.execute(
+                "UPDATE event_request SET status = ?, updated_at = datetime('now') "
+                f"WHERE id = ? AND status IN ({placeholders})",
+                (to_status, request_id, *expected),
+            )
+            return cursor.rowcount == 1
+
     def set_parsed_definition(
         self, request_id: int, parsed_definition: dict, category: str
     ) -> None:
@@ -289,10 +332,17 @@ class SqliteStorage(Storage):
     def add_audit_entry(
         self, request_id: int, step: str, detail: Optional[dict] = None
     ) -> int:
+        if self._actor is None:
+            raise UnattributedAuditEntry(
+                f"'{step}' on request {request_id} has no actor; bind one with acting_as()"
+            )
+        if detail and "actor" in detail:
+            raise ValueError(f"'{step}' detail may not set its own actor")
+        detail = {**(detail or {}), "actor": asdict(self._actor)}
         with self._connect() as conn:
             cursor = conn.execute(
                 "INSERT INTO audit_log (request_id, step, detail) VALUES (?, ?, ?)",
-                (request_id, step, json.dumps(detail) if detail is not None else None),
+                (request_id, step, json.dumps(detail)),
             )
             return int(cursor.lastrowid)
 

@@ -40,7 +40,7 @@ Both, with an explicit seam between them.
 | **At intake — enforcement** | The active profile is law. The engine rejects what violates it, deterministically, and the model has no vote. No auto-loosening, ever |
 | **At intake — but survivable** | A rejection is never terminal. It offers a compliant name the engine itself vouches for, a one-click resubmit, and consent recorded in the audit log |
 | **At intake — the dissent door** | *"This rule looks wrong for us."* Records the disagreement, stamped with the profile version in force when it was raised, and routes it to a data-team review queue. It amends nothing — no profile change, no file write, no status change, no model call |
-| **Authoring — a separate, deliberate act** | The data team amends the profile in the governance wizard, commits the YAML, and `git log` is the history. Never the same screen as intake, never the same moment |
+| **Authoring — a separate, deliberate act** | The data team amends the profile on its own screen. In the repo, the YAML is committed and `git log` is the history; on a hosted instance, each save is an audited profile version ([ADR 0006](adr/0006-governance-profiles-are-versioned-and-edited-in-the-app.md)). Never the same screen as intake, never the same moment |
 
 ### What this decides about naming rejections
 
@@ -58,7 +58,8 @@ fact-versus-inference split the rules engine already draws, one level up.
 
 The two intake-side doors are built. `verb_position` is not: it appears nowhere in
 the profile schema or the rules engine, so today a team that disagrees with a
-naming rejection can dissent but cannot yet author its way out.
+naming rejection can dissent but cannot yet author its way out. It is v1.1
+authoring work, not required for v1.
 
 ## Anti-scope
 
@@ -73,15 +74,16 @@ Each line kills work.
 - **It is not a linter.** Validation is table stakes. The product is telling
   someone something they did not already know — that the thing they want already
   exists.
-- **v1 is `track` only.** No `identify`, `page`, or `screen`. The wizard's
-  "something about a user" card stays an honest dead end and says so.
+- **No `page` or `screen`.** v1 was `track` only; `identify` and `group` joined
+  in [ADR 0003](adr/0003-identify-and-group-join-track.md), which also sets where personal-data traits may go.
 - **No free-form regex for naming conventions, ever.** This does not extend to the
   PII blocklist. A PII entry is a lowercase token substring-matched against
   property names — no compile step, no injection surface. Free-form PII tokens are
   fine. Free-form naming regex is not.
 - **No auto-convert, no auto-fix, no auto-amend.** Explain, then confirm.
-- **No auth, no multi-tenancy, localhost only.** Stated loudly in the README rather
-  than half-solved. Hosting is out of scope for v1 and is a stated blocker.
+- **No multi-tenancy.** One instance serves one organization. Auth and hosting left
+  anti-scope in [ADR 0004](adr/0004-a-hosted-single-organization-instance.md): authenticated at the edge, verified in the app. Until a
+  hosted instance exists, the README's localhost-only warning stands.
 - **No embeddings** until a catalog passes roughly 500 events. One model call
   against a catalog this size is correct today.
 - **Not a Notion product.** Notion is one publish target among several, not the
@@ -127,7 +129,6 @@ Every clause is a demo beat. One of them does not exist yet: engineering's code.
 | **Code snippets per SDK**, generated from a platform spec and syntax-checked in CI | Engineering's output, and half the thesis |
 | **Platform specs as data** (`platforms/*.yaml`) | Prerequisite for snippets and canonical names |
 | **Guided rename-and-resubmit, plus the "this rule looks wrong" flag** | The requester-facing defect |
-| **`verb_position` profile knob** | Lets a team author out of a rejection instead of patching the rule |
 | **A PII flag must not render as a hard failure** | Two red marks where only one is blocking is a lie about severity |
 | **README rewrite, six ADRs, cold-clone doc** | Without written decisions, every seam reads as accidental |
 | **Recorded walkthrough and README screenshots** | Without these, nothing is showable without a clone |
@@ -139,10 +140,14 @@ Every clause is a demo beat. One of them does not exist yet: engineering's code.
 
 Live eval tier · `source: requested | suggested` properties · the structured event
 display · approver-side convert or send-back for `duplicate_unsure` · canonical-name
-allowlist · starter-plan batch intake (see [Deferred, not killed — starter plan
+allowlist · `verb_position` profile knob · starter-plan batch intake (see [Deferred, not killed — starter plan
 generation](#deferred-not-killed--starter-plan-generation)) ·
 MCP server · PostHog publish and reconcile · admin profile history · re-vet on rule
 change · agent-review prose tightening.
+
+Several of these were pulled forward for the first hosted instance — the live eval
+tier, batch intake, profile history, and re-vetting on rule change. Their order and
+status live in [TASKS → Next phase](../TASKS.md#next-phase-first-hosted-instance).
 
 ### Deferred, not killed — starter plan generation
 
@@ -165,10 +170,10 @@ so it can't return later as a scope violation.
 
 | Item | Reason |
 | :--- | :--- |
-| `identify` / `page` / `screen` support | Triples the rules surface, zero demo payoff |
-| Hosting the app anywhere | No auth. Say so in the README instead of half-solving it |
+| `page` / `screen` support | Triples the rules surface, zero demo payoff. *`identify` and `group` were revived in [ADR 0003](adr/0003-identify-and-group-join-track.md)* |
+| ~~Hosting the app anywhere~~ | **Revived in [ADR 0004](adr/0004-a-hosted-single-organization-instance.md)**, which supplies the auth this row was waiting for. Original reason: no auth. Say so in the README instead of half-solving it |
 | Embeddings for duplicate detection | Wrong below roughly 500 events |
-| Screenshot-driven event design | Unbounded scope, adds an image-input surface, and [batch intake](#deferred-not-killed--starter-plan-generation) gets the same demo beat more cheaply |
-| Governance wizard writing to git server-side, or opening a PR | An unauthenticated write path into a repo. Download-only is safer *and* better — the data team commits the file and thereby owns it |
+| ~~Screenshot-driven event design~~ | **Revived in a bounded form in [ADR 0007](adr/0007-screenshot-intake-proposes-people-decide.md)**: a capped batch feeding the existing loop, one draft per proposed event. Original reason: unbounded scope, adds an image-input surface, and [batch intake](#deferred-not-killed--starter-plan-generation) gets the same demo beat more cheaply |
+| Governance wizard writing to git server-side, or opening a PR | An unauthenticated write path into a repo. Download-only is safer *and* better — the data team commits the file and thereby owns it. *Still killed: [ADR 0006](adr/0006-governance-profiles-are-versioned-and-edited-in-the-app.md) lets an admin save profile versions to the instance's database, never to git* |
 | `pii.mode: block` | Reserved in schema, never needed. Flag-and-acknowledge is the designed behaviour |
 | Chasing an empty critique list | Not a definition of done |
