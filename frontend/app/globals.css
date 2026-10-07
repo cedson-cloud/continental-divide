@@ -481,6 +481,10 @@ table.prop-table {
   color: var(--faint);
   white-space: nowrap;
 }
+.timeline-actor {
+  font-size: 12px;
+  color: var(--faint);
+}
 .timeline-body {
   margin-top: 8px;
   font-size: 13.5px;
