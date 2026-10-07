@@ -10,10 +10,10 @@ wrong for a plan being audited against itself.
 Parsing is plain json + dict access, not Pydantic: foreign plans carry property types
 outside our ``PropertyType`` enum (e.g. "datetime"), recorded as low-severity notes
 rather than failures. A ``structure`` check separates malformed input (missing or
-unusable event and property names) from convention violations, and structure-failed
-names are excluded from duplicate detection — a name that isn't there can neither
-violate a convention nor collide with another. Category notes are informational and
-do not change verdicts.
+unusable event and property names, or properties that are not a list of objects) from
+convention violations, and structure-failed names are excluded from duplicate
+detection — a name that isn't there can neither violate a convention nor collide with
+another. Category notes are informational and do not change verdicts.
 Reads only the given JSON file; writes nothing to disk and never touches the database.
 
 Usage: python -m app.vet <plan.json>
@@ -96,11 +96,25 @@ def _vet_event(event: dict, index: int, profile: GovernanceProfile) -> dict:
             }
         )
 
-    properties = [p for p in (event.get("properties") or []) if isinstance(p, dict)]
+    properties = event.get("properties")
+    if properties is None:
+        properties = []
+    elif not isinstance(properties, list):
+        problems.append(
+            f"event at index {index} has non-list properties "
+            f"({type(properties).__name__})"
+        )
+        properties = []
 
     bad_props = []
     pii_hits = []
     for prop_index, prop in enumerate(properties):
+        if not isinstance(prop, dict):
+            problems.append(
+                f"property at index {prop_index} is not an object "
+                f"({type(prop).__name__})"
+            )
+            continue
         prop_name = prop.get("name")
         if not isinstance(prop_name, str) or not prop_name.strip():
             problems.append(

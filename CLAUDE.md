@@ -81,6 +81,7 @@ These are settled. Raise them with me before changing any of them.
 
 - I read code and direct builds. I'm not an engineer. Lean on me for product and data judgment, not syntax.
 - **I handle git. Do not commit or push, ever.**
+- End every pull request description with: "Built with Claude Code. Scope, design decisions and review by Calvin Edson."
 - **Run `./privacy_check.sh` before every commit.** Exit 0 is clean, 1 means a private term was found, 2 means it did not run, which is never a pass. The term list lives outside the repo.
 - **Never weaken or bypass the append-only audit log.** It's enforced by DB triggers, and that's deliberate.
 - Don't rewrite code I didn't ask you to touch.
