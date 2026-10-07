@@ -5,6 +5,8 @@ types."""
 import json
 from pathlib import Path
 
+import pytest
+
 from app.governance import load_profile
 from app.vet import main, vet_plan
 
@@ -160,6 +162,57 @@ def test_unnamed_property_is_a_structure_problem():
     assert "property at index 0 has a missing or empty name" in structure["detail"]
     # Not misreported as a convention violation.
     assert _check(report, "property_naming")["passed"]
+
+
+def test_properties_keyed_by_name_fail_structure_instead_of_skipping_pii():
+    event = {
+        "name": "Cart Cleared",
+        "category": "Growth",
+        "properties": {"user_email": {"type": "string"}},
+    }
+    report = vet_plan({"source": "acme", "events": [event]})["events"][0]
+    assert report["verdict"] == "fail"
+    structure = _check(report, "structure")
+    assert not structure["passed"]
+    assert "event at index 0 has non-list properties (dict)" in structure["detail"]
+
+
+@pytest.mark.parametrize(
+    "properties, type_name",
+    [("cart_id", "str"), ("", "str"), (5, "int"), (True, "bool"), (False, "bool")],
+)
+def test_any_other_non_list_properties_fail_structure_without_crashing(
+    properties, type_name
+):
+    event = {"name": "Cart Cleared", "category": "Growth", "properties": properties}
+    report = vet_plan({"source": "acme", "events": [event]})["events"][0]
+    assert report["verdict"] == "fail"
+    assert (
+        f"event at index 0 has non-list properties ({type_name})"
+        in _check(report, "structure")["detail"]
+    )
+
+
+@pytest.mark.parametrize("properties", [{}, {"properties": None}])
+def test_an_event_with_no_properties_is_well_formed(properties):
+    event = {"name": "Cart Cleared", "category": "Growth", **properties}
+    report = vet_plan({"source": "acme", "events": [event]})["events"][0]
+    assert report["verdict"] == "pass"
+    assert _check(report, "structure")["passed"]
+
+
+def test_a_property_that_is_not_an_object_fails_structure_instead_of_vanishing():
+    event = {
+        "name": "Cart Cleared",
+        "category": "Growth",
+        "properties": [{"name": "cart_id", "type": "string"}, "user_email"],
+    }
+    report = vet_plan({"source": "acme", "events": [event]})["events"][0]
+    assert report["verdict"] == "fail"
+    assert (
+        "property at index 1 is not an object (str)"
+        in _check(report, "structure")["detail"]
+    )
 
 
 def test_similarity_does_not_chain_across_a_cluster():
