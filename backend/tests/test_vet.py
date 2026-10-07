@@ -215,6 +215,42 @@ def test_a_property_that_is_not_an_object_fails_structure_instead_of_vanishing()
     )
 
 
+@pytest.mark.parametrize("template", ["segment-ecommerce", "posthog-snake-case"])
+def test_system_events_are_reported_separately_never_as_naming_failures(template):
+    plan = {
+        "source": "acme",
+        "events": [
+            {
+                "name": "$pageview",
+                "category": "Growth",
+                "properties": [{"name": "$current_url", "type": "string"}],
+            },
+            {"name": "$autocapture"},
+        ],
+    }
+    result = vet_plan(plan, load_profile(_TEMPLATES_DIR / f"{template}.yaml"))
+    assert [r["verdict"] for r in result["events"]] == ["system", "system"]
+    for report in result["events"]:
+        assert all(c["passed"] for c in report["checks"])
+    assert result["plan_checks"]["system_events"] == ["$pageview", "$autocapture"]
+    assert result["summary"] == {
+        "events": 2, "pass": 0, "flag": 0, "fail": 0, "system": 2
+    }
+
+
+def test_a_malformed_system_event_still_fails_structure():
+    event = {"name": "$pageview", "properties": "$current_url"}
+    report = vet_plan({"source": "acme", "events": [event]})["events"][0]
+    assert report["verdict"] == "fail"
+    assert not _check(report, "structure")["passed"]
+
+
+def test_a_dollar_sign_inside_a_name_does_not_make_a_system_event():
+    report = _vet(_event("Order $ Refunded"))["events"][0]
+    assert report["verdict"] == "fail"
+    assert not _check(report, "event_naming")["passed"]
+
+
 def test_similarity_does_not_chain_across_a_cluster():
     # Consecutive names score ~0.9 against each other but the endpoints only 0.6.
     # Complete linkage breaks the run into tight pairs instead of one chained
@@ -248,8 +284,12 @@ def test_sample_plan_counts_are_pinned_under_both_templates():
     plan = json.loads(_SAMPLE_PLAN_PATH.read_text())
     segment = vet_plan(plan, load_profile(_TEMPLATES_DIR / "segment-ecommerce.yaml"))
     posthog = vet_plan(plan, load_profile(_TEMPLATES_DIR / "posthog-snake-case.yaml"))
-    assert segment["summary"] == {"events": 15, "pass": 7, "flag": 3, "fail": 5}
-    assert posthog["summary"] == {"events": 15, "pass": 0, "flag": 1, "fail": 14}
+    assert segment["summary"] == {
+        "events": 15, "pass": 7, "flag": 3, "fail": 5, "system": 0
+    }
+    assert posthog["summary"] == {
+        "events": 15, "pass": 0, "flag": 1, "fail": 14, "system": 0
+    }
 
 
 def test_cli_resolves_the_active_profile(tmp_path, capsys):
@@ -276,6 +316,7 @@ def test_empty_plan():
     assert result["plan_checks"] == {
         "exact_duplicates": [],
         "near_duplicates": [],
+        "system_events": [],
         "category_notes": {
             "declared_categories": [],
             "single_event_categories": [],

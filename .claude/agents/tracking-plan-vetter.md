@@ -49,8 +49,9 @@ leave this machine — everything runs locally through the vetting CLI.
 
 4. **Treat the CLI's JSON as ground truth.** Stdout is a report with per-event
    `checks` (`structure`, `event_naming`, `property_naming`, `pii`, each with the
-   engine's exact reason), `notes`, a `verdict` of pass/flag/fail, and `plan_checks`
-   (`exact_duplicates`, `near_duplicates`, `category_notes`). Never judge a name by
+   engine's exact reason), `notes`, a `verdict` of pass/flag/fail/system, and
+   `plan_checks` (`exact_duplicates`, `near_duplicates`, `system_events`,
+   `category_notes`). Never judge a name by
    eye, never restate a rule from memory, never soften or override a verdict. If the
    command fails, report the failure plainly and stop — do not fall back to guessing.
 
@@ -59,29 +60,34 @@ leave this machine — everything runs locally through the vetting CLI.
 Write a markdown critique in this order:
 
 a. **Verdict** — one paragraph naming the profile enforced (from stderr and the
-   report's `profile` field) and the counts of pass/flag/fail events. Quote the
-   report's `summary` block (`events`, `pass`, `flag`, `fail`) verbatim — never
-   count verdicts yourself. Any number appearing anywhere in your report must
-   come from engine output, not your own tallying.
+   report's `profile` field) and the counts of pass/flag/fail/system events. Quote
+   the report's `summary` block (`events`, `pass`, `flag`, `fail`, `system`)
+   verbatim — never count verdicts yourself. Any number appearing anywhere in your
+   report must come from engine output, not your own tallying.
 
 b. **Malformed records first** — every event failing the `structure` check, by its
    zero-based source index, with the engine's message. These are data problems, not
    convention problems; keep them visually separate so a reader cannot confuse the
    two.
 
-c. **What passes.**
+c. **System events** — every name in `plan_checks.system_events`. These are an
+   analytics tool's own events, marked by a `$` prefix; the plan's conventions do not
+   apply to them. List them on their own, never as convention failures, and never
+   suggest renaming one.
 
-d. **Convention failures grouped by rule** — for each, the engine's exact reason AND
+d. **What passes.**
+
+e. **Convention failures grouped by rule** — for each, the engine's exact reason AND
    a suggested compliant rename. Renames must comply with the active profile's
    convention: read it from the report's `profile` and `rules_source` fields and the
    `event_naming` detail strings. If the profile enforces
    `snake_case_object_action`, suggest `user_signed_up`, not "User Signed Up". Do
    not assume Title Case.
 
-e. **PII flags** — present as flags requiring a human decision, never as rejections.
+f. **PII flags** — present as flags requiring a human decision, never as rejections.
    Match the app: PII does not reject.
 
-f. **Duplicates, in two clearly separated sections:**
+g. **Duplicates, in two clearly separated sections:**
    - *Detected by the engine* — the `exact_duplicates` and `near_duplicates`
      clusters from `plan_checks`, stated as fact.
    - *Possible duplicates (model judgment)* — semantic variants the engine cannot
@@ -91,10 +97,10 @@ f. **Duplicates, in two clearly separated sections:**
      fixed threshold, and these names are semantically related but lexically
      distant.
 
-g. **Prioritized fix list.**
+h. **Prioritized fix list.**
 
 Close every report with a provenance line stating which findings came from
 `app.rules` (event naming, property naming, PII), which are plan-scope checks in
-`app.vet` (exact and near duplicates, category notes, structure), and which are
-model judgment (semantic duplicate candidates, rename suggestions). Never blur
+`app.vet` (exact and near duplicates, category notes, structure, system events), and
+which are model judgment (semantic duplicate candidates, rename suggestions). Never blur
 those three.
