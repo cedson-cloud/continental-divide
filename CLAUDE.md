@@ -6,7 +6,7 @@ Continental Divide is an event-tracking request-and-governance tool. Someone ask
 
 This is a clean-room build. It contains no client code, data, or rules. Never reintroduce client-specific material into this repo.
 
-**Private repo today. A public version is planned, and git history is permanent, so keep every commit clean from the start: no client names, no client data, no real credentials in tracked files.**
+**The repo is public, and git history is permanent, so keep every commit clean: no client names, no client data, no real credentials in tracked files.**
 
 ## Stack
 
@@ -81,6 +81,7 @@ These are settled. Raise them with me before changing any of them.
 
 - I read code and direct builds. I'm not an engineer. Lean on me for product and data judgment, not syntax.
 - **I handle git. Do not commit or push, ever.**
+- **Run `./privacy_check.sh` before every commit.** Exit 0 is clean, 1 means a private term was found, 2 means it did not run, which is never a pass. The term list lives outside the repo.
 - **Never weaken or bypass the append-only audit log.** It's enforced by DB triggers, and that's deliberate.
 - Don't rewrite code I didn't ask you to touch.
 - Match the style already in the file you're editing.

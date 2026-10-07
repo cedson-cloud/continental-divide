@@ -74,6 +74,63 @@ in nobody's queue.
 _Avoid_: Pending, unsubmitted
 
 **Governance profile**:
-The versioned file naming the conventions, categories, and PII blocklist a request is
-evaluated under.
+The conventions, categories, and PII blocklist a request is evaluated under.
 _Avoid_: Config, ruleset, policy
+
+**Profile version**:
+One saved state of a governance profile. Every request is judged by exactly one, and
+records which.
+_Avoid_: Revision, snapshot
+
+**Drift**:
+An approved event that no longer passes the rules of the current profile version. Drift
+is reported, never fixed automatically.
+_Avoid_: Violation, regression, stale event
+
+**Proposed event**:
+A draft the system suggested rather than one a requester asked for. It goes through the
+same loop as any other draft.
+_Avoid_: Suggestion, generated event, candidate
+
+**Proposal batch**:
+The set of proposed events produced from one intake.
+_Avoid_: Bulk request, import
+
+**Actor**:
+The person an audit entry says took the step, and how that was established: verified
+against a signed token, or claimed by local configuration and marked unverified. Every
+audit entry names one. A typed name on a form is not an actor.
+_Avoid_: User, approver name, author
+
+**Impact**:
+Whether an event matters to the whole business or to one team. Chosen by a person, never
+by the model, and it never blocks.
+_Avoid_: Priority, severity
+
+### What an event definition holds
+
+**Call type**:
+What kind of thing a definition records: `track` (something a person did), `identify`
+(who the person is), or `group` (the organization they belong to).
+_Avoid_: Event type, method
+
+**Trait**:
+A fact about a person or an organization, carried on an `identify` or `group` call.
+_Avoid_: Attribute, user property (for traits; a track call carries properties)
+
+**Canonical ID**:
+The one stable identifier a plan uses for a person. Never an email address.
+_Avoid_: User ID (ambiguous across tools), distinct ID, primary key
+
+**Surface**:
+Where a call is made from — a browser, a server, or another platform.
+_Avoid_: Platform (a surface's code comes from a platform), channel, source
+
+**Trigger**:
+The moment on a surface that causes a call to fire.
+_Avoid_: Hook, when
+
+**System event**:
+An event an analytics tool records on its own, marked by a `$` prefix. Not subject to the
+plan's naming convention.
+_Avoid_: Auto event, built-in event

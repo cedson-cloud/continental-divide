@@ -33,6 +33,7 @@ from app.publisher import get_publisher
 from app.rules import load_plan
 
 MODEL = "claude-sonnet-4-6"
+ACTOR = {"email": "tester@example.com", "method": "local", "verified": False}
 
 BOOKMARKED = {
     "name": "Product Bookmarked",
@@ -481,7 +482,8 @@ def test_raising_review_never_blocks_routing(storage):
     assert request["status"] == "draft"
     assert request["duplicate_candidates"] == []
     assert _entry(storage, rid, "duplicate_review_failed")["detail"] == {
-        "error": "model service down"
+        "error": "model service down",
+        "actor": ACTOR,
     }
     assert "duplicate_review" not in _steps(storage, rid)
 

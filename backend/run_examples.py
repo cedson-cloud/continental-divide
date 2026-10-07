@@ -3,6 +3,9 @@
 Resets the demo database, ingests every example (parse -> rules -> route, persisting a
 request row and its audit trail), then prints each request and its full audit log.
 
+Every audit entry names who made it, so this runs only with AUTH_MODE=local and
+LOCAL_IDENTITY_EMAIL set in backend/.env. It checks that before it resets anything.
+
 Usage (from backend/, with deps installed):
     python run_examples.py
 """
@@ -12,6 +15,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from app.config import get_settings
+from app.identity import Unauthenticated, get_verifier
 from app.pipeline import ingest
 from app.storage import reset_storage
 
@@ -19,7 +24,11 @@ EXAMPLES_DIR = Path(__file__).parent / "examples"
 
 
 def main() -> None:
-    storage = reset_storage()
+    try:
+        identity = get_verifier(get_settings()).verify({})
+    except Unauthenticated as exc:
+        raise SystemExit(f"run_examples.py did not run, and reset nothing: {exc}")
+    storage = reset_storage().acting_as(identity)
 
     for path in sorted(EXAMPLES_DIR.glob("*.json")):
         candidate = json.loads(path.read_text())

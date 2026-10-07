@@ -29,6 +29,7 @@ from app.publisher import get_publisher
 from app.rate_limit import RateLimiter
 
 MODEL = "claude-sonnet-4-6"
+ACTOR = {"email": "tester@example.com", "method": "local", "verified": False}
 TARGET_EVENT = "Product Added to Wishlist"
 
 BOOKMARKED = {
@@ -146,6 +147,7 @@ def test_convert_creates_a_new_draft_carrying_the_original_intake(storage):
     assert supersedes["detail"] == {
         "original_request_id": rid,
         "existing_event": TARGET_EVENT,
+        "actor": ACTOR,
     }
     superseded_by = next(
         e for e in storage.get_audit_log(rid) if e["step"] == "superseded_by"
@@ -153,6 +155,7 @@ def test_convert_creates_a_new_draft_carrying_the_original_intake(storage):
     assert superseded_by["detail"] == {
         "new_request_id": nid,
         "existing_event": TARGET_EVENT,
+        "actor": ACTOR,
     }
 
     # The new draft is a normal draft: the requester still confirms it. Named after

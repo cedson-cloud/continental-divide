@@ -54,6 +54,11 @@ class NoMatchingFinding(Exception):
     points at; the finding is the authority on the target, not the caller."""
 
 
+class PublishFailed(Exception):
+    """The decision stands and the request stays ``approved``; only publishing failed,
+    and a ``publish_failed`` audit entry records why."""
+
+
 class IntakeModelError(Exception):
     """The model service failed while drafting a definition; the request is persisted
     and rejected, and the caller should surface a 502."""
@@ -727,6 +732,12 @@ def decide(
             "required to approve"
         )
 
+    to_status = "approved" if decision == "approve" else Decision.rejected.value
+    if not storage.transition(request_id, DECIDABLE_STATUSES, to_status):
+        raise InvalidTransition(
+            f"request {request_id} was decided by someone else first and cannot be decided"
+        )
+
     storage.add_audit_entry(
         request_id,
         "decision_received",
@@ -757,24 +768,54 @@ def decide(
                     "candidates": [f["existing_event"] for f in findings],
                 },
             )
-        storage.update_request_status(request_id, "approved")
-        event = EventDefinition.model_validate(request["parsed_definition"])
-        result = publisher.publish(event)
-        storage.set_publish_result(request_id, result.model_dump())
-        storage.update_request_status(request_id, "published")
-        storage.add_audit_entry(
-            request_id,
-            "published",
-            {
-                "publisher": result.publisher,
-                "confluence_doc_id": result.confluence_doc["id"],
-                "jira_ticket_key": result.jira_ticket["key"],
-            },
-        )
-        return result
+        return publish_approved(request_id, storage, publisher)
 
-    storage.update_request_status(request_id, Decision.rejected.value)
     storage.add_audit_entry(
         request_id, "rejection_recorded", {"approver": approver_name, "note": note}
     )
     return None
+
+
+def publish_approved(
+    request_id: int, storage: Storage, publisher: Publisher
+) -> PublishResult:
+    """Publish a request that is ``approved`` but not yet ``published``: the tail of an
+    approval, and the retry after a failed publish.
+
+    A publisher error records ``publish_failed`` and raises :class:`PublishFailed`,
+    leaving the request ``approved`` so this can be called again. Raises
+    :class:`RequestNotFound` or :class:`InvalidTransition` for the caller to map to HTTP.
+    """
+    request = storage.get_request(request_id)
+    if request is None:
+        raise RequestNotFound(f"request {request_id} not found")
+    if request["status"] != "approved":
+        raise InvalidTransition(
+            f"request {request_id} is '{request['status']}' and cannot be published"
+        )
+    event = EventDefinition.model_validate(request["parsed_definition"])
+    publisher_name = getattr(publisher, "name", type(publisher).__name__)
+    try:
+        result = publisher.publish(event)
+    except Exception as exc:
+        error = f"{type(exc).__name__}: {exc}"
+        storage.add_audit_entry(
+            request_id,
+            "publish_failed",
+            {"publisher": publisher_name, "error": error},
+        )
+        raise PublishFailed(
+            f"request {request_id} is approved but publishing failed ({error})"
+        ) from exc
+    storage.set_publish_result(request_id, result.model_dump())
+    storage.update_request_status(request_id, "published")
+    storage.add_audit_entry(
+        request_id,
+        "published",
+        {
+            "publisher": result.publisher,
+            "confluence_doc_id": result.confluence_doc["id"],
+            "jira_ticket_key": result.jira_ticket["key"],
+        },
+    )
+    return result

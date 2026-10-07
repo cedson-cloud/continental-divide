@@ -26,6 +26,7 @@ from app.recourse import (
 )
 
 MODEL = "claude-sonnet-4-6"
+ACTOR = {"email": "tester@example.com", "method": "local", "verified": False}
 GOVERNANCE_DIR = Path(__file__).parents[2] / "governance"
 
 REJECTED_NAME = "Back in Stock Alert Requested"
@@ -119,10 +120,12 @@ def test_rename_creates_a_new_request_linked_in_both_directions(storage):
     assert _entry(storage, rid, "superseded_by")["detail"] == {
         "new_request_id": nid,
         "new_name": COMPLIANT_NAME,
+        "actor": ACTOR,
     }
     assert _entry(storage, nid, "supersedes")["detail"] == {
         "original_request_id": rid,
         "original_name": REJECTED_NAME,
+        "actor": ACTOR,
     }
 
 
@@ -285,7 +288,7 @@ def test_dispute_records_the_rule_the_note_and_the_profile_it_disputes(storage):
     }
     # A later reader knows which version of the rules was being argued with.
     assert len(detail["profile_digest"]) == 12
-    assert _entry(storage, rid, "rule_disputed")["detail"] == detail
+    assert _entry(storage, rid, "rule_disputed")["detail"] == {**detail, "actor": ACTOR}
 
 
 def test_dispute_changes_no_status_and_writes_no_file(client, storage):

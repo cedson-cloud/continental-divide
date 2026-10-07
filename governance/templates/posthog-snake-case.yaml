@@ -2,8 +2,10 @@
 # Everything except the naming convention is inherited from the Segment template.
 version: 1
 name: posthog-snake-case
-# snake_case is idiomatic PostHog, not a published spec — the SDK docs
-# demonstrate it, they don't mandate it.
+# snake_case object_action follows PostHog's SDK examples. PostHog's published naming
+# guidance is category:object_action, lowercase, present tense:
+# https://posthog.com/docs/product-analytics/best-practices
+# That convention will be added as its own option.
 source: https://posthog.com/docs/libraries/python
 extends: segment-ecommerce.yaml
 

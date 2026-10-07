@@ -29,6 +29,7 @@ from app.pipeline import (
 from app.publisher import get_publisher
 
 MODEL = "claude-sonnet-4-6"
+ACTOR = {"email": "tester@example.com", "method": "local", "verified": False}
 TARGET_EVENT = "Product Added to Wishlist"
 
 BOOKMARKED = {
@@ -95,6 +96,7 @@ def test_withdraw_from_draft_succeeds_and_lands_withdrawn(client, storage):
     assert withdrawn["detail"] == {
         "existing_event": TARGET_EVENT,
         "reason": "the wishlist event covers this",
+        "actor": ACTOR,
     }
 
     # Over HTTP, and the reason is optional: agreeing needs no essay.

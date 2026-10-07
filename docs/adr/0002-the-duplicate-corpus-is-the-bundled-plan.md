@@ -1,6 +1,6 @@
 # The duplicate corpus is the bundled sample plan, and the data dictionary deliberately shows more
 
-Status: accepted, with the expansion open
+Status: superseded by ADR 0005
 
 ADR 0001 settles who may report a duplicate and what each tier may demand. This one
 settles the other axis: **what we compare against.** Today all three tiers compare against

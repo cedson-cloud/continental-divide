@@ -13,6 +13,11 @@ class Settings(BaseSettings):
     notion_token: str = ""
     notion_approval_db_id: str = ""
 
+    # Unset rejects every request. "local" acts as LOCAL_IDENTITY_EMAIL, unverified,
+    # and is for localhost only.
+    auth_mode: str = ""
+    local_identity_email: str = ""
+
     database_path: str = "backend/data/continental_divide.db"
 
     max_intake_chars: int = 2000
