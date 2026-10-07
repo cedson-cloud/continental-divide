@@ -23,6 +23,15 @@ function dotTone(entry: AuditEntry): string {
   return "info";
 }
 
+type Actor = { email: string; verified: boolean };
+
+function actorLine(entry: AuditEntry): string {
+  const actor = entry.detail?.actor as Actor | undefined;
+  return actor
+    ? `by ${actor.email}${actor.verified ? "" : " · unverified"}`
+    : "actor not recorded";
+}
+
 export function ProposedDefinition({
   definition,
 }: {
@@ -101,7 +110,9 @@ function DetailBody({ entry }: { entry: AuditEntry }) {
     );
   }
 
-  const entries = Object.entries(detail).filter(([, v]) => v !== null && v !== "");
+  const entries = Object.entries(detail).filter(
+    ([key, v]) => key !== "actor" && v !== null && v !== "",
+  );
   if (entries.length === 0) return null;
   return (
     <dl className="kv">
@@ -125,6 +136,7 @@ export function AuditTimeline({ entries }: { entries: AuditEntry[] }) {
             <span className="timeline-step">{stepLabel(entry.step)}</span>
             <span className="timeline-time">{formatTimestamp(entry.created_at)}</span>
           </div>
+          <div className="timeline-actor">{actorLine(entry)}</div>
           <div className="timeline-body">
             <DetailBody entry={entry} />
           </div>
