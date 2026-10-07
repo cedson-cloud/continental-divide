@@ -54,6 +54,12 @@ _RULES_SOURCE = {
 
 # --- per-event checks ------------------------------------------------------------
 
+def _is_system_event(name: str | None) -> bool:
+    """An analytics tool's own event, marked by a ``$`` prefix. The plan does not name
+    it, so the plan's conventions do not apply to it."""
+    return name is not None and name.startswith("$")
+
+
 def _vet_event(event: dict, index: int, profile: GovernanceProfile) -> dict:
     """Per-event checks. ``structure`` separates malformed input from convention
     violations: an unusable event or property name fails ``structure`` and skips
@@ -142,6 +148,14 @@ def _vet_event(event: dict, index: int, profile: GovernanceProfile) -> dict:
             "detail": "; ".join(problems) if problems else "event shape is well-formed",
         }
     ]
+    if _is_system_event(name):
+        return {
+            "index": index,
+            "name": name,
+            "category": category,
+            "checks": checks,
+            "notes": notes,
+        }
     if name is not None:
         naming = profile.event_naming
         name_err = event_name_error(
@@ -262,6 +276,8 @@ def vet_plan(plan: dict, profile: GovernanceProfile = DEFAULT_PROFILE) -> dict:
         )
         if hard_failed:
             report["verdict"] = "fail"
+        elif _is_system_event(report["name"]):
+            report["verdict"] = "system"
         elif pii_flagged or report["name"] in flagged_names:
             report["verdict"] = "flag"
         else:
@@ -277,11 +293,13 @@ def vet_plan(plan: dict, profile: GovernanceProfile = DEFAULT_PROFILE) -> dict:
             "pass": verdicts["pass"],
             "flag": verdicts["flag"],
             "fail": verdicts["fail"],
+            "system": verdicts["system"],
         },
         "events": reports,
         "plan_checks": {
             "exact_duplicates": exact_duplicates,
             "near_duplicates": near_duplicates,
+            "system_events": [r["name"] for r in reports if r["verdict"] == "system"],
             "category_notes": _category_notes(reports),
         },
     }
