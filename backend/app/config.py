@@ -14,11 +14,15 @@ class Settings(BaseSettings):
     notion_approval_db_id: str = ""
 
     # Unset rejects every request. "local" acts as LOCAL_IDENTITY_EMAIL, unverified,
-    # and is for localhost only.
+    # and is for localhost only. "demo" gives each anonymous visitor a private sandbox
+    # (docs/adr/0010) and needs DEMO_COOKIE_SECRET.
     auth_mode: str = ""
     local_identity_email: str = ""
+    demo_cookie_secret: str = ""
+    demo_cookie_secure: bool = True
 
     database_path: str = "backend/data/continental_divide.db"
+    sandbox_dir: str = "backend/data/sandboxes"
 
     max_intake_chars: int = 2000
     rate_limit_max: int = 10
