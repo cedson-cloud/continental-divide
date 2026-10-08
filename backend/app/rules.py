@@ -227,17 +227,21 @@ def _snake_case_error(
     return None
 
 
-def property_name_error(name: str, *, convention: str = "snake_case") -> str | None:
+def property_name_error(
+    name: str, *, convention: str = "snake_case", kind: str = "property"
+) -> str | None:
+    """``kind`` names what is being judged in the message: a property, a trait, or a
+    group type all follow the property naming convention."""
     if convention != "snake_case":
         raise ValueError(f"unknown property naming convention '{convention}'")
     found = _disallowed_characters(name, _SNAKE_CASE_CHARS)
     if found:
         return (
-            f"property '{name}' must be snake_case: lowercase letters a–z, numbers "
+            f"{kind} '{name}' must be snake_case: lowercase letters a–z, numbers "
             f"and underscores only (found {found})"
         )
     if not _SNAKE_CASE.match(name):
-        return f"property '{name}' must be snake_case"
+        return f"{kind} '{name}' must be snake_case"
     return None
 
 
@@ -266,14 +270,36 @@ def pii_hit(
 def pii_hits(
     event: EventDefinition, profile: "GovernanceProfile"
 ) -> dict[str, str]:
-    """Each property that matches the profile's PII blocklist, mapped to the entry it
-    matched. Every one needs a written reason from the requester (ADR 0003)."""
+    """Each property or trait that matches the profile's PII blocklist, mapped to the
+    entry it matched. Every one needs a written reason from the requester (ADR 0003)."""
     blocklist = profile.pii.blocklist
     return {
         p.name: entry
-        for p in event.properties
+        for p in [*event.properties, *event.traits]
         if (entry := pii_hit(p.name, blocklist=blocklist))
     }
+
+
+def _pii_check(event: EventDefinition, hits: dict[str, str]) -> RuleCheck:
+    """The PII finding. The demand is the same on every call type — a written reason
+    per hit, then an acknowledgment — but only on identify is personal data in the
+    right place; anywhere else the reason has to argue otherwise (ADR 0003)."""
+    if not hits:
+        fields = "traits" if event.call_type != "track" else "property names"
+        return RuleCheck(rule="pii", passed=True, detail=f"no PII tokens in {fields}")
+    details = "; ".join(f"{name} -> {entry}" for name, entry in hits.items())
+    if event.call_type == "identify":
+        detail = (
+            "personal data on identify: the requester says why each is needed, and "
+            f"the approver acknowledges: {details}"
+        )
+    else:
+        where = "a group trait" if event.call_type == "group" else "a track property"
+        detail = (
+            f"personal data belongs on identify, not on {where}: the requester's "
+            f"reason has to argue otherwise, and the approver acknowledges: {details}"
+        )
+    return RuleCheck(rule="pii", passed=False, detail=detail)
 
 
 # --- duplicates --------------------------------------------------------------------
@@ -326,6 +352,52 @@ def near_duplicate_of(name: str, known: Collection[str]) -> str | None:
 
 
 # --- evaluation ------------------------------------------------------------------
+
+def _evaluate_traits(
+    event: EventDefinition, profile: "GovernanceProfile"
+) -> Evaluation:
+    """Identify and group definitions. Traits follow the property naming convention,
+    and so does a group's type; a failure there rejects, as it does for properties.
+    No event-name, category, or duplicate rule applies: the plan has one identify
+    call and one call per group type, so a second request adds traits to it rather
+    than duplicating it."""
+    convention = profile.property_naming.convention
+    checks = []
+    if event.call_type == "group":
+        group_error = property_name_error(
+            event.name, convention=convention, kind="group type"
+        )
+        checks.append(
+            RuleCheck(
+                rule="group_naming",
+                passed=group_error is None,
+                detail=group_error or f"group type is {convention}",
+            )
+        )
+    trait_errors = [
+        error
+        for t in event.traits
+        if (error := property_name_error(t.name, convention=convention, kind="trait"))
+    ]
+    checks.append(
+        RuleCheck(
+            rule="trait_naming",
+            passed=not trait_errors,
+            detail="; ".join(trait_errors) or f"all trait names are {convention}",
+        )
+    )
+    hits = pii_hits(event, profile)
+    checks.append(_pii_check(event, hits))
+    rejected = any(not c.passed for c in checks if c.rule not in _ADVISORY_RULES)
+    return Evaluation(
+        decision=Decision.rejected if rejected else Decision.pending_approval,
+        routed_to_approval=not rejected,
+        checks=checks,
+        pii_flagged=bool(hits),
+        pii_details="; ".join(f"{name} -> {entry}" for name, entry in hits.items()),
+        pii_hits=hits,
+    )
+
 
 def _system_events(
     profile: "GovernanceProfile",
@@ -385,6 +457,9 @@ def evaluate(
     if profile is None:
         profile = DEFAULT_PROFILE
 
+    if event.call_type != "track":
+        return _evaluate_traits(event, profile)
+
     checks = []
 
     naming = profile.event_naming
@@ -442,20 +517,7 @@ def evaluate(
     hits = pii_hits(event, profile)
     pii_flagged = bool(hits)
     pii_details = "; ".join(f"{name} -> {entry}" for name, entry in hits.items())
-    checks.append(
-        RuleCheck(
-            rule="pii",
-            passed=not pii_flagged,
-            detail=(
-                "no PII tokens in property names"
-                if not pii_flagged
-                else (
-                    "flagged (the requester gives a written reason for each, and the "
-                    f"approver acknowledges): {pii_details}"
-                )
-            ),
-        )
-    )
+    checks.append(_pii_check(event, hits))
 
     # PII does not reject; only the naming, category, and property-naming rules do.
     # The duplicate rules are appended below and are advisory for the same reason, so

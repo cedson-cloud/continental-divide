@@ -31,6 +31,10 @@ pii:
 # Informational: vetting notes categories outside this list. Empty = no notes.
 categories: []
 
+# The call types intake accepts (ADR 0003). Drop group when the analytics tool's group
+# add-on is not available.
+call_types: [track, identify, group]
+
 # Where event data is allowed to be sent. Category-level, vendor-neutral names;
 # empty means no constraint, matching categories.
 destinations:

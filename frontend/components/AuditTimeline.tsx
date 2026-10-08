@@ -1,5 +1,5 @@
 import { AuditEntry, EventDefinition, RuleCheck } from "@/lib/api";
-import { formatTimestamp, stepLabel } from "@/lib/format";
+import { definitionTitle, formatTimestamp, stepLabel } from "@/lib/format";
 
 function dotTone(entry: AuditEntry): string {
   const detail = entry.detail || {};
@@ -37,15 +37,19 @@ export function ProposedDefinition({
 }: {
   definition: Partial<EventDefinition>;
 }) {
+  const isTrack = (definition.call_type ?? "track") === "track";
+  const fields = (isTrack ? definition.properties : definition.traits) ?? [];
   return (
     <div>
       <div className="row" style={{ gap: 8 }}>
-        <span style={{ fontWeight: 600 }}>{definition.name || "—"}</span>
-        {definition.category && <span className="tag">{definition.category}</span>}
+        <span style={{ fontWeight: 600 }}>{definitionTitle(definition)}</span>
+        {isTrack
+          ? definition.category && <span className="tag">{definition.category}</span>
+          : <span className="tag">{definition.call_type}</span>}
       </div>
-      {definition.properties && definition.properties.length > 0 && (
+      {fields.length > 0 && (
         <div className="row" style={{ gap: 6, marginTop: 6 }}>
-          {definition.properties.map((p) => (
+          {fields.map((p) => (
             <span className="tag" key={p.name}>
               {p.name}: {p.type}
             </span>

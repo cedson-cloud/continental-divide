@@ -49,6 +49,11 @@ class DuplicateNoteRequired(Exception):
     pass
 
 
+class CallTypeConflict(Exception):
+    """A supplied definition states a call type other than the request's. The request
+    is the authority on its call type; a disagreement is refused, never corrected."""
+
+
 class PiiReasonRequired(Exception):
     """A PII hit has no written reason from the requester, or a reason names a field
     with no hit (ADR 0003)."""
@@ -77,7 +82,9 @@ def _parse(candidate: dict) -> Tuple[Optional[EventDefinition], Optional[list]]:
     try:
         return EventDefinition.model_validate(candidate), None
     except ValidationError as exc:
-        return None, exc.errors(include_url=False)
+        # Context can hold the raised exception itself, which the audit log cannot
+        # store; the message already says what it would.
+        return None, exc.errors(include_url=False, include_context=False)
 
 
 def _route(
@@ -122,6 +129,14 @@ def _route(
             "name": parsed.name,
             "category": parsed.category,
             "properties": [p.name for p in parsed.properties],
+            **(
+                {
+                    "call_type": parsed.call_type,
+                    "traits": [t.name for t in parsed.traits],
+                }
+                if parsed.call_type != "track"
+                else {}
+            ),
         },
     )
 
@@ -462,10 +477,21 @@ def ingest_raw_definition(
     This path has no requester step, so every PII hit's written reason arrives here, in
     ``pii_reasons``. A hit without one raises :class:`PiiReasonRequired` before anything
     is written, like any other malformed request.
+
+    The request's ``call_type`` is stamped onto the definition before it is parsed. A
+    definition that states a different one raises :class:`CallTypeConflict`, also
+    before anything is written.
     """
     if profile is None:
         profile = load_active_profile()
-    parsed, parse_errors = _parse(candidate_definition)
+    call_type = call_type or "track"
+    stated = candidate_definition.get("call_type", call_type)
+    if stated != call_type:
+        raise CallTypeConflict(
+            f"the definition states call type '{stated}' but the request is "
+            f"'{call_type}'"
+        )
+    parsed, parse_errors = _parse({**candidate_definition, "call_type": call_type})
     reasons = _checked_pii_reasons(
         pii_hits(parsed, profile) if parsed is not None else {}, pii_reasons
     )

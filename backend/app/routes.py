@@ -27,7 +27,9 @@ from .governance_draft import (
     build_profile_yaml,
     validate_profile_yaml,
 )
+from .models import CallType
 from .pipeline import (
+    CallTypeConflict,
     DuplicateAcknowledgmentRequired,
     DuplicateNoteRequired,
     IntakeModelError,
@@ -80,9 +82,9 @@ _limiter = RateLimiter(_settings.rate_limit_max, _settings.rate_limit_window_sec
 
 
 SubmitterTeam = Literal["Product", "Marketing", "Data", "Engineering"]
-# track only: EventDefinition is track-shaped and rules.py enforces an event-name
-# convention. identify/page/screen need their own shapes and rules (see TASKS.md).
-CallType = Literal["track"]
+# The model path drafts track only until its identify and group prompts exist (TASKS
+# item 5c). The model-free raw path takes every call type the profile allows.
+DraftedCallType = Literal["track"]
 # "Unsure" is a real answer: it is stored verbatim and surfaced to the approver as
 # an open question rather than forcing a guess at intake.
 Side = Literal["Client", "Server", "Unsure"]
@@ -107,12 +109,21 @@ def _validate_urgency(model):
     return model
 
 
+def _validate_request_kind(model):
+    if model.request_kind == "new_property_on_existing" and model.call_type != "track":
+        raise ValueError(
+            "a property request adds to a track event; identify and group requests "
+            "add traits instead"
+        )
+    return model
+
+
 class IntakeBody(BaseModel):
     raw_intake_text: str
     business_value: str = Field(min_length=1)
     submitter_name: str = Field(min_length=1)
     submitter_team: SubmitterTeam
-    call_type: CallType = "track"
+    call_type: DraftedCallType = "track"
     side: Side = "Client"
     urgent: bool = False
     urgency_reason: Optional[str] = None
@@ -148,6 +159,7 @@ class RawIntakeBody(BaseModel):
 
     _needed_by_iso = field_validator("needed_by")(_validate_needed_by)
     _urgency = model_validator(mode="after")(_validate_urgency)
+    _request_kind = model_validator(mode="after")(_validate_request_kind)
 
 
 class SubmitBody(BaseModel):
@@ -203,6 +215,17 @@ def _active_profile() -> GovernanceProfile:
         raise HTTPException(
             status_code=500,
             detail="the active governance profile could not be loaded",
+        )
+
+
+def _validate_call_type(call_type: str, profile: GovernanceProfile) -> None:
+    if call_type not in profile.call_types:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"call type '{call_type}' is not allowed. The governance profile "
+                f"allows: {', '.join(profile.call_types)}"
+            ),
         )
 
 
@@ -331,6 +354,7 @@ def create_request_raw(
         or "raw definition"
     )
     profile = _active_profile()
+    _validate_call_type(body.call_type, profile)
     _validate_destinations(body.destinations, profile)
     try:
         request_id = ingest_raw_definition(
@@ -351,7 +375,7 @@ def create_request_raw(
             profile=profile,
             pii_reasons=body.pii_reasons,
         )
-    except PiiReasonRequired as exc:
+    except (CallTypeConflict, PiiReasonRequired) as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     return _intake_response(storage, request_id)
 
@@ -383,6 +407,7 @@ def list_requests(storage: Storage = Depends(acting_storage)) -> list:
         {
             "id": row["id"],
             "name": (row.get("parsed_definition") or {}).get("name"),
+            "call_type": row.get("call_type") or "track",
             "category": row["category"],
             "status": row["status"],
             "created_at": row["created_at"],

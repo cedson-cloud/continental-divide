@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { QueueItem, friendlyError, listRequests } from "@/lib/api";
-import { formatTimestamp, isActionable } from "@/lib/format";
+import { definitionTitle, formatTimestamp, isActionable } from "@/lib/format";
 import { StatusBadge } from "@/components/StatusBadge";
 
 export default function QueuePage() {
@@ -52,7 +52,7 @@ export default function QueuePage() {
               {items.map((item) => (
                 <tr key={item.id}>
                   <td>
-                    <div className="queue-name">{item.name || "—"}</div>
+                    <div className="queue-name">{definitionTitle(item)}</div>
                     <div className="queue-id">#{item.id}</div>
                   </td>
                   <td>{item.category || "—"}</td>

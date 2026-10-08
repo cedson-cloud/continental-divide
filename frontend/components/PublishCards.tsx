@@ -2,29 +2,32 @@ import { PublishArtifact } from "@/lib/api";
 
 export function PublishCards({ artifact }: { artifact: PublishArtifact }) {
   const { confluence_doc, jira_ticket } = artifact;
+  const rows = confluence_doc.traits ?? confluence_doc.properties ?? [];
   return (
     <div className="cards">
       <div className="card">
         <div className="card-head">Confluence doc · {confluence_doc.id}</div>
         <div className="card-body">
           <h4>{confluence_doc.title}</h4>
-          <span className="tag">{confluence_doc.category}</span>
+          <span className="tag">
+            {confluence_doc.category ?? confluence_doc.call_type}
+          </span>
           {confluence_doc.description && (
             <p className="muted" style={{ fontSize: 13.5, marginTop: 8 }}>
               {confluence_doc.description}
             </p>
           )}
-          {confluence_doc.properties.length > 0 && (
+          {rows.length > 0 && (
             <table className="prop-table mt-12">
               <thead>
                 <tr>
-                  <th>Property</th>
+                  <th>{confluence_doc.traits ? "Trait" : "Property"}</th>
                   <th>Type</th>
                   <th>Required</th>
                 </tr>
               </thead>
               <tbody>
-                {confluence_doc.properties.map((p) => (
+                {rows.map((p) => (
                   <tr key={p.name}>
                     <td>{p.name}</td>
                     <td>{p.type}</td>

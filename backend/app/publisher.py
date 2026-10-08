@@ -40,6 +40,8 @@ class MockPublisher(Publisher):
     def publish(self, event_definition: EventDefinition) -> PublishResult:
         self._sequence += 1
         seq = self._sequence
+        if event_definition.call_type != "track":
+            return self._publish_traits(event_definition, seq)
         property_rows = [
             {"name": p.name, "type": p.type.value, "required": p.required}
             for p in event_definition.properties
@@ -60,6 +62,36 @@ class MockPublisher(Publisher):
                 f"Properties: {len(property_rows)}\n"
                 f"Doc: {confluence_doc['id']}"
             ),
+        }
+        return PublishResult(
+            publisher=self.name,
+            confluence_doc=confluence_doc,
+            jira_ticket=jira_ticket,
+        )
+
+    def _publish_traits(self, definition: EventDefinition, seq: int) -> PublishResult:
+        """Identify adds to the plan's one identify call; group to the call for its
+        group type. Neither has a category, and both carry traits, not properties."""
+        if definition.call_type == "identify":
+            title, summary = "Identify traits", "Implement identify traits"
+        else:
+            title = f"Group: {definition.name}"
+            summary = f"Implement group call: {definition.name}"
+        trait_rows = [
+            {"name": t.name, "type": t.type.value, "required": t.required}
+            for t in definition.traits
+        ]
+        confluence_doc = {
+            "id": f"PAGE-{seq:03d}",
+            "title": title,
+            "call_type": definition.call_type,
+            "description": definition.description or "",
+            "traits": trait_rows,
+        }
+        jira_ticket = {
+            "key": f"TRACK-{seq:03d}",
+            "summary": summary,
+            "body": f"Traits: {len(trait_rows)}\nDoc: {confluence_doc['id']}",
         }
         return PublishResult(
             publisher=self.name,

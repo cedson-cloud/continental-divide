@@ -1,4 +1,17 @@
+import type { CallType } from "./api";
+
 export type StatusMeta = { label: string; tone: string };
+
+// What a definition is called on screen. A track event is its name; the plan has one
+// identify call, and one group call per group type (ADR 0003).
+export function definitionTitle(definition: {
+  call_type?: CallType;
+  name?: string | null;
+}): string {
+  if (definition.call_type === "identify") return "Identify traits";
+  if (definition.call_type === "group") return `Group: ${definition.name ?? "—"}`;
+  return definition.name || "—";
+}
 
 const STATUS_META: Record<string, StatusMeta> = {
   draft: { label: "Draft — not submitted", tone: "neutral" },
