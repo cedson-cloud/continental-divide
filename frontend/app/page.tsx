@@ -24,7 +24,13 @@ import { AgentReview } from "@/components/AgentReview";
 import { EventPicker } from "@/components/EventPicker";
 import { DuplicateResolution } from "@/components/DuplicateResolution";
 import { EngineDuplicates } from "@/components/EngineDuplicates";
-import { gatingDuplicateFindings, submissionNeedsAnswer } from "@/lib/gating";
+import {
+  gatingDuplicateFindings,
+  missingPiiReasons,
+  piiReasonsToSend,
+  submissionNeedsAnswer,
+} from "@/lib/gating";
+import { PiiReasons } from "@/components/PiiReasons";
 import { RejectedRecourse } from "@/components/RejectedRecourse";
 import { RuleChecks } from "@/components/RuleChecks";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -378,12 +384,17 @@ function Outcome({ detail }: { detail: RequestDetail }) {
   const findings = detail.duplicate_candidates;
   const duplicateFindings = gatingDuplicateFindings(findings);
   const needsAnswer = submissionNeedsAnswer(findings, checks);
+  const [piiReasons, setPiiReasons] = useState<Record<string, string>>({});
+  const piiBlocked = missingPiiReasons(detail.pii_hits, piiReasons).length > 0;
 
   async function submit(resolution: SubmitResolution = {}) {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      await submitRequest(detail.id, resolution);
+      await submitRequest(detail.id, {
+        ...resolution,
+        piiReasons: piiReasonsToSend(detail.pii_hits, piiReasons),
+      });
       setSubmitted(true);
     } catch (err) {
       setSubmitError(friendlyError(err));
@@ -552,10 +563,17 @@ function Outcome({ detail }: { detail: RequestDetail }) {
 
       {isDraft ? (
         <>
+          <PiiReasons
+            hits={detail.pii_hits}
+            value={piiReasons}
+            onChange={setPiiReasons}
+            disabled={submitting}
+          />
           {needsAnswer ? (
             <DuplicateResolution
               findings={duplicateFindings}
               busy={submitting}
+              submitBlocked={piiBlocked}
               onWithdraw={withdraw}
               onSubmit={submit}
             />
@@ -564,7 +582,7 @@ function Outcome({ detail }: { detail: RequestDetail }) {
               <button
                 className="btn btn-primary"
                 onClick={() => submit()}
-                disabled={submitting}
+                disabled={submitting || piiBlocked}
               >
                 {submitting ? "Submitting…" : "Submit request"}
               </button>

@@ -1,5 +1,6 @@
 "use client";
 
+import { ReactNode } from "react";
 import { EventDefinition, RequestDetail, RuleCheck } from "@/lib/api";
 import { WizardState } from "@/lib/wizard";
 import { ProposedDefinition } from "@/components/AuditTimeline";
@@ -19,11 +20,15 @@ export function StepReview({
   detail,
   state,
   busy,
+  piiPanel,
+  submitBlocked = false,
   onSubmit,
 }: {
   detail: RequestDetail;
   state: WizardState;
   busy: boolean;
+  piiPanel?: ReactNode;
+  submitBlocked?: boolean;
   onSubmit: () => void;
 }) {
   const log = detail.audit_log;
@@ -69,8 +74,14 @@ export function StepReview({
         </p>
       </div>
 
+      {piiPanel}
+
       <div className="row mt-16">
-        <button className="btn btn-primary" onClick={onSubmit} disabled={busy}>
+        <button
+          className="btn btn-primary"
+          onClick={onSubmit}
+          disabled={busy || submitBlocked}
+        >
           {busy ? "Submitting…" : "Submit request"}
         </button>
       </div>

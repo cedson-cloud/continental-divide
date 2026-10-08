@@ -33,3 +33,27 @@ export function submissionNeedsAnswer(
 ): boolean {
   return gatingDuplicateFindings(findings).length > 0 || hasNearDuplicate(checks);
 }
+
+// Every PII hit needs the requester's written reason before submission (ADR 0003).
+// The flagged properties still without one, in the order the engine reported them.
+// A blank reason is no reason, matching the server.
+export function missingPiiReasons(
+  hits: Record<string, string>,
+  reasons: Record<string, string>,
+): string[] {
+  return Object.keys(hits).filter((name) => !(reasons[name] ?? "").trim());
+}
+
+// The reasons to send: one per current hit, trimmed. A reason typed for a property an
+// earlier draft flagged is dropped, because the server refuses a reason for a
+// property no PII rule flagged.
+export function piiReasonsToSend(
+  hits: Record<string, string>,
+  reasons: Record<string, string>,
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.keys(hits)
+      .filter((name) => (reasons[name] ?? "").trim())
+      .map((name) => [name, reasons[name].trim()]),
+  );
+}

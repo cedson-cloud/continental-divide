@@ -22,6 +22,13 @@ from app.storage import reset_storage
 
 EXAMPLES_DIR = Path(__file__).parent / "examples"
 
+# Every PII hit needs the requester's written reason before it reaches an approver.
+PII_REASONS = {
+    "pii_violation_newsletter_subscribed.json": {
+        "email": "the newsletter is sent to this address",
+    },
+}
+
 
 def main() -> None:
     try:
@@ -33,7 +40,9 @@ def main() -> None:
     for path in sorted(EXAMPLES_DIR.glob("*.json")):
         candidate = json.loads(path.read_text())
         raw_intake_text = candidate.get("description") or f"Request for {candidate.get('name')}"
-        request_id = ingest(raw_intake_text, candidate, storage)
+        request_id = ingest(
+            raw_intake_text, candidate, storage, pii_reasons=PII_REASONS.get(path.name)
+        )
 
         request = storage.get_request(request_id)
         print(f"\n=== {path.name} ===")

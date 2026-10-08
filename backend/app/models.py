@@ -67,3 +67,6 @@ class Evaluation(BaseModel):
     # but a human must acknowledge the PII before it can be approved.
     pii_flagged: bool = False
     pii_details: str = ""
+    # Each flagged property and the blocklist entry it matched; every one needs a
+    # written reason from the requester before the request reaches an approver.
+    pii_hits: dict[str, str] = Field(default_factory=dict)

@@ -23,7 +23,7 @@ from .interpreter import Interpretation, InterpreterError, interpret
 from .models import Decision, EventDefinition
 from .notion_publisher import push_request
 from .publisher import Publisher, PublishResult
-from .rules import evaluate
+from .rules import evaluate, pii_hits
 from .storage import Storage
 
 DECIDABLE_STATUSES = {Decision.pending_approval.value, Decision.flagged_duplicate.value}
@@ -47,6 +47,11 @@ class DuplicateAcknowledgmentRequired(Exception):
 
 class DuplicateNoteRequired(Exception):
     pass
+
+
+class PiiReasonRequired(Exception):
+    """A PII hit has no written reason from the requester, or a reason names a field
+    with no hit (ADR 0003)."""
 
 
 class NoMatchingFinding(Exception):
@@ -142,6 +147,7 @@ def _route(
             "flags": evaluation.flags,
             "pii_flagged": evaluation.pii_flagged,
             "pii_details": evaluation.pii_details,
+            "pii_hits": evaluation.pii_hits,
         },
     )
 
@@ -237,6 +243,52 @@ def _engine_duplicates(request_id: int, storage: Storage) -> set:
         for check in entry["detail"].get("checks", [])
         if check["rule"] in ("duplicate", "near_duplicate") and not check["passed"]
     }
+
+
+def recorded_pii_hits(request: dict, storage: Storage) -> dict[str, str]:
+    """The PII hits the rules found on this request, from its ``rules_evaluated``
+    entry, so the reasons asked for are the ones the judging profile flagged. Entries
+    written before hits were recorded are re-derived under the active profile."""
+    entry = next(
+        (
+            e
+            for e in reversed(storage.get_audit_log(request["id"]))
+            if e["step"] == "rules_evaluated"
+        ),
+        None,
+    )
+    if entry is None:
+        return {}
+    if "pii_hits" in entry["detail"]:
+        return entry["detail"]["pii_hits"]
+    if not request.get("pii_flagged") or not request.get("parsed_definition"):
+        return {}
+    return pii_hits(
+        EventDefinition.model_validate(request["parsed_definition"]),
+        load_active_profile(),
+    )
+
+
+def _checked_pii_reasons(
+    hits: dict[str, str], reasons: Optional[dict[str, str]]
+) -> dict[str, str]:
+    """The requester's reasons, one per hit and nothing else, or
+    :class:`PiiReasonRequired`. A blank reason is no reason."""
+    reasons = {
+        name: reason.strip() for name, reason in (reasons or {}).items() if reason.strip()
+    }
+    unflagged = sorted(set(reasons) - set(hits))
+    if unflagged:
+        raise PiiReasonRequired(
+            f"a reason was given for {', '.join(unflagged)}, which no PII rule flagged"
+        )
+    missing = [name for name in hits if name not in reasons]
+    if missing:
+        raise PiiReasonRequired(
+            f"{', '.join(missing)} flagged as PII; a written reason for each is "
+            "required before an approver sees the request"
+        )
+    return reasons
 
 
 def _push_if_pending(request_id: int, storage: Storage) -> None:
@@ -399,13 +451,24 @@ def ingest_raw_definition(
     existing_event: Optional[str] = None,
     destinations: Optional[list] = None,
     profile: Optional[GovernanceProfile] = None,
+    pii_reasons: Optional[dict[str, str]] = None,
 ) -> int:
     """Route a pre-built definition that skips the model, for demos where a faithful
     model would not author the violation under test (a malformed name, a duplicate).
 
     The trail records ``definition_provided`` in place of ``model_interpreted``; the rest
     of the pipeline is identical to :func:`interpret_intake`.
+
+    This path has no requester step, so every PII hit's written reason arrives here, in
+    ``pii_reasons``. A hit without one raises :class:`PiiReasonRequired` before anything
+    is written, like any other malformed request.
     """
+    if profile is None:
+        profile = load_active_profile()
+    parsed, parse_errors = _parse(candidate_definition)
+    reasons = _checked_pii_reasons(
+        pii_hits(parsed, profile) if parsed is not None else {}, pii_reasons
+    )
     request_id = storage.create_request(
         raw_intake_text=raw_intake_text,
         submitter_name=submitter_name,
@@ -436,12 +499,14 @@ def ingest_raw_definition(
             "request_kind": request_kind,
             "existing_event": existing_event,
             "destinations": destinations,
+            **({"pii_reasons": reasons} if reasons else {}),
         },
     )
+    if reasons:
+        storage.set_pii_reasons(request_id, reasons)
     storage.add_audit_entry(
         request_id, "definition_provided", {"definition": candidate_definition}
     )
-    parsed, parse_errors = _parse(candidate_definition)
     if parsed is not None:
         storage.set_parsed_definition(request_id, parsed.model_dump(), parsed.category)
     _route(request_id, parsed, parse_errors, storage, profile, duplicate_fn)
@@ -454,22 +519,36 @@ def ingest(
     storage: Storage,
     # None skips the review: this path is deliberately model-free for offline demos.
     duplicate_fn: Optional[Callable[..., DuplicateReview]] = None,
+    pii_reasons: Optional[dict[str, str]] = None,
 ) -> int:
     """Persist and route a request from a structured definition supplied directly.
 
     Used offline where the definition is given rather than drafted by the model (see
     ``run_examples.py``). The HTTP intake path uses :func:`interpret_intake` instead.
+    Like :func:`ingest_raw_definition`, a PII hit without a reason in ``pii_reasons``
+    raises :class:`PiiReasonRequired` before anything is written.
     """
+    profile = load_active_profile()
     parsed, parse_errors = _parse(candidate_definition)
+    reasons = _checked_pii_reasons(
+        pii_hits(parsed, profile) if parsed is not None else {}, pii_reasons
+    )
     request_id = storage.create_request(
         raw_intake_text=raw_intake_text,
         parsed_definition=parsed.model_dump() if parsed else None,
         category=parsed.category if parsed else None,
     )
     storage.add_audit_entry(
-        request_id, "intake_received", {"raw_intake_text": raw_intake_text}
+        request_id,
+        "intake_received",
+        {
+            "raw_intake_text": raw_intake_text,
+            **({"pii_reasons": reasons} if reasons else {}),
+        },
     )
-    _route(request_id, parsed, parse_errors, storage, duplicate_fn=duplicate_fn)
+    if reasons:
+        storage.set_pii_reasons(request_id, reasons)
+    _route(request_id, parsed, parse_errors, storage, profile, duplicate_fn)
     return request_id
 
 
@@ -479,6 +558,7 @@ def submit_request(
     duplicate_note: Optional[str] = None,
     *,
     duplicate_unsure: bool = False,
+    pii_reasons: Optional[dict[str, str]] = None,
 ) -> None:
     """Confirm a draft and move it into the approval queue.
 
@@ -494,9 +574,13 @@ def submit_request(
     ``submitted`` entry records whichever was used. An exact name match is the
     approver's to acknowledge, not the requester's, because there is nothing to
     argue. Other finding kinds, and findings below high confidence, are information
-    rather than an accusation and never gate submission. Raises
-    :class:`RequestNotFound`, :class:`InvalidTransition`, or
-    :class:`DuplicateNoteRequired` for the caller to map to HTTP.
+    rather than an accusation and never gate submission.
+
+    Every PII hit needs a written reason in ``pii_reasons``, keyed by property name;
+    the reasons are kept on the request and in the ``submitted`` entry. Raises
+    :class:`RequestNotFound`, :class:`InvalidTransition`,
+    :class:`DuplicateNoteRequired`, or :class:`PiiReasonRequired` for the caller to
+    map to HTTP.
     """
     request = storage.get_request(request_id)
     if request is None:
@@ -526,12 +610,16 @@ def submit_request(
             "the existing event won't work — or duplicate_unsure, passing the "
             "question to the approver — is required to submit"
         )
+    reasons = _checked_pii_reasons(recorded_pii_hits(request, storage), pii_reasons)
 
+    if reasons:
+        storage.set_pii_reasons(request_id, reasons)
     storage.add_audit_entry(
         request_id,
         "submitted",
         {
             "decision": decision,
+            **({"pii_reasons": reasons} if reasons else {}),
             **({"duplicate_note": duplicate_note} if duplicate_note else {}),
             **(
                 {"duplicate_unsure": True}
@@ -752,6 +840,8 @@ def decide(
                 {
                     "message": f"PII acknowledged by {approver_name or 'unknown'}",
                     "pii_details": request["pii_details"],
+                    # Requests submitted before reasons were required have none.
+                    "pii_reasons": request.get("pii_reasons") or {},
                 },
             )
         if findings or engine_duplicates:

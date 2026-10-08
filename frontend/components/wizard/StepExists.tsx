@@ -1,5 +1,6 @@
 "use client";
 
+import { ReactNode } from "react";
 import { ReviewFinding, RuleCheck, SubmitResolution } from "@/lib/api";
 import { AgentReview } from "@/components/AgentReview";
 import { DuplicateResolution } from "@/components/DuplicateResolution";
@@ -21,6 +22,8 @@ export function StepExists({
   checks,
   flags,
   busy,
+  piiPanel,
+  submitBlocked = false,
   onWithdraw,
   onSubmit,
   onNext,
@@ -29,6 +32,9 @@ export function StepExists({
   checks: RuleCheck[];
   flags: string[];
   busy: boolean;
+  // Shown only where this step submits; the caller owns the reasons.
+  piiPanel?: ReactNode;
+  submitBlocked?: boolean;
   onWithdraw: (existingEvent: string) => void;
   onSubmit: (resolution: SubmitResolution) => void;
   onNext: () => void;
@@ -40,9 +46,11 @@ export function StepExists({
       <div>
         {engine}
         <AgentReview findings={findings} variant="requester" />
+        {piiPanel}
         <DuplicateResolution
           findings={gatingDuplicateFindings(findings)}
           busy={busy}
+          submitBlocked={submitBlocked}
           onWithdraw={onWithdraw}
           onSubmit={onSubmit}
         />

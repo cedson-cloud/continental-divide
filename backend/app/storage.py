@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS event_request (
     status TEXT NOT NULL,
     pii_flagged INTEGER NOT NULL DEFAULT 0,
     pii_details TEXT,
+    pii_reasons TEXT,
     duplicate_candidates TEXT,
     submitter_name TEXT,
     submitter_team TEXT,
@@ -161,6 +162,10 @@ class Storage(ABC):
     def set_pii_flags(
         self, request_id: int, pii_flagged: bool, pii_details: str
     ) -> None:
+        ...
+
+    @abstractmethod
+    def set_pii_reasons(self, request_id: int, reasons: dict[str, str]) -> None:
         ...
 
     @abstractmethod
@@ -310,6 +315,15 @@ class SqliteStorage(Storage):
                 (1 if pii_flagged else 0, pii_details, request_id),
             )
 
+    def set_pii_reasons(self, request_id: int, reasons: dict[str, str]) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE event_request "
+                "SET pii_reasons = ?, updated_at = datetime('now') "
+                "WHERE id = ?",
+                (json.dumps(reasons), request_id),
+            )
+
     def set_duplicate_candidates(
         self, request_id: int, candidates: list[dict]
     ) -> None:
@@ -370,6 +384,8 @@ class SqliteStorage(Storage):
             data["published_artifact"] = json.loads(data["published_artifact"])
         if data.get("destinations"):
             data["destinations"] = json.loads(data["destinations"])
+        if data.get("pii_reasons"):
+            data["pii_reasons"] = json.loads(data["pii_reasons"])
         return data
 
     @staticmethod
