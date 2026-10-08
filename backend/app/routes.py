@@ -7,6 +7,7 @@ here. The Anthropic key is not used in this layer.
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
@@ -59,6 +60,7 @@ from .recourse import (
     rename_and_resubmit,
 )
 from .rules import effective_categories, event_name_error
+from .spend import SpendCapReached, get_meter
 from .storage import Storage, get_storage, workspace_storage
 from .workspace import (
     COOKIE_NAME,
@@ -84,11 +86,40 @@ def acting_storage(identity: Identity = Depends(current_identity)) -> Storage:
     return get_storage().acting_as(identity)
 
 
+def _client_key(request: Request) -> str:
+    """The client's address for rate limiting: the first entry of DEMO_CLIENT_IP_HEADER
+    when one is configured and present, else the socket address."""
+    header = get_settings().demo_client_ip_header.strip()
+    if header:
+        first = request.headers.get(header, "").split(",")[0].strip()
+        if first:
+            return first
+    return request.client.host if request.client else "unknown"
+
+
+def _require_model_budget() -> None:
+    """Refuse a drafting route before it writes anything once the demo's daily budget is
+    spent, so a refusal never uses up a sandbox's allowance (docs/adr/0010)."""
+    meter = get_meter()
+    if meter is None:
+        return
+    try:
+        meter.check()
+    except SpendCapReached as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
+
 router = APIRouter(dependencies=[Depends(current_identity)])
 # The one route a demo visitor reaches before they have an identity.
 session_router = APIRouter()
 
 _SANDBOX_MAX_AGE_SECONDS = 7 * 24 * 60 * 60
+_HOUR = 60 * 60
+
+
+@lru_cache
+def _session_limiters(per_client: int, total: int) -> tuple[RateLimiter, RateLimiter]:
+    return RateLimiter(per_client, _HOUR), RateLimiter(total, _HOUR)
 
 
 @session_router.post("/session")
@@ -101,6 +132,14 @@ def start_session(request: Request, response: Response) -> dict:
     if len(secret) < MIN_SECRET_LENGTH:
         raise HTTPException(status_code=503, detail="the demo is not configured")
     if workspace_from_headers(request.headers, secret) is None:
+        per_client, total = _session_limiters(
+            settings.demo_sessions_per_ip_per_hour, settings.demo_sessions_per_hour
+        )
+        if not (per_client.allow(_client_key(request)) and total.allow("all")):
+            raise HTTPException(
+                status_code=429,
+                detail="too many new demo sessions right now; try again in an hour",
+            )
         response.set_cookie(
             COOKIE_NAME,
             sign_workspace(new_workspace_id(), secret),
@@ -339,9 +378,9 @@ def get_catalog(storage: Storage = Depends(acting_storage)) -> CatalogView:
 def create_request(
     body: IntakeBody, request: Request, storage: Storage = Depends(acting_storage)
 ) -> IntakeResponse:
-    client = request.client.host if request.client else "unknown"
-    if not _limiter.allow(client):
+    if not _limiter.allow(_client_key(request)):
         raise HTTPException(status_code=429, detail="rate limit exceeded")
+    _require_model_budget()
 
     if len(body.raw_intake_text) > _settings.max_intake_chars:
         raise HTTPException(
@@ -542,8 +581,7 @@ def rename_request(
 ) -> dict:
     # A rename costs one model call — the catalog review on the new request — so it
     # draws on the same rate-limit budget as intake and convert.
-    client = request.client.host if request.client else "unknown"
-    if not _limiter.allow(client):
+    if not _limiter.allow(_client_key(request)):
         raise HTTPException(status_code=429, detail="rate limit exceeded")
 
     try:
@@ -593,9 +631,9 @@ def convert_request(
 ) -> dict:
     # A convert re-runs full model intake — a drafting call plus a catalog review —
     # so it draws on the same rate-limit budget as POST /requests.
-    client = request.client.host if request.client else "unknown"
-    if not _limiter.allow(client):
+    if not _limiter.allow(_client_key(request)):
         raise HTTPException(status_code=429, detail="rate limit exceeded")
+    _require_model_budget()
 
     try:
         new_request_id = convert_to_property_request(

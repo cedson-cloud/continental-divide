@@ -19,6 +19,7 @@ import anthropic
 from .config import get_settings
 from .governance import EXAMPLE_EVENT_NAMES, GovernanceProfile, load_active_profile
 from .rules import convention_description, effective_categories, event_name_error
+from .spend import SpendCapReached, get_meter
 
 
 def build_system_prompt(profile: GovernanceProfile) -> str:
@@ -164,6 +165,13 @@ def interpret(
         existing_event=existing_event,
     )
 
+    meter = get_meter()
+    if meter is not None:
+        try:
+            meter.check()
+        except SpendCapReached as exc:
+            raise InterpreterError(model, str(exc)) from exc
+
     api_key = settings.anthropic_api_key or os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
         raise InterpreterError(model, "no ANTHROPIC_API_KEY configured")
@@ -179,6 +187,8 @@ def interpret(
         )
     except anthropic.AnthropicError as exc:
         raise InterpreterError(model, f"model request failed ({type(exc).__name__})") from exc
+    if meter is not None:
+        meter.record_response(model, response)
 
     text = "".join(
         block.text for block in response.content if getattr(block, "type", None) == "text"
