@@ -37,7 +37,8 @@ from .governance import (
     load_profile,
 )
 from .models import PropertyType
-from .rules import event_name_error, pii_hit, property_name_error
+from .platforms import load_platform, plan_named_events, render_plan_name
+from .rules import event_name_error, near_duplicate_of, pii_hit, property_name_error
 
 _KNOWN_PROPERTY_TYPES = frozenset(t.value for t in PropertyType)
 
@@ -60,7 +61,50 @@ def _is_system_event(name: str | None) -> bool:
     return name is not None and name.startswith("$")
 
 
-def _vet_event(event: dict, index: int, profile: GovernanceProfile) -> dict:
+def _platform_names(
+    profile: GovernanceProfile,
+) -> tuple[dict[str, tuple[str | None, str]], dict[str, str]]:
+    """The names the profile's platform marks as system events, each mapped to the plan
+    name it stands for (None when it has none) and a note for the report; and each
+    listed equivalent name mapped to the plan name it duplicates (ADR 0009)."""
+    convention = profile.event_naming.convention
+    named = plan_named_events(profile.platform, convention)
+    recognized: dict[str, tuple[str | None, str]] = {}
+    for plan_name, event in named.items():
+        recognized[plan_name] = (
+            plan_name,
+            f"system event, sent as {event.sent_as} by {event.sent_by}; "
+            "do not also send it as a custom event",
+        )
+    for plan_name, event in named.items():
+        recognized.setdefault(
+            event.sent_as,
+            (
+                plan_name,
+                f"system event sent by {event.sent_by}; "
+                f"show it in the plan as '{plan_name}'",
+            ),
+        )
+    if profile.platform is not None:
+        for event in load_platform(profile.platform).system_events:
+            if event.plan_name is None:
+                recognized.setdefault(
+                    event.sent_as, (None, f"system event: {event.records}")
+                )
+    equivalents = {
+        render_plan_name(name, convention): plan_name
+        for plan_name, event in named.items()
+        for name in event.equivalents
+    }
+    return recognized, equivalents
+
+
+def _vet_event(
+    event: dict,
+    index: int,
+    profile: GovernanceProfile,
+    recognized: dict[str, tuple[str | None, str]],
+) -> dict:
     """Per-event checks. ``structure`` separates malformed input from convention
     violations: an unusable event or property name fails ``structure`` and skips
     the convention checks, which cannot apply to a name that isn't there."""
@@ -151,7 +195,9 @@ def _vet_event(event: dict, index: int, profile: GovernanceProfile) -> dict:
             "detail": "; ".join(problems) if problems else "event shape is well-formed",
         }
     ]
-    if _is_system_event(name):
+    if _is_system_event(name) or name in recognized:
+        if name in recognized:
+            notes.append({"severity": "low", "note": recognized[name][1]})
         return {
             "index": index,
             "name": name,
@@ -237,6 +283,46 @@ def _near_duplicate_clusters(names: list[str]) -> list[list[str]]:
     return [cluster for cluster in clusters if len(cluster) > 1]
 
 
+def _system_event_duplicates(
+    custom_names: list[str],
+    recognized: dict[str, tuple[str | None, str]],
+    equivalents: dict[str, str],
+) -> list[dict]:
+    """Custom events that duplicate a system event, whether or not the plan lists the
+    system event: the SDK sends it either way. A listed equivalent name, or a plan name
+    written differently, is a duplicate."""
+    plan_names = {plan_name for plan_name, _ in recognized.values() if plan_name}
+    found = []
+    for name in dict.fromkeys(custom_names):
+        match = near_duplicate_of(name, equivalents.keys() | plan_names)
+        if name in equivalents:
+            match = name
+        if match is not None:
+            found.append(
+                {"event": name, "system_event": equivalents.get(match, match)}
+            )
+    return found
+
+
+def _listed_twice(
+    reports: list[dict], recognized: dict[str, tuple[str | None, str]]
+) -> list[dict]:
+    """System events a plan lists under more than one name, such as a sent name and
+    its plan name."""
+    by_plan_name: dict[str, list[str]] = {}
+    for report in reports:
+        plan_name = recognized.get(report["name"], (None, ""))[0]
+        if plan_name is not None and report["name"] not in by_plan_name.get(
+            plan_name, []
+        ):
+            by_plan_name.setdefault(plan_name, []).append(report["name"])
+    return [
+        {"system_event": plan_name, "names": names}
+        for plan_name, names in by_plan_name.items()
+        if len(names) > 1
+    ]
+
+
 def _category_notes(reports: list[dict]) -> dict:
     by_category = Counter(r["category"] for r in reports if r["category"])
     return {
@@ -256,20 +342,32 @@ def vet_plan(plan: dict, profile: GovernanceProfile = DEFAULT_PROFILE) -> dict:
     "pass". PII flags but never rejects, matching ``evaluate()``. With no profile,
     the built-in default reproduces the intake pipeline's conventions.
     """
+    recognized, equivalents = _platform_names(profile)
+
+    def is_system(name: str | None) -> bool:
+        return _is_system_event(name) or name in recognized
+
     reports = [
-        _vet_event(event, index, profile)
+        _vet_event(event, index, profile, recognized)
         for index, event in enumerate(plan.get("events") or [])
         if isinstance(event, dict)
     ]
     # Structure-failed events carry no usable name and sit out duplicate detection.
+    # System events sit out the similarity checks too: they are matched by name below.
     names = [r["name"] for r in reports if r["name"] is not None]
+    custom_names = [n for n in names if not is_system(n)]
 
     exact_duplicates = sorted(n for n, count in Counter(names).items() if count > 1)
-    near_duplicates = _near_duplicate_clusters(names)
+    near_duplicates = _near_duplicate_clusters(custom_names)
+    system_event_duplicates = _system_event_duplicates(
+        custom_names, recognized, equivalents
+    )
 
-    flagged_names = set(exact_duplicates) | {
-        n for cluster in near_duplicates for n in cluster
-    }
+    flagged_names = (
+        set(exact_duplicates)
+        | {n for cluster in near_duplicates for n in cluster}
+        | {d["event"] for d in system_event_duplicates}
+    )
     for report in reports:
         hard_failed = any(
             not c["passed"] for c in report["checks"] if c["rule"] != "pii"
@@ -279,7 +377,7 @@ def vet_plan(plan: dict, profile: GovernanceProfile = DEFAULT_PROFILE) -> dict:
         )
         if hard_failed:
             report["verdict"] = "fail"
-        elif _is_system_event(report["name"]):
+        elif is_system(report["name"]):
             report["verdict"] = "system"
         elif pii_flagged or report["name"] in flagged_names:
             report["verdict"] = "flag"
@@ -303,6 +401,8 @@ def vet_plan(plan: dict, profile: GovernanceProfile = DEFAULT_PROFILE) -> dict:
             "exact_duplicates": exact_duplicates,
             "near_duplicates": near_duplicates,
             "system_events": [r["name"] for r in reports if r["verdict"] == "system"],
+            "system_event_duplicates": system_event_duplicates,
+            "system_events_listed_twice": _listed_twice(reports, recognized),
             "category_notes": _category_notes(reports),
         },
     }

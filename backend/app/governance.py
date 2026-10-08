@@ -17,6 +17,7 @@ from typing import Literal, Optional
 import yaml
 from pydantic import BaseModel, ConfigDict, ValidationError
 
+from .platforms import PlatformError, load_platform
 from .rules import _CONNECTORS, _IRREGULAR_PAST, _PARTICLES, _PII_BLOCKLIST
 
 
@@ -65,6 +66,9 @@ class GovernanceProfile(BaseModel):
     # Where event data is allowed to be sent. Empty = no constraint, matching
     # how categories behave.
     destinations: list[str] = []
+    # The platform file whose system events join the corpus (ADR 0009). None = no
+    # system events.
+    platform: Optional[str] = None
 
 
 DEFAULT_PROFILE = GovernanceProfile(
@@ -140,9 +144,15 @@ def profile_from_dict(data: dict, *, label: str = "<in-memory>") -> GovernancePr
     """Validate an already-loaded mapping. ``label`` names the source in errors;
     in-memory callers (the setup wizard draft) never touch the filesystem."""
     try:
-        return GovernanceProfile.model_validate(data)
+        profile = GovernanceProfile.model_validate(data)
     except ValidationError as exc:
         raise GovernanceError(f"invalid governance profile {label}: {exc}") from exc
+    if profile.platform is not None:
+        try:
+            load_platform(profile.platform)
+        except PlatformError as exc:
+            raise GovernanceError(f"governance profile {label}: {exc}") from exc
+    return profile
 
 
 def load_profile(path: str | Path) -> GovernanceProfile:

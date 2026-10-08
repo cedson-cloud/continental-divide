@@ -1,0 +1,60 @@
+# Segment: the events and calls its libraries send on their own (ADR 0009).
+# A tracking plan shows each under its plan_name. Page and screen views arrive as page
+# and screen calls, not as named track events.
+version: 1
+name: segment
+checked: "2026-10-07"
+docs:
+  - https://www.twilio.com/docs/segment/connections/spec/page
+  - https://www.twilio.com/docs/segment/connections/spec/screen
+  - https://www.twilio.com/docs/segment/connections/spec/mobile
+  - https://www.twilio.com/docs/segment/connections/spec/ab-testing
+
+system_events:
+  - plan_name: Page Viewed
+    sent_as: a page call
+    records: a person seeing a page of the website
+    sent_by: analytics.js, by default
+    equivalents: [Page Loaded, Page Visited]
+
+  - plan_name: Screen Viewed
+    sent_as: a screen call
+    records: a person seeing a screen of a mobile app
+    sent_by: the app
+    equivalents: [Screen Loaded]
+
+  - plan_name: Application Installed
+    sent_as: Application Installed
+    records: the app being installed
+    sent_by: Segment's mobile libraries, when lifecycle events are enabled
+    equivalents: [App Installed]
+
+  - plan_name: Application Opened
+    sent_as: Application Opened
+    records: the app being opened
+    sent_by: Segment's mobile libraries, when lifecycle events are enabled
+    equivalents: [App Opened, App Launched, Application Launched]
+
+  - plan_name: Application Updated
+    sent_as: Application Updated
+    records: the app being updated
+    sent_by: Segment's mobile libraries, when lifecycle events are enabled
+    equivalents: [App Updated]
+
+  - plan_name: Application Backgrounded
+    sent_as: Application Backgrounded
+    records: the app being sent to the background
+    sent_by: Segment's Kotlin, Swift and React Native libraries, when lifecycle events are enabled
+    equivalents: [App Backgrounded]
+
+  - plan_name: Application Foregrounded
+    sent_as: Application Foregrounded
+    records: the app coming to the foreground
+    sent_by: Segment's Swift library, when lifecycle events are enabled
+    equivalents: [App Foregrounded]
+
+  - plan_name: Experiment Viewed
+    sent_as: Experiment Viewed
+    records: a person seeing a variation of an active A/B test
+    sent_by: A/B testing tools connected to Segment
+    equivalents: [Variation Viewed]

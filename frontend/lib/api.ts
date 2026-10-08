@@ -118,7 +118,7 @@ export type CatalogViewProperty = {
   // For array properties, the shared shape its items follow. The shape itself
   // is returned once under CatalogView.shapes, never inlined per event.
   shape: string | null;
-  source: "sample_plan" | "approved_request";
+  source: "sample_plan" | "approved_request" | "system_event";
   request_id: number | null;
   // Requests that asked for this property when the event already carried it.
   also_requested_by: number[];
@@ -129,11 +129,14 @@ export type CatalogViewEvent = {
   category: string;
   description: string;
   properties: CatalogViewProperty[];
-  source: "sample_plan" | "approved_request";
+  source: "sample_plan" | "approved_request" | "system_event";
   request_id: number | null;
   approved_at: string | null;
   // A property addition whose target event is nowhere in the catalog.
   unresolved_target: boolean;
+  // For a system event: the name or call the SDK sends, and which SDK sends it.
+  sent_as: string | null;
+  sent_by: string | null;
 };
 
 export type SharedShape = {
@@ -150,6 +153,7 @@ export type CatalogView = {
     new_events_from_requests: number;
     property_additions_merged: number;
     unresolved_targets: number;
+    system_events: number;
   };
 };
 

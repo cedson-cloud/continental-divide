@@ -59,9 +59,19 @@ def test_composes_both_sources_and_counts_add_up(client, storage):
     counts = body["counts"]
     assert counts["from_sample_plan"] == 28
     assert counts["new_events_from_requests"] == 2
-    assert counts["total"] == counts["from_sample_plan"] + counts["new_events_from_requests"]
+    # The active profile names Segment, whose system events join the dictionary.
+    assert counts["system_events"] == 8
+    assert counts["total"] == (
+        counts["from_sample_plan"]
+        + counts["system_events"]
+        + counts["new_events_from_requests"]
+    )
     assert counts["total"] == len(body["events"])
-    assert {e["source"] for e in body["events"]} == {"sample_plan", "approved_request"}
+    assert {e["source"] for e in body["events"]} == {
+        "sample_plan",
+        "system_event",
+        "approved_request",
+    }
 
 
 def test_an_approved_request_carries_its_source_id_and_approval_time(client, storage):
@@ -229,11 +239,12 @@ def test_counts_across_every_branch(client, storage):
 
     counts = client.get("/catalog").json()["counts"]
     assert counts == {
-        "total": 28 + 2 + 1,
+        "total": 28 + 8 + 2 + 1,
         "from_sample_plan": 28,
         "new_events_from_requests": 2,
         "property_additions_merged": 2,
         "unresolved_targets": 1,
+        "system_events": 8,
     }
 
 

@@ -76,6 +76,9 @@ Each line kills work.
   exists.
 - **No `page` or `screen`.** v1 was `track` only; `identify` and `group` joined
   in [ADR 0003](adr/0003-identify-and-group-join-track.md), which also sets where personal-data traits may go.
+  A platform's own page and screen events are existing events a request can refer to
+  and collide with ([ADR 0009](adr/0009-a-platforms-system-events-are-existing-events.md));
+  they are not call types.
 - **No free-form regex for naming conventions, ever.** This does not extend to the
   PII blocklist. A PII entry is a lowercase token substring-matched against
   property names — no compile step, no injection surface. Free-form PII tokens are
@@ -170,7 +173,7 @@ so it can't return later as a scope violation.
 
 | Item | Reason |
 | :--- | :--- |
-| `page` / `screen` support | Triples the rules surface, zero demo payoff. *`identify` and `group` were revived in [ADR 0003](adr/0003-identify-and-group-join-track.md)* |
+| `page` / `screen` support | Triples the rules surface, zero demo payoff. *`identify` and `group` were revived in [ADR 0003](adr/0003-identify-and-group-join-track.md); a platform's page and screen system events count as existing events ([ADR 0009](adr/0009-a-platforms-system-events-are-existing-events.md))* |
 | ~~Hosting the app anywhere~~ | **Revived in [ADR 0004](adr/0004-a-hosted-single-organization-instance.md)**, which supplies the auth this row was waiting for. Original reason: no auth. Say so in the README instead of half-solving it |
 | Embeddings for duplicate detection | Wrong below roughly 500 events |
 | ~~Screenshot-driven event design~~ | **Revived in a bounded form in [ADR 0007](adr/0007-screenshot-intake-proposes-people-decide.md)**: a capped batch feeding the existing loop, one draft per proposed event. Original reason: unbounded scope, adds an image-input surface, and [batch intake](#deferred-not-killed--starter-plan-generation) gets the same demo beat more cheaply |

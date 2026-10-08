@@ -8,6 +8,7 @@ name: posthog-snake-case
 # That convention will be added as its own option.
 source: https://posthog.com/docs/libraries/python
 extends: segment-ecommerce.yaml
+platform: posthog
 
 event_naming:
   convention: snake_case_object_action

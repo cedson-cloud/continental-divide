@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .models import Decision, Evaluation, EventDefinition, RuleCheck
+from .platforms import SystemEvent, plan_named_events, render_plan_name
 
 if TYPE_CHECKING:
     from .governance import GovernanceProfile
@@ -313,6 +314,26 @@ def near_duplicate_of(name: str, known: Collection[str]) -> str | None:
 
 # --- evaluation ------------------------------------------------------------------
 
+def _system_events(
+    profile: "GovernanceProfile",
+) -> tuple[dict[str, SystemEvent], dict[str, str]]:
+    """The profile's system events keyed by plan name, and each listed equivalent name
+    mapped to the plan name it means, all written in the profile's convention. Empty
+    when the profile names no platform (ADR 0009)."""
+    convention = profile.event_naming.convention
+    by_plan_name = plan_named_events(profile.platform, convention)
+    equivalents = {
+        render_plan_name(name, convention): plan_name
+        for plan_name, event in by_plan_name.items()
+        for name in event.equivalents
+    }
+    return by_plan_name, equivalents
+
+
+def _sent(event: SystemEvent) -> str:
+    return f"sent as {event.sent_as} by {event.sent_by}"
+
+
 def evaluate(
     event: EventDefinition,
     profile: "GovernanceProfile | None" = None,
@@ -437,11 +458,9 @@ def evaluate(
         and existing_event is not None
         and event.name.strip() == existing_event.strip()
     )
-    exact_match = (
-        not hard_failed
-        and not expected_match
-        and event.name in known_event_names()
-    )
+    system_events, system_equivalents = _system_events(profile)
+    corpus = known_event_names() | system_events.keys()
+    exact_match = not hard_failed and not expected_match and event.name in corpus
     # Both duplicate checks are always recorded, whatever they found: silence would
     # look the same as the check not running.
     if hard_failed:
@@ -450,6 +469,11 @@ def evaluate(
         duplicate_detail = (
             f"'{event.name}' matches the event this property is being "
             "added to; expected, not a duplicate"
+        )
+    elif exact_match and event.name in system_events:
+        duplicate_detail = (
+            f"'{event.name}' is a system event, "
+            f"{_sent(system_events[event.name])}"
         )
     elif exact_match:
         duplicate_detail = f"'{event.name}' already exists in the tracking plan"
@@ -460,14 +484,30 @@ def evaluate(
     )
 
     near_match = (
-        near_duplicate_of(event.name, known_event_names())
+        near_duplicate_of(event.name, corpus)
         if not hard_failed and not expected_match and not exact_match
         else None
     )
+    # A listed equivalent differs in words, not spelling, so normalization cannot
+    # find it; the platform file names it instead.
+    checked = not hard_failed and not expected_match and not exact_match
+    if near_match is None and checked:
+        equivalent = (
+            event.name
+            if event.name in system_equivalents
+            else near_duplicate_of(event.name, system_equivalents.keys())
+        )
+        if equivalent is not None:
+            near_match = system_equivalents[equivalent]
     if hard_failed:
         near_detail = "not checked: the definition was rejected before this rule"
     elif expected_match or exact_match:
         near_detail = "not checked: an exact match already answers the question"
+    elif near_match in system_events:
+        near_detail = (
+            f"'{event.name}' means the same as the system event '{near_match}', "
+            f"{_sent(system_events[near_match])}"
+        )
     elif near_match:
         near_detail = (
             f"'{event.name}' is the same name as '{near_match}' written differently"
