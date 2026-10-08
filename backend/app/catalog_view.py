@@ -226,10 +226,14 @@ def build_catalog_view(
     sample = _sample_plan_events(plan)
     system = _system_events(profile)
 
+    # Identify traits and group types join the dictionary in their own sections
+    # (TASKS item 5d); until then only track requests are events here.
     approved = [
         row
         for row in storage.list_requests()  # ordered by id
-        if row["status"] in _APPROVED_STATUSES and row.get("parsed_definition")
+        if row["status"] in _APPROVED_STATUSES
+        and row.get("parsed_definition")
+        and row["parsed_definition"].get("call_type", "track") == "track"
     ]
     additions = [
         row for row in approved if row.get("request_kind") == "new_property_on_existing"

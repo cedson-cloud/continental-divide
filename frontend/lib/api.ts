@@ -9,11 +9,18 @@ export type EventProperty = {
   items: string | null;
 };
 
+export type CallType = "track" | "identify" | "group";
+
+// The shape follows the call type (ADR 0003): a track event has a name, a category and
+// properties; identify has traits only; group names its group type and its traits.
+// call_type and traits are absent on definitions stored before identify and group.
 export type EventDefinition = {
-  name: string;
-  category: string;
+  call_type?: CallType;
+  name: string | null;
+  category: string | null;
   description: string | null;
   properties: EventProperty[];
+  traits?: EventProperty[];
 };
 
 export type ReviewFinding = {
@@ -42,6 +49,7 @@ export type IntakeResult = {
 export type QueueItem = {
   id: number;
   name: string | null;
+  call_type: CallType;
   category: string | null;
   status: string;
   created_at: string;
@@ -55,12 +63,18 @@ export type AuditEntry = {
   created_at: string;
 };
 
+type DocRow = { name: string; type: string; required: boolean };
+
+// A track doc carries a category and properties; an identify or group doc carries
+// its call type and traits instead.
 export type ConfluenceDoc = {
   id: string;
   title: string;
-  category: string;
+  category?: string;
+  call_type?: CallType;
   description: string;
-  properties: { name: string; type: string; required: boolean }[];
+  properties?: DocRow[];
+  traits?: DocRow[];
 };
 
 export type JiraTicket = { key: string; summary: string; body: string };

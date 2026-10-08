@@ -86,7 +86,9 @@ Each line kills work.
 - **No auto-convert, no auto-fix, no auto-amend.** Explain, then confirm.
 - **No multi-tenancy.** One instance serves one organization. Auth and hosting left
   anti-scope in [ADR 0004](adr/0004-a-hosted-single-organization-instance.md): authenticated at the edge, verified in the app. Until a
-  hosted instance exists, the README's localhost-only warning stands.
+  hosted instance exists, the README's localhost-only warning stands. The public demo
+  gives each visitor a separate database ([ADR 0010](adr/0010-a-public-demo-gives-each-visitor-a-private-sandbox.md)):
+  that is isolation, not tenancy.
 - **No embeddings** until a catalog passes roughly 500 events. One model call
   against a catalog this size is correct today.
 - **Not a Notion product.** Notion is one publish target among several, not the
@@ -150,7 +152,7 @@ change · agent-review prose tightening.
 
 Several of these were pulled forward for the first hosted instance — the live eval
 tier, batch intake, profile history, and re-vetting on rule change. Their order and
-status live in [TASKS → Next phase](../TASKS.md#next-phase-first-hosted-instance).
+status live in [TASKS → Parked: first hosted instance](../TASKS.md#parked-first-hosted-instance).
 
 ### Deferred, not killed — starter plan generation
 

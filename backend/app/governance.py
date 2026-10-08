@@ -17,6 +17,7 @@ from typing import Literal, Optional
 import yaml
 from pydantic import BaseModel, ConfigDict, ValidationError
 
+from .models import CallType
 from .platforms import PlatformError, load_platform
 from .rules import _CONNECTORS, _IRREGULAR_PAST, _PARTICLES, _PII_BLOCKLIST
 
@@ -69,6 +70,9 @@ class GovernanceProfile(BaseModel):
     # The platform file whose system events join the corpus (ADR 0009). None = no
     # system events.
     platform: Optional[str] = None
+    # The call types intake accepts (ADR 0003). A profile drops group when the
+    # analytics tool's group add-on is absent.
+    call_types: list[CallType] = ["track", "identify", "group"]
 
 
 DEFAULT_PROFILE = GovernanceProfile(
