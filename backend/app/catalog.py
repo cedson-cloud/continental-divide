@@ -24,6 +24,7 @@ from .config import get_settings
 from .interpreter import _strip_fences
 from .models import EventDefinition
 from .rules import load_plan
+from .spend import SpendCapReached, get_meter
 
 # Asserted on by tests and rendered verbatim into the system prompt: the model must
 # know that finding nothing is the normal outcome, not a failure to perform.
@@ -263,6 +264,13 @@ def review_against_catalog(
         # is the best available target.
         existing_event = definition.name
 
+    meter = get_meter()
+    if meter is not None:
+        try:
+            meter.check()
+        except SpendCapReached as exc:
+            raise DuplicateReviewError(model, str(exc)) from exc
+
     api_key = settings.anthropic_api_key or os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
         raise DuplicateReviewError(model, "no ANTHROPIC_API_KEY configured")
@@ -285,6 +293,8 @@ def review_against_catalog(
         raise DuplicateReviewError(
             model, f"model request failed ({type(exc).__name__})"
         ) from exc
+    if meter is not None:
+        meter.record_response(model, response)
 
     text = "".join(
         block.text for block in response.content if getattr(block, "type", None) == "text"

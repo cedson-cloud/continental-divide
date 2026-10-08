@@ -13,30 +13,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.config import get_settings
-from app.storage import get_storage, workspace_storage
+from app.storage import workspace_storage
 from app.workspace import COOKIE_NAME, sign_workspace
 
 CLEAN_EXAMPLE = Path(__file__).parents[1] / "examples" / "clean_cart_cleared.json"
-SECRET = "test-only-signing-key-" + "x" * 32
-
-
-@pytest.fixture
-def demo_env(tmp_path, monkeypatch):
-    monkeypatch.setenv("AUTH_MODE", "demo")
-    monkeypatch.setenv("DEMO_COOKIE_SECRET", SECRET)
-    monkeypatch.setenv("DEMO_COOKIE_SECURE", "false")
-    monkeypatch.setenv("SANDBOX_DIR", str(tmp_path / "sandboxes"))
-    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "shared.db"))
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "")
-    monkeypatch.setenv("NOTION_TOKEN", "")
-    monkeypatch.setenv("NOTION_APPROVAL_DB_ID", "")
-    get_settings.cache_clear()
-    get_storage.cache_clear()
-    workspace_storage.cache_clear()
-    yield tmp_path
-    get_settings.cache_clear()
-    get_storage.cache_clear()
-    workspace_storage.cache_clear()
 
 
 def _visitor() -> TestClient:

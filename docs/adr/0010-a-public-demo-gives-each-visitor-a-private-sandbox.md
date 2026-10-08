@@ -20,7 +20,9 @@ behalf of people nobody has verified, so the controls below are what make it saf
   reach another visitor's rows, because they live in another file.
 - **The visitor holds every role.** Every approval is a self-approval and is marked as one
   (ADR 0004). Every audit entry records the actor as an anonymous demo visitor, unverified.
-- **Five model-drafted requests per workspace.** The model-free screens are not counted.
+- **Five requests per workspace, however they are created** — drafted, raw, renamed or
+  converted. Drafts, renames and conversions call the model; the raw path does not, but
+  counting it bounds the size of the file. Viewing, deciding and exporting are not counted.
 - **A CSV export** of the workspace's plan, so a visitor leaves with something.
 - **A workspace is discarded 7 days after its last use.**
 
@@ -33,8 +35,8 @@ and its history are discarded after 7 days. Those are the demo's terms. On a rea
 
 ## Spend
 
-- **Per workspace:** five drafts. Clearing cookies gets a new workspace, so this is a courtesy
-  limit, not the spend control.
+- **Per workspace:** five requests. Clearing cookies gets a new workspace, so this is a
+  courtesy limit, not the spend control.
 - **Per instance:** a daily model-spend cap, counted on the server from token usage. At the cap,
   drafting stops with a plain message and an audit entry, the semantic review fails advisory
   (ADR 0004's rule that an advisory call never blocks intake), and the model-free path and every

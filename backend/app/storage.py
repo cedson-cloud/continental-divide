@@ -20,11 +20,9 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Collection, Optional
 
-from .config import get_settings
+from .config import get_settings, repo_path
 from .identity import Identity
 from .workspace import is_workspace_id
-
-_REPO_ROOT = Path(__file__).resolve().parents[2]
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS event_request (
@@ -103,6 +101,14 @@ def _ensure_columns(conn: sqlite3.Connection) -> None:
 
 class UnattributedAuditEntry(Exception):
     """An audit entry was written with no actor bound to the storage."""
+
+
+class RequestQuotaReached(Exception):
+    """A demo sandbox already holds as many requests as it is allowed (docs/adr/0010)."""
+
+    def __init__(self, limit: int) -> None:
+        super().__init__(f"this sandbox has used all {limit} requests the demo allows")
+        self.limit = limit
 
 
 class Storage(ABC):
@@ -190,8 +196,9 @@ class Storage(ABC):
 
 
 class SqliteStorage(Storage):
-    def __init__(self, db_path: Path) -> None:
+    def __init__(self, db_path: Path, max_requests: Optional[int] = None) -> None:
         self.db_path = db_path
+        self.max_requests = max_requests
         self._actor: Optional[Identity] = None
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
@@ -230,6 +237,8 @@ class SqliteStorage(Storage):
         existing_event: Optional[str] = None,
         destinations: Optional[list] = None,
     ) -> int:
+        # One statement, so the count and the insert cannot be split by a second
+        # request arriving at the same moment.
         with self._connect() as conn:
             cursor = conn.execute(
                 "INSERT INTO event_request "
@@ -237,7 +246,8 @@ class SqliteStorage(Storage):
                 "submitter_name, submitter_team, call_type, side, "
                 "business_value, urgent, urgency_reason, needed_by, "
                 "request_kind, existing_event, destinations) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? "
+                "WHERE ? IS NULL OR (SELECT COUNT(*) FROM event_request) < ?",
                 (
                     raw_intake_text,
                     json.dumps(parsed_definition) if parsed_definition else None,
@@ -254,8 +264,12 @@ class SqliteStorage(Storage):
                     request_kind,
                     existing_event,
                     json.dumps(destinations) if destinations else None,
+                    self.max_requests,
+                    self.max_requests,
                 ),
             )
+            if cursor.rowcount == 0:
+                raise RequestQuotaReached(self.max_requests)
             return int(cursor.lastrowid)
 
     def get_request(self, request_id: int) -> Optional[dict]:
@@ -400,13 +414,8 @@ class SqliteStorage(Storage):
         return data
 
 
-def _resolve_repo_path(raw: str) -> Path:
-    path = Path(raw)
-    return path if path.is_absolute() else _REPO_ROOT / path
-
-
 def _resolve_db_path() -> Path:
-    return _resolve_repo_path(get_settings().database_path)
+    return repo_path(get_settings().database_path)
 
 
 @lru_cache
@@ -420,8 +429,11 @@ def workspace_storage(workspace_id: str) -> Storage:
     Discarding a sandbox removes the file; nothing ever deletes audit rows."""
     if not is_workspace_id(workspace_id):
         raise ValueError("a workspace id is 32 lowercase hex characters")
-    sandbox_dir = _resolve_repo_path(get_settings().sandbox_dir)
-    return SqliteStorage(sandbox_dir / f"{workspace_id}.db")
+    settings = get_settings()
+    return SqliteStorage(
+        repo_path(settings.sandbox_dir) / f"{workspace_id}.db",
+        max_requests=settings.demo_requests_per_visitor,
+    )
 
 
 def reset_storage() -> Storage:
