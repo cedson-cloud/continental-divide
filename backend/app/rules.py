@@ -263,6 +263,19 @@ def pii_hit(
     return None
 
 
+def pii_hits(
+    event: EventDefinition, profile: "GovernanceProfile"
+) -> dict[str, str]:
+    """Each property that matches the profile's PII blocklist, mapped to the entry it
+    matched. Every one needs a written reason from the requester (ADR 0003)."""
+    blocklist = profile.pii.blocklist
+    return {
+        p.name: entry
+        for p in event.properties
+        if (entry := pii_hit(p.name, blocklist=blocklist))
+    }
+
+
 # --- duplicates --------------------------------------------------------------------
 
 # Rules that report a condition without rejecting. A human decides what to do about
@@ -426,14 +439,9 @@ def evaluate(
         )
     )
 
-    blocklist = profile.pii.blocklist
-    pii_hits = [
-        f"{p.name} -> {pii_hit(p.name, blocklist=blocklist)}"
-        for p in event.properties
-        if pii_hit(p.name, blocklist=blocklist)
-    ]
-    pii_flagged = bool(pii_hits)
-    pii_details = "; ".join(pii_hits)
+    hits = pii_hits(event, profile)
+    pii_flagged = bool(hits)
+    pii_details = "; ".join(f"{name} -> {entry}" for name, entry in hits.items())
     checks.append(
         RuleCheck(
             rule="pii",
@@ -441,7 +449,10 @@ def evaluate(
             detail=(
                 "no PII tokens in property names"
                 if not pii_flagged
-                else f"flagged (acknowledgment required to approve): {pii_details}"
+                else (
+                    "flagged (the requester gives a written reason for each, and the "
+                    f"approver acknowledges): {pii_details}"
+                )
             ),
         )
     )
@@ -543,4 +554,5 @@ def evaluate(
         flags=flags,
         pii_flagged=pii_flagged,
         pii_details=pii_details,
+        pii_hits=hits,
     )

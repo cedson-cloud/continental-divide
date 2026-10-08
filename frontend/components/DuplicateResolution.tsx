@@ -10,14 +10,19 @@ import { ReviewFinding, SubmitResolution } from "@/lib/api";
 // With no findings the panel still appears — the engine's near-duplicate rule gates
 // submission on its own. That case has no finding to agree with, so the withdraw
 // door is absent and only the other two are offered.
+//
+// submitBlocked holds both submit doors shut while something else the server
+// requires is unanswered (a PII reason); withdrawing needs nothing and stays open.
 export function DuplicateResolution({
   findings,
   busy,
+  submitBlocked = false,
   onWithdraw,
   onSubmit,
 }: {
   findings: ReviewFinding[];
   busy: boolean;
+  submitBlocked?: boolean;
   onWithdraw: (existingEvent: string) => void;
   onSubmit: (resolution: SubmitResolution) => void;
 }) {
@@ -40,7 +45,7 @@ export function DuplicateResolution({
         <button
           className="btn"
           onClick={() => onSubmit({ duplicateUnsure: true })}
-          disabled={busy}
+          disabled={busy || submitBlocked}
         >
           I&apos;m not sure — ask the approver
         </button>
@@ -62,7 +67,7 @@ export function DuplicateResolution({
         <button
           className="btn btn-primary"
           onClick={() => onSubmit({ duplicateNote: note })}
-          disabled={busy || note.trim().length === 0}
+          disabled={busy || submitBlocked || note.trim().length === 0}
         >
           Submit request
         </button>

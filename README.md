@@ -30,7 +30,8 @@ flows. This tool is the line a tracking request has to cross, and it decides wha
 3. **Confirm:** the requester sees what was drafted and what the tool found before anyone
    else does. If it looks like something that already exists, they can take the existing
    event instead, pass the question to the approver, or say in writing why it won't work
-   for them. Nothing enters the approval queue until they say so.
+   for them. Every property flagged as personal data needs a written reason. Nothing
+   enters the approval queue until they say so.
 4. **Approve:** the request routes to a human, who must acknowledge any duplicate or PII
    flag by name before approving.
 5. **Publish:** on approval, the tool publishes the event documentation and opens a
@@ -121,10 +122,10 @@ depending on what the model writes.
   it publishes a mock Confluence doc and Jira ticket. The happy path, end to end.
 - **Natural language, PII:** "track when someone subscribes to our newsletter and
   capture their email address". The model faithfully proposes an `email` property, and the
-  PII rule flags it. It is *not* auto-rejected: the request routes to approval, and the
-  approver cannot approve it without acknowledging the PII on the record. The point: the
-  model drafts what was asked for, the rules govern, and a human puts their name on the
-  exception.
+  PII rule flags it. It is *not* auto-rejected. The requester cannot submit it without
+  writing why the request needs the email address, and the approver cannot approve it
+  without acknowledging that reason on the record. The point: the model drafts what was
+  asked for, the rules govern, and two people put their names on the exception.
 - **Raw naming violation:** a pre-built `add_to_cart` definition. The naming rule
   rejects it for not being Object Action, Title Case. A well-behaved model won't author a
   malformed name from plain English, so this path skips the model to exercise the rule.

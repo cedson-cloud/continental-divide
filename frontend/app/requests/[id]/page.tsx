@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import {
   RequestDetail,
   ReviewFinding,
@@ -23,7 +23,13 @@ import { DefinitionView } from "@/components/DefinitionView";
 import { AgentReview } from "@/components/AgentReview";
 import { DuplicateResolution } from "@/components/DuplicateResolution";
 import { EngineDuplicates } from "@/components/EngineDuplicates";
-import { gatingDuplicateFindings, submissionNeedsAnswer } from "@/lib/gating";
+import {
+  gatingDuplicateFindings,
+  missingPiiReasons,
+  piiReasonsToSend,
+  submissionNeedsAnswer,
+} from "@/lib/gating";
+import { PiiReasons } from "@/components/PiiReasons";
 import { PublishCards } from "@/components/PublishCards";
 import { RejectedRecourse } from "@/components/RejectedRecourse";
 import { RuleChecks } from "@/components/RuleChecks";
@@ -74,6 +80,7 @@ export default function RequestDetailPage({ params }: { params: { id: string } }
   const [note, setNote] = useState("");
   const [approverName, setApproverName] = useState("");
   const [piiAcknowledged, setPiiAcknowledged] = useState(false);
+  const [piiReasons, setPiiReasons] = useState<Record<string, string>>({});
   const [findingsAcknowledged, setFindingsAcknowledged] = useState(false);
   const [deciding, setDeciding] = useState(false);
   const [decisionError, setDecisionError] = useState<string | null>(null);
@@ -164,7 +171,10 @@ export default function RequestDetailPage({ params }: { params: { id: string } }
     setSubmitting(true);
     setSubmitError(null);
     try {
-      await submitRequest(id, resolution);
+      await submitRequest(id, {
+        ...resolution,
+        piiReasons: piiReasonsToSend(detail?.pii_hits ?? {}, piiReasons),
+      });
       load();
     } catch (err) {
       setSubmitError(friendlyError(err));
@@ -407,10 +417,17 @@ export default function RequestDetailPage({ params }: { params: { id: string } }
             This draft has not been submitted. It enters the approval queue when you
             submit it.
           </p>
+          <PiiReasons
+            hits={detail.pii_hits}
+            value={piiReasons}
+            onChange={setPiiReasons}
+            disabled={submitting || convertingEvent !== null}
+          />
           {submissionNeedsAnswer(findings, evaluation.checks) ? (
             <DuplicateResolution
               findings={duplicateFindings}
               busy={submitting || convertingEvent !== null}
+              submitBlocked={missingPiiReasons(detail.pii_hits, piiReasons).length > 0}
               onWithdraw={withdraw}
               onSubmit={submitDraft}
             />
@@ -419,7 +436,11 @@ export default function RequestDetailPage({ params }: { params: { id: string } }
               <button
                 className="btn btn-primary"
                 onClick={() => submitDraft()}
-                disabled={submitting || convertingEvent !== null}
+                disabled={
+                  submitting ||
+                  convertingEvent !== null ||
+                  missingPiiReasons(detail.pii_hits, piiReasons).length > 0
+                }
               >
                 {submitting ? "Submitting…" : "Submit request"}
               </button>
@@ -447,6 +468,21 @@ export default function RequestDetailPage({ params }: { params: { id: string } }
             onChange={(e) => setNote(e.target.value)}
             disabled={deciding}
           />
+          {detail.pii_flagged && Object.keys(detail.pii_hits).length > 0 && (
+            <dl className="kv mt-12">
+              {Object.entries(detail.pii_hits).map(([name, entry]) => (
+                <Fragment key={name}>
+                  <dt>
+                    {name} ({entry})
+                  </dt>
+                  <dd>
+                    {detail.pii_reasons[name] ||
+                      "No reason recorded: submitted before reasons were required."}
+                  </dd>
+                </Fragment>
+              ))}
+            </dl>
+          )}
           {detail.pii_flagged && (
             <label className="row mt-12" style={{ gap: 8, fontSize: 14 }}>
               <input

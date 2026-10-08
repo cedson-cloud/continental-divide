@@ -110,7 +110,7 @@ def test_pii_intake_is_flagged_and_gated_on_acknowledgment(storage):
     assert request["pii_flagged"] is True
     assert request["pii_details"] == "email -> email"
 
-    submit_request(rid, storage)
+    submit_request(rid, storage, pii_reasons={"email": "to send the newsletter"})
     assert storage.get_request(rid)["status"] == "pending_approval"
 
     with pytest.raises(PiiAcknowledgmentRequired):

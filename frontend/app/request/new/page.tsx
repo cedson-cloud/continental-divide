@@ -21,7 +21,9 @@ import {
   toIntakePayload,
   wizardReducer,
 } from "@/lib/wizard";
+import { missingPiiReasons, piiReasonsToSend } from "@/lib/gating";
 import { EventPicker } from "@/components/EventPicker";
+import { PiiReasons } from "@/components/PiiReasons";
 import { RejectedRecourse } from "@/components/RejectedRecourse";
 import { StepExists } from "@/components/wizard/StepExists";
 import { StepReview } from "@/components/wizard/StepReview";
@@ -59,6 +61,7 @@ export default function GuidedRequestPage() {
   const [allowedDestinations, setAllowedDestinations] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [piiReasons, setPiiReasons] = useState<Record<string, string>>({});
   // Synchronous guard: two clicks in the same frame both render with
   // busy=false, so the disabled prop alone cannot stop the second one.
   const inFlight = useRef(false);
@@ -90,7 +93,10 @@ export default function GuidedRequestPage() {
     setBusy(true);
     setActionError(null);
     try {
-      await submitRequest(state.detail.id, resolution);
+      await submitRequest(state.detail.id, {
+        ...resolution,
+        piiReasons: piiReasonsToSend(state.detail.pii_hits, piiReasons),
+      });
       setPhase({ name: "submitted" });
     } catch (err) {
       setActionError(friendlyError(err));
@@ -247,6 +253,16 @@ export default function GuidedRequestPage() {
 
   const detail = state.detail;
   const rejected = detail != null && detail.status !== "draft";
+  const piiHits = detail?.pii_hits ?? {};
+  const piiBlocked = missingPiiReasons(piiHits, piiReasons).length > 0;
+  const piiPanel = (
+    <PiiReasons
+      hits={piiHits}
+      value={piiReasons}
+      onChange={setPiiReasons}
+      disabled={busy}
+    />
+  );
 
   return (
     <main className="container">
@@ -432,6 +448,8 @@ export default function GuidedRequestPage() {
                   ?.detail?.flags as string[]) || [])
               }
               busy={busy}
+              piiPanel={piiPanel}
+              submitBlocked={piiBlocked}
               onWithdraw={withdraw}
               onSubmit={submit}
               onNext={() => dispatch({ type: "NEXT" })}
@@ -468,6 +486,8 @@ export default function GuidedRequestPage() {
             detail={detail}
             state={state}
             busy={busy}
+            piiPanel={piiPanel}
+            submitBlocked={piiBlocked}
             onSubmit={() => submit()}
           />
         )}

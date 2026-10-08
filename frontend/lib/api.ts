@@ -99,6 +99,11 @@ export type RequestDetail = {
   // names the engine itself accepts. Empty when the request was not name-rejected,
   // or when no purely structural repair of the name passes.
   name_suggestions: string[];
+  // Each property the PII rule flagged, mapped to the blocklist entry it matched, and
+  // the requester's written reason for each (ADR 0003). Requests submitted before
+  // reasons were required have hits and no reasons.
+  pii_hits: Record<string, string>;
+  pii_reasons: Record<string, string>;
 };
 
 export type Dispute = {
@@ -284,6 +289,7 @@ export function getRequest(id: number): Promise<RequestDetail> {
 export type SubmitResolution = {
   duplicateNote?: string;
   duplicateUnsure?: boolean;
+  piiReasons?: Record<string, string>;
 };
 
 export function submitRequest(
@@ -295,6 +301,7 @@ export function submitRequest(
     body: JSON.stringify({
       duplicate_note: resolution.duplicateNote || null,
       duplicate_unsure: resolution.duplicateUnsure ?? false,
+      pii_reasons: resolution.piiReasons ?? {},
     }),
   });
 }

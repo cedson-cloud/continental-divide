@@ -34,6 +34,7 @@ from .pipeline import (
     InvalidTransition,
     NoMatchingFinding,
     PiiAcknowledgmentRequired,
+    PiiReasonRequired,
     PublishFailed,
     RequestNotFound,
     convert_to_property_request,
@@ -41,6 +42,7 @@ from .pipeline import (
     ingest_raw_definition,
     interpret_intake,
     publish_approved,
+    recorded_pii_hits,
     submit_request,
     withdraw_request,
 )
@@ -140,6 +142,9 @@ class RawIntakeBody(BaseModel):
     request_kind: RequestKind = "new_event"
     existing_event: Optional[str] = None
     destinations: list[str] = Field(default_factory=list)
+    # No requester step follows this path, so each PII hit's written reason comes
+    # with the definition, keyed by property name (ADR 0003).
+    pii_reasons: dict[str, str] = Field(default_factory=dict)
 
     _needed_by_iso = field_validator("needed_by")(_validate_needed_by)
     _urgency = model_validator(mode="after")(_validate_urgency)
@@ -148,6 +153,8 @@ class RawIntakeBody(BaseModel):
 class SubmitBody(BaseModel):
     duplicate_note: Optional[str] = None
     duplicate_unsure: bool = False
+    # Keyed by property name; one per PII hit (ADR 0003).
+    pii_reasons: dict[str, str] = Field(default_factory=dict)
 
 
 class ConvertBody(BaseModel):
@@ -325,23 +332,27 @@ def create_request_raw(
     )
     profile = _active_profile()
     _validate_destinations(body.destinations, profile)
-    request_id = ingest_raw_definition(
-        raw_intake_text,
-        body.definition,
-        storage,
-        submitter_name=body.submitter_name,
-        submitter_team=body.submitter_team,
-        call_type=body.call_type,
-        side=body.side,
-        business_value=body.business_value,
-        urgent=body.urgent,
-        urgency_reason=body.urgency_reason,
-        needed_by=body.needed_by,
-        request_kind=body.request_kind,
-        existing_event=body.existing_event,
-        destinations=body.destinations,
-        profile=profile,
-    )
+    try:
+        request_id = ingest_raw_definition(
+            raw_intake_text,
+            body.definition,
+            storage,
+            submitter_name=body.submitter_name,
+            submitter_team=body.submitter_team,
+            call_type=body.call_type,
+            side=body.side,
+            business_value=body.business_value,
+            urgent=body.urgent,
+            urgency_reason=body.urgency_reason,
+            needed_by=body.needed_by,
+            request_kind=body.request_kind,
+            existing_event=body.existing_event,
+            destinations=body.destinations,
+            profile=profile,
+            pii_reasons=body.pii_reasons,
+        )
+    except PiiReasonRequired as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
     return _intake_response(storage, request_id)
 
 
@@ -414,6 +425,9 @@ def get_request(request_id: int, storage: Storage = Depends(acting_storage)) -> 
     # computed by the same function POST /rename validates against, so what the UI
     # offers and what the endpoint accepts cannot drift.
     request["name_suggestions"] = name_suggestions(request, storage)
+    # The fields each reason answers for, beside the reasons themselves.
+    request["pii_hits"] = recorded_pii_hits(request, storage)
+    request["pii_reasons"] = request.get("pii_reasons") or {}
     return request
 
 
@@ -429,12 +443,13 @@ def submit_request_route(
             storage,
             duplicate_note=body.duplicate_note if body else None,
             duplicate_unsure=body.duplicate_unsure if body else False,
+            pii_reasons=body.pii_reasons if body else None,
         )
     except RequestNotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     except InvalidTransition as exc:
         raise HTTPException(status_code=409, detail=str(exc))
-    except DuplicateNoteRequired as exc:
+    except (DuplicateNoteRequired, PiiReasonRequired) as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
     saved = storage.get_request(request_id)
