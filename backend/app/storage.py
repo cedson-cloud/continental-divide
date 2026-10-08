@@ -16,13 +16,13 @@ import copy
 import json
 import sqlite3
 from abc import ABC, abstractmethod
-from dataclasses import asdict
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Collection, Optional
 
 from .config import get_settings
 from .identity import Identity
+from .workspace import is_workspace_id
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -352,7 +352,11 @@ class SqliteStorage(Storage):
             )
         if detail and "actor" in detail:
             raise ValueError(f"'{step}' detail may not set its own actor")
-        detail = {**(detail or {}), "actor": asdict(self._actor)}
+        actor = self._actor
+        detail = {
+            **(detail or {}),
+            "actor": {"email": actor.email, "method": actor.method, "verified": actor.verified},
+        }
         with self._connect() as conn:
             cursor = conn.execute(
                 "INSERT INTO audit_log (request_id, step, detail) VALUES (?, ?, ?)",
@@ -396,15 +400,28 @@ class SqliteStorage(Storage):
         return data
 
 
-def _resolve_db_path() -> Path:
-    raw = get_settings().database_path
+def _resolve_repo_path(raw: str) -> Path:
     path = Path(raw)
     return path if path.is_absolute() else _REPO_ROOT / path
+
+
+def _resolve_db_path() -> Path:
+    return _resolve_repo_path(get_settings().database_path)
 
 
 @lru_cache
 def get_storage() -> Storage:
     return SqliteStorage(_resolve_db_path())
+
+
+@lru_cache(maxsize=256)
+def workspace_storage(workspace_id: str) -> Storage:
+    """A demo visitor's sandbox: a SQLite file of its own under SANDBOX_DIR (docs/adr/0010).
+    Discarding a sandbox removes the file; nothing ever deletes audit rows."""
+    if not is_workspace_id(workspace_id):
+        raise ValueError("a workspace id is 32 lowercase hex characters")
+    sandbox_dir = _resolve_repo_path(get_settings().sandbox_dir)
+    return SqliteStorage(sandbox_dir / f"{workspace_id}.db")
 
 
 def reset_storage() -> Storage:

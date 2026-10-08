@@ -73,13 +73,18 @@ def _unauthenticated(monkeypatch) -> None:
     get_settings.cache_clear()
 
 
+# /session is how a demo visitor gets an identity, so it cannot require one. Outside demo
+# mode it answers 404 and sets nothing; see the assertion below and docs/adr/0010.
+_OPEN_ROUTES = {"/health", "/session"}
+
+
 def _app_routes():
     """Every route the app documents, wherever it is mounted, so a route added later
     without the identity check fails here."""
     from app.main import app
 
     for path, operations in app.openapi()["paths"].items():
-        if path != "/health":
+        if path not in _OPEN_ROUTES:
             for method in operations:
                 yield method.upper(), path.replace("{request_id}", "1")
 
@@ -96,6 +101,9 @@ def test_with_auth_unset_every_route_but_health_is_a_401_and_writes_nothing(
         assert response.status_code == 401, (method, path, response.status_code)
 
     assert client.get("/health").status_code == 200
+    session = client.post("/session")
+    assert session.status_code == 404
+    assert "set-cookie" not in session.headers
     assert storage.list_requests() == []
 
 

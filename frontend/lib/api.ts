@@ -204,16 +204,26 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  let res: Response;
+async function send(path: string, init?: RequestInit): Promise<Response> {
   try {
-    res = await fetch(`${BASE}${path}`, {
+    return await fetch(`${BASE}${path}`, {
       ...init,
       headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
       cache: "no-store",
+      credentials: "include",
     });
   } catch {
     throw new ApiError(0, "cannot reach the API server");
+  }
+}
+
+// On the public demo a first visit has no sandbox yet (docs/adr/0010): start one and
+// retry once. Elsewhere /session is a 404 and the original 401 stands.
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  let res = await send(path, init);
+  if (res.status === 401) {
+    const session = await send("/session", { method: "POST" });
+    if (session.ok) res = await send(path, init);
   }
   const text = await res.text();
   const data = text ? JSON.parse(text) : null;

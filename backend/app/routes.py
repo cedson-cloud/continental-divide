@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from .catalog import catalog_entries
@@ -59,7 +59,14 @@ from .recourse import (
     rename_and_resubmit,
 )
 from .rules import effective_categories, event_name_error
-from .storage import Storage, get_storage
+from .storage import Storage, get_storage, workspace_storage
+from .workspace import (
+    COOKIE_NAME,
+    MIN_SECRET_LENGTH,
+    new_workspace_id,
+    sign_workspace,
+    workspace_from_headers,
+)
 
 
 def current_identity(request: Request) -> Identity:
@@ -72,10 +79,37 @@ def current_identity(request: Request) -> Identity:
 
 
 def acting_storage(identity: Identity = Depends(current_identity)) -> Storage:
+    if identity.workspace is not None:
+        return workspace_storage(identity.workspace).acting_as(identity)
     return get_storage().acting_as(identity)
 
 
 router = APIRouter(dependencies=[Depends(current_identity)])
+# The one route a demo visitor reaches before they have an identity.
+session_router = APIRouter()
+
+_SANDBOX_MAX_AGE_SECONDS = 7 * 24 * 60 * 60
+
+
+@session_router.post("/session")
+def start_session(request: Request, response: Response) -> dict:
+    """Give a demo visitor a private sandbox, or keep the one they have (docs/adr/0010)."""
+    settings = get_settings()
+    if settings.auth_mode != "demo":
+        raise HTTPException(status_code=404, detail="Not Found")
+    secret = settings.demo_cookie_secret
+    if len(secret) < MIN_SECRET_LENGTH:
+        raise HTTPException(status_code=503, detail="the demo is not configured")
+    if workspace_from_headers(request.headers, secret) is None:
+        response.set_cookie(
+            COOKIE_NAME,
+            sign_workspace(new_workspace_id(), secret),
+            max_age=_SANDBOX_MAX_AGE_SECONDS,
+            httponly=True,
+            secure=settings.demo_cookie_secure,
+            samesite="lax",
+        )
+    return {"status": "ok"}
 
 _settings = get_settings()
 _limiter = RateLimiter(_settings.rate_limit_max, _settings.rate_limit_window_seconds)
