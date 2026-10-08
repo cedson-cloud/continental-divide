@@ -21,10 +21,15 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from .governance import GovernanceProfile
+from .platforms import plan_named_events
 from .rules import load_plan
 from .storage import Storage
 
-EventSource = Literal["sample_plan", "approved_request"]
+EventSource = Literal["sample_plan", "approved_request", "system_event"]
+
+# System events belong to no plan category; the dictionary groups them on their own.
+SYSTEM_EVENTS_CATEGORY = "System events"
 
 # Statuses that mean a human said yes. `approved` is the moment of decision;
 # `published` is the same request after the publisher ran.
@@ -67,6 +72,9 @@ class CatalogViewEvent(BaseModel):
     # surfaced rather than dropped: an orphaned property request is a governance
     # fact worth seeing.
     unresolved_target: bool = False
+    # For a system event: the name or call the SDK sends, and which SDK sends it.
+    sent_as: Optional[str] = None
+    sent_by: Optional[str] = None
 
 
 class CatalogCounts(BaseModel):
@@ -75,6 +83,7 @@ class CatalogCounts(BaseModel):
     new_events_from_requests: int
     property_additions_merged: int
     unresolved_targets: int
+    system_events: int
 
 
 class CatalogView(BaseModel):
@@ -113,6 +122,24 @@ def _sample_plan_events(plan: dict) -> list[CatalogViewEvent]:
         )
         for category, events in plan["categories"].items()
         for event in events
+    ]
+
+
+def _system_events(profile: Optional[GovernanceProfile]) -> list[CatalogViewEvent]:
+    if profile is None:
+        return []
+    named = plan_named_events(profile.platform, profile.event_naming.convention)
+    return [
+        CatalogViewEvent(
+            name=name,
+            category=SYSTEM_EVENTS_CATEGORY,
+            description=event.records[:1].upper() + event.records[1:],
+            properties=[],
+            source="system_event",
+            sent_as=event.sent_as,
+            sent_by=event.sent_by,
+        )
+        for name, event in named.items()
     ]
 
 
@@ -187,13 +214,17 @@ def _shared_shapes(plan: dict, events: list[CatalogViewEvent]) -> dict[str, Shar
     return shapes
 
 
-def build_catalog_view(storage: Storage) -> CatalogView:
+def build_catalog_view(
+    storage: Storage, profile: Optional[GovernanceProfile] = None
+) -> CatalogView:
     """Compose the dictionary. new_event requests become entries — including on a
     name collision, where both entries are returned. Property additions merge
     into their target instead (or surface as unresolved when it does not exist),
-    in request-id order, so a reader sees the event accumulate over time."""
+    in request-id order, so a reader sees the event accumulate over time. The
+    profile's platform adds its system events, which take property additions too."""
     plan = load_plan()
     sample = _sample_plan_events(plan)
+    system = _system_events(profile)
 
     approved = [
         row
@@ -209,9 +240,9 @@ def build_catalog_view(storage: Storage) -> CatalogView:
         if row.get("request_kind") != "new_property_on_existing"
     ]
 
-    events = sample + new_events
+    events = sample + system + new_events
     # On a name collision the earliest entry is the merge target — the sample
-    # plan before any rival approved definition.
+    # plan, then a system event, before any rival approved definition.
     by_name: dict[str, CatalogViewEvent] = {}
     for event in events:
         by_name.setdefault(event.name, event)
@@ -239,5 +270,6 @@ def build_catalog_view(storage: Storage) -> CatalogView:
             new_events_from_requests=len(new_events),
             property_additions_merged=merged,
             unresolved_targets=len(unresolved),
+            system_events=len(system),
         ),
     )

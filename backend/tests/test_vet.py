@@ -317,6 +317,8 @@ def test_empty_plan():
         "exact_duplicates": [],
         "near_duplicates": [],
         "system_events": [],
+        "system_event_duplicates": [],
+        "system_events_listed_twice": [],
         "category_notes": {
             "declared_categories": [],
             "single_event_categories": [],

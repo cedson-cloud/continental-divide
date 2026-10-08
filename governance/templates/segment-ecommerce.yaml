@@ -4,6 +4,8 @@
 version: 1
 name: segment-ecommerce
 source: https://www.twilio.com/docs/segment/protocols/tracking-plan/best-practices
+# System events the SDK sends on its own join the corpus (ADR 0009): platforms/segment.yaml.
+platform: segment
 
 event_naming:
   convention: title_case_object_action

@@ -268,7 +268,7 @@ def get_catalog(storage: Storage = Depends(acting_storage)) -> CatalogView:
     """The data dictionary: sample-plan events plus approved requests, each marked
     with its source. Read-only — no writes, no model call, no Notion. This view is
     NOT what the duplicate review reads; that stays catalog_entries() by design."""
-    return build_catalog_view(storage)
+    return build_catalog_view(storage, _active_profile())
 
 
 @router.post("/requests", response_model=IntakeResponse)

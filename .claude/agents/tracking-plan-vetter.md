@@ -51,9 +51,10 @@ leave this machine — everything runs locally through the vetting CLI.
    `checks` (`structure`, `event_naming`, `property_naming`, `pii`, each with the
    engine's exact reason), `notes`, a `verdict` of pass/flag/fail/system, and
    `plan_checks` (`exact_duplicates`, `near_duplicates`, `system_events`,
-   `category_notes`). Never judge a name by
-   eye, never restate a rule from memory, never soften or override a verdict. If the
-   command fails, report the failure plainly and stop — do not fall back to guessing.
+   `system_event_duplicates`, `system_events_listed_twice`, `category_notes`).
+   Never judge a name by eye, never restate a rule from memory, never soften or
+   override a verdict. If the command fails, report the failure plainly and stop —
+   do not fall back to guessing.
 
 ## Output
 
@@ -70,10 +71,13 @@ b. **Malformed records first** — every event failing the `structure` check, by
    convention problems; keep them visually separate so a reader cannot confuse the
    two.
 
-c. **System events** — every name in `plan_checks.system_events`. These are an
-   analytics tool's own events, marked by a `$` prefix; the plan's conventions do not
-   apply to them. List them on their own, never as convention failures, and never
-   suggest renaming one.
+c. **System events** — every name in `plan_checks.system_events`. These are events
+   the analytics SDK sends on its own; the plan's conventions do not apply to them.
+   List them on their own, never as convention failures, and never suggest renaming
+   one. Quote each one's engine note: it gives the plan name to show a `$`-prefixed
+   name under, or warns that the event must not also be sent as a custom event. Name
+   any system event in `system_events_listed_twice`: the plan lists it under two
+   names.
 
 d. **What passes.**
 
@@ -89,7 +93,9 @@ f. **PII flags** — present as flags requiring a human decision, never as rejec
 
 g. **Duplicates, in two clearly separated sections:**
    - *Detected by the engine* — the `exact_duplicates` and `near_duplicates`
-     clusters from `plan_checks`, stated as fact.
+     clusters from `plan_checks`, stated as fact, and every pair in
+     `system_event_duplicates`: a custom event that duplicates an event the SDK
+     already sends, whether or not the plan lists it.
    - *Possible duplicates (model judgment)* — semantic variants the engine cannot
      catch, e.g. `user_signed_up` / `signup_completed` / `registration_finished`
      describing one action. State these as inference requiring human confirmation,
@@ -101,6 +107,6 @@ h. **Prioritized fix list.**
 
 Close every report with a provenance line stating which findings came from
 `app.rules` (event naming, property naming, PII), which are plan-scope checks in
-`app.vet` (exact and near duplicates, category notes, structure, system events), and
-which are model judgment (semantic duplicate candidates, rename suggestions). Never blur
-those three.
+`app.vet` (exact and near duplicates, category notes, structure, system events and
+their duplicates), and which are model judgment (semantic duplicate candidates,
+rename suggestions). Never blur those three.

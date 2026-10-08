@@ -1,0 +1,92 @@
+# PostHog: the events its SDKs send on their own (ADR 0009).
+# A tracking plan shows each under its plan_name; in PostHog, an action with that name on
+# the sent event shows it the same way (actions rename an event and apply retroactively).
+version: 1
+name: posthog
+checked: "2026-10-07"
+docs:
+  - https://posthog.com/docs/data/events
+  - https://posthog.com/docs/data/actions
+  - https://posthog.com/docs/product-analytics/autocapture
+  - https://posthog.com/docs/libraries/react-native
+  - https://posthog.com/docs/error-tracking/capture
+
+system_events:
+  - plan_name: Page Viewed
+    sent_as: $pageview
+    records: a page load or client-side navigation in the browser
+    sent_by: posthog-js, unless capture_pageview is false
+    equivalents: [Page Loaded, Page Visited]
+
+  - plan_name: Page Left
+    sent_as: $pageleave
+    records: a person leaving a page
+    sent_by: posthog-js, unless capture_pageleave is false
+    equivalents: [Page Exited, Page Closed]
+
+  - plan_name: Screen Viewed
+    sent_as: $screen
+    records: a screen view in a mobile app
+    sent_by: PostHog's mobile SDKs on navigation where supported, or posthog.screen()
+    equivalents: [Screen Loaded]
+
+  - plan_name: Application Installed
+    sent_as: Application Installed
+    records: the app being installed
+    sent_by: PostHog's mobile SDKs, when app lifecycle events are captured
+    equivalents: [App Installed]
+
+  - plan_name: Application Opened
+    sent_as: Application Opened
+    records: the app being opened from a closed state
+    sent_by: PostHog's mobile SDKs, when app lifecycle events are captured
+    equivalents: [App Opened, App Launched, Application Launched]
+
+  - plan_name: Application Updated
+    sent_as: Application Updated
+    records: the app being updated
+    sent_by: PostHog's mobile SDKs, when app lifecycle events are captured
+    equivalents: [App Updated]
+
+  - plan_name: Application Backgrounded
+    sent_as: Application Backgrounded
+    records: the app being sent to the background
+    sent_by: PostHog's mobile SDKs, when app lifecycle events are captured
+    equivalents: [App Backgrounded]
+
+  - plan_name: Application Foregrounded
+    sent_as: Application Became Active
+    records: the app coming to the foreground
+    sent_by: PostHog's mobile SDKs, when app lifecycle events are captured
+    equivalents: [App Foregrounded]
+
+  - plan_name: Rage Clicked
+    sent_as: $rageclick
+    records: repeated clicks in one place in quick succession
+    sent_by: posthog-js
+
+  - plan_name: Exception Captured
+    sent_as: $exception
+    records: an exception the app threw
+    sent_by: PostHog's SDKs, when exception autocapture is on
+
+  - plan_name: Feature Flag Called
+    sent_as: $feature_flag_called
+    records: a feature flag being evaluated for a person
+    sent_by: PostHog's SDKs
+
+  - sent_as: $autocapture
+    records: clicks, form submissions and other element interactions
+    sent_by: posthog-js, when autocapture is on
+
+  - sent_as: $identify
+    records: the identify call, which the plan models as an identify call
+    sent_by: PostHog's SDKs
+
+  - sent_as: $create_alias
+    records: two identifiers being linked as one person
+    sent_by: PostHog's SDKs
+
+  - sent_as: $groupidentify
+    records: the group call, which the plan models as a group call
+    sent_by: PostHog's SDKs

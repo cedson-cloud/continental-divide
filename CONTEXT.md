@@ -36,8 +36,9 @@ _Avoid_: Mechanical duplicate, hard duplicate
 
 **Near duplicate**:
 A drafted event whose name is one already in the corpus, written differently — differing
-only in case, separators, or a plural, and sharing the same action verb. Deterministic,
-but a judgment: where the line falls is a choice.
+only in case, separators, or a plural, and sharing the same action verb — or a name its
+platform lists as equivalent to a system event's plan name. Deterministic, but a judgment:
+where the line falls is a choice.
 _Avoid_: Lexical duplicate, fuzzy match, near-miss
 
 **Semantic duplicate**:
@@ -131,6 +132,9 @@ The moment on a surface that causes a call to fire.
 _Avoid_: Hook, when
 
 **System event**:
-An event an analytics tool records on its own, marked by a `$` prefix. Not subject to the
-plan's naming convention.
+An event an analytics tool's SDK records on its own: a page or screen view, an app
+lifecycle event. The plan shows it under a **plan name** that follows the plan's
+convention (`Page Viewed`), not the name the SDK sends (`$pageview` in PostHog, a `page`
+call in Segment). A platform file lists them, and they are always in the corpus of a
+profile that names that platform.
 _Avoid_: Auto event, built-in event

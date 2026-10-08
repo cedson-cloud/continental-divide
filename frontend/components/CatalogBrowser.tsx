@@ -7,9 +7,9 @@ import { CatalogView, CatalogViewEvent, SharedShape } from "@/lib/api";
 // Persistent and honest: the review's view of the catalog is narrower than this
 // page, and papering over that would misrepresent what the tool checks.
 export const REVIEW_GAP_NOTICE =
-  "The duplicate review currently checks new requests against the sample plan " +
-  "only. Events approved through this tool appear here but are not yet part of " +
-  "what the review compares against.";
+  "New requests are checked for duplicates against the sample plan and the " +
+  "events the analytics SDK sends on its own. Events approved through this tool " +
+  "appear here but are not yet part of what the check compares against.";
 
 export const COLLISION_WARNING = "Two definitions share this name.";
 
@@ -87,6 +87,8 @@ function EventRow({
           <Link className="badge approved" href={`/requests/${event.request_id}`}>
             Requested
           </Link>
+        ) : event.source === "system_event" ? (
+          <span className="badge pending">System event</span>
         ) : (
           <span className="badge neutral">Sample plan</span>
         )}
@@ -100,7 +102,13 @@ function EventRow({
       )}
       <p className="muted" style={{ fontSize: 13, margin: "2px 0 0" }}>
         {event.description}
-        {mergedCount > 0 && (
+        {mergedCount > 0 && event.source === "system_event" && (
+          <>
+            {" — "}
+            {mergedCount} added by request
+          </>
+        )}
+        {mergedCount > 0 && event.source !== "system_event" && (
           <>
             {" — "}
             {baseCount} from the{" "}
@@ -109,6 +117,11 @@ function EventRow({
           </>
         )}
       </p>
+      {event.source === "system_event" && (
+        <p className="muted" style={{ fontSize: 13, margin: "2px 0 0" }}>
+          Sent automatically as {event.sent_as} by {event.sent_by}.
+        </p>
+      )}
       {expanded && (
         <div className="mt-12">
           {event.properties.length === 0 ? (
@@ -238,6 +251,7 @@ export function CatalogBrowser({ catalog }: { catalog: CatalogView }) {
         </label>
         <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>
           {counts.total} events — {counts.from_sample_plan} from the sample plan,{" "}
+          {counts.system_events} system event{counts.system_events === 1 ? "" : "s"},{" "}
           {counts.new_events_from_requests} approved as new events,{" "}
           {counts.property_additions_merged} property additions merged in
           {counts.unresolved_targets > 0 &&

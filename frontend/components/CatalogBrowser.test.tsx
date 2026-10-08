@@ -34,6 +34,8 @@ function event(overrides: Partial<CatalogViewEvent>): CatalogViewEvent {
     request_id: null,
     approved_at: null,
     unresolved_target: false,
+    sent_as: null,
+    sent_by: null,
     ...overrides,
   };
 }
@@ -55,6 +57,7 @@ function catalog(events: CatalogViewEvent[]): CatalogView {
       ).length,
       property_additions_merged: 0,
       unresolved_targets: events.filter((e) => e.unresolved_target).length,
+      system_events: events.filter((e) => e.source === "system_event").length,
     },
   };
 }
@@ -175,6 +178,31 @@ describe("CatalogBrowser", () => {
     );
 
     expect(screen.getAllByText(COLLISION_WARNING)).toHaveLength(2);
+  });
+
+  it("labels a system event and says what the SDK sends it as", () => {
+    render(
+      <CatalogBrowser
+        catalog={catalog([
+          event({
+            name: "Page Viewed",
+            category: "System events",
+            description: "A person seeing a page of the website",
+            properties: [],
+            source: "system_event",
+            sent_as: "a page call",
+            sent_by: "analytics.js, by default",
+          }),
+        ])}
+      />,
+    );
+
+    expect(screen.getByText("System event")).toBeInTheDocument();
+    expect(
+      screen.getByText("Sent automatically as a page call by analytics.js, by default."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Sample plan")).toBeNull();
+    expect(screen.getByText(/1 system event/)).toBeInTheDocument();
   });
 
   it("always renders the honest notice about what the review compares against", () => {
