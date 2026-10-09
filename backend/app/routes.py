@@ -61,7 +61,7 @@ from .recourse import (
 )
 from .rules import effective_categories, event_name_error
 from .spend import SpendCapReached, get_meter
-from .storage import Storage, get_storage, workspace_storage
+from .storage import Storage, discard_idle_sandboxes, get_storage, use_sandbox
 from .workspace import (
     COOKIE_NAME,
     MIN_SECRET_LENGTH,
@@ -80,9 +80,25 @@ def current_identity(request: Request) -> Identity:
         raise HTTPException(status_code=401, detail=str(exc))
 
 
-def acting_storage(identity: Identity = Depends(current_identity)) -> Storage:
+def _set_workspace_cookie(response: Response, workspace_id: str) -> None:
+    settings = get_settings()
+    response.set_cookie(
+        COOKIE_NAME,
+        sign_workspace(workspace_id, settings.demo_cookie_secret),
+        max_age=settings.demo_sandbox_idle_days * 24 * 60 * 60,
+        httponly=True,
+        secure=settings.demo_cookie_secure,
+        samesite="lax",
+    )
+
+
+def acting_storage(
+    response: Response, identity: Identity = Depends(current_identity)
+) -> Storage:
     if identity.workspace is not None:
-        return workspace_storage(identity.workspace).acting_as(identity)
+        # Each use restarts the sandbox's idle period, and its cookie's with it.
+        _set_workspace_cookie(response, identity.workspace)
+        return use_sandbox(identity.workspace).acting_as(identity)
     return get_storage().acting_as(identity)
 
 
@@ -113,7 +129,6 @@ router = APIRouter(dependencies=[Depends(current_identity)])
 # The one route a demo visitor reaches before they have an identity.
 session_router = APIRouter()
 
-_SANDBOX_MAX_AGE_SECONDS = 7 * 24 * 60 * 60
 _HOUR = 60 * 60
 
 
@@ -140,14 +155,9 @@ def start_session(request: Request, response: Response) -> dict:
                 status_code=429,
                 detail="too many new demo sessions right now; try again in an hour",
             )
-        response.set_cookie(
-            COOKIE_NAME,
-            sign_workspace(new_workspace_id(), secret),
-            max_age=_SANDBOX_MAX_AGE_SECONDS,
-            httponly=True,
-            secure=settings.demo_cookie_secure,
-            samesite="lax",
-        )
+        # Bounded by the limits above, so it needs no schedule of its own.
+        discard_idle_sandboxes()
+        _set_workspace_cookie(response, new_workspace_id())
     return {"status": "ok"}
 
 _settings = get_settings()

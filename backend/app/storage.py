@@ -14,7 +14,9 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import sqlite3
+import time
 from abc import ABC, abstractmethod
 from functools import lru_cache
 from pathlib import Path
@@ -423,17 +425,49 @@ def get_storage() -> Storage:
     return SqliteStorage(_resolve_db_path())
 
 
+def _sandbox_path(workspace_id: str) -> Path:
+    if not is_workspace_id(workspace_id):
+        raise ValueError("a workspace id is 32 lowercase hex characters")
+    return repo_path(get_settings().sandbox_dir) / f"{workspace_id}.db"
+
+
 @lru_cache(maxsize=256)
 def workspace_storage(workspace_id: str) -> Storage:
     """A demo visitor's sandbox: a SQLite file of its own under SANDBOX_DIR (docs/adr/0010).
     Discarding a sandbox removes the file; nothing ever deletes audit rows."""
-    if not is_workspace_id(workspace_id):
-        raise ValueError("a workspace id is 32 lowercase hex characters")
-    settings = get_settings()
     return SqliteStorage(
-        repo_path(settings.sandbox_dir) / f"{workspace_id}.db",
-        max_requests=settings.demo_requests_per_visitor,
+        _sandbox_path(workspace_id),
+        max_requests=get_settings().demo_requests_per_visitor,
     )
+
+
+def use_sandbox(workspace_id: str) -> Storage:
+    """A visitor's sandbox, marked as used now. Reads leave a SQLite file's modified time
+    alone, so it is set here: that time is what :func:`discard_idle_sandboxes` reads."""
+    storage = workspace_storage(workspace_id)
+    os.utime(_sandbox_path(workspace_id))
+    return storage
+
+
+def discard_idle_sandboxes() -> list[str]:
+    """Delete every sandbox unused for DEMO_SANDBOX_IDLE_DAYS, a whole file at a time, and
+    return their workspace ids. No row is deleted, so the audit log's triggers never need an
+    exception (docs/adr/0010). Only files named by a workspace id are ever touched."""
+    settings = get_settings()
+    directory = repo_path(settings.sandbox_dir)
+    if not directory.is_dir():
+        return []
+    cutoff = time.time() - settings.demo_sandbox_idle_days * 24 * 60 * 60
+    discarded = []
+    for path in sorted(directory.glob("*.db")):
+        if not is_workspace_id(path.stem) or path.stat().st_mtime > cutoff:
+            continue
+        path.unlink(missing_ok=True)
+        path.with_name(f"{path.name}-journal").unlink(missing_ok=True)
+        discarded.append(path.stem)
+    if discarded:
+        workspace_storage.cache_clear()
+    return discarded
 
 
 def reset_storage() -> Storage:
