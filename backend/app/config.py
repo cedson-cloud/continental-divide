@@ -39,6 +39,12 @@ class Settings(BaseSettings):
     # The header the frontend host puts the client's address in. Unset uses the socket
     # address, which behind a proxy is the proxy's.
     demo_client_ip_header: str = ""
+    # The frontend host's proxy sends this in X-Demo-Proxy-Secret on every request it
+    # forwards. The echo route reports whether it matched; PR 4 makes it required.
+    demo_proxy_secret: str = ""
+    # GET /demo/echo, for checking what reaches the backend through the proxy. Off, the
+    # route answers 404.
+    demo_echo_route: bool = False
 
     max_request_bytes: int = 65536
 
