@@ -201,20 +201,40 @@ def _validate_request_kind(model):
     return model
 
 
+# Every free-text field that reaches a prompt or the audit log is capped here, the
+# same order of magnitude as MAX_INTAKE_CHARS. Event, rule and property names are
+# shorter than notes, and a person's name is shorter still.
+MAX_NOTE_CHARS = 2000
+MAX_NAME_CHARS = 200
+MAX_PERSON_NAME_CHARS = 80
+MAX_DESTINATIONS = 8
+
+
+def _validate_pii_reasons(value: dict[str, str]) -> dict[str, str]:
+    for name, reason in value.items():
+        if len(name) > MAX_NAME_CHARS:
+            raise ValueError(f"pii_reasons key exceeds {MAX_NAME_CHARS} characters")
+        if len(reason) > MAX_NOTE_CHARS:
+            raise ValueError(
+                f"pii_reasons value for {name!r} exceeds {MAX_NOTE_CHARS} characters"
+            )
+    return value
+
+
 class IntakeBody(BaseModel):
     raw_intake_text: str
-    business_value: str = Field(min_length=1)
-    submitter_name: str = Field(min_length=1)
+    business_value: str = Field(min_length=1, max_length=MAX_NOTE_CHARS)
+    submitter_name: str = Field(min_length=1, max_length=MAX_PERSON_NAME_CHARS)
     submitter_team: SubmitterTeam
     call_type: DraftedCallType = "track"
     side: Side = "Client"
     urgent: bool = False
-    urgency_reason: Optional[str] = None
+    urgency_reason: Optional[str] = Field(default=None, max_length=MAX_NOTE_CHARS)
     needed_by: Optional[str] = None
     request_kind: RequestKind = "new_event"
     # Only meaningful when request_kind is new_property_on_existing.
-    existing_event: Optional[str] = None
-    destinations: list[str] = Field(default_factory=list)
+    existing_event: Optional[str] = Field(default=None, max_length=MAX_NAME_CHARS)
+    destinations: list[str] = Field(default_factory=list, max_length=MAX_DESTINATIONS)
 
     _needed_by_iso = field_validator("needed_by")(_validate_needed_by)
     _urgency = model_validator(mode="after")(_validate_urgency)
@@ -225,57 +245,60 @@ class RawIntakeBody(BaseModel):
     # model-free deterministic demo path and run_examples.py posts to it headlessly.
     definition: dict
     raw_intake_text: Optional[str] = None
-    business_value: str = Field(min_length=1)
-    submitter_name: Optional[str] = None
+    business_value: str = Field(min_length=1, max_length=MAX_NOTE_CHARS)
+    submitter_name: Optional[str] = Field(default=None, max_length=MAX_PERSON_NAME_CHARS)
     submitter_team: Optional[SubmitterTeam] = None
     call_type: CallType = "track"
     side: Side = "Client"
     urgent: bool = False
-    urgency_reason: Optional[str] = None
+    urgency_reason: Optional[str] = Field(default=None, max_length=MAX_NOTE_CHARS)
     needed_by: Optional[str] = None
     request_kind: RequestKind = "new_event"
-    existing_event: Optional[str] = None
-    destinations: list[str] = Field(default_factory=list)
+    existing_event: Optional[str] = Field(default=None, max_length=MAX_NAME_CHARS)
+    destinations: list[str] = Field(default_factory=list, max_length=MAX_DESTINATIONS)
     # No requester step follows this path, so each PII hit's written reason comes
     # with the definition, keyed by property name (ADR 0003).
     pii_reasons: dict[str, str] = Field(default_factory=dict)
 
+    _pii_reason_caps = field_validator("pii_reasons")(_validate_pii_reasons)
     _needed_by_iso = field_validator("needed_by")(_validate_needed_by)
     _urgency = model_validator(mode="after")(_validate_urgency)
     _request_kind = model_validator(mode="after")(_validate_request_kind)
 
 
 class SubmitBody(BaseModel):
-    duplicate_note: Optional[str] = None
+    duplicate_note: Optional[str] = Field(default=None, max_length=MAX_NOTE_CHARS)
     duplicate_unsure: bool = False
     # Keyed by property name; one per PII hit (ADR 0003).
     pii_reasons: dict[str, str] = Field(default_factory=dict)
 
+    _pii_reason_caps = field_validator("pii_reasons")(_validate_pii_reasons)
+
 
 class ConvertBody(BaseModel):
-    existing_event: str = Field(min_length=1)
+    existing_event: str = Field(min_length=1, max_length=MAX_NAME_CHARS)
 
 
 class WithdrawBody(BaseModel):
-    existing_event: str = Field(min_length=1)
-    reason: Optional[str] = None
+    existing_event: str = Field(min_length=1, max_length=MAX_NAME_CHARS)
+    reason: Optional[str] = Field(default=None, max_length=MAX_NOTE_CHARS)
 
 
 class RenameBody(BaseModel):
-    new_name: str = Field(min_length=1)
+    new_name: str = Field(min_length=1, max_length=MAX_NAME_CHARS)
 
 
 class DisputeBody(BaseModel):
-    rule: str = Field(min_length=1)
+    rule: str = Field(min_length=1, max_length=MAX_NAME_CHARS)
     # A dispute with no argument in it is not a governance record, so the note is
     # required here and not only in the UI.
-    note: str = Field(min_length=1)
+    note: str = Field(min_length=1, max_length=MAX_NOTE_CHARS)
 
 
 class DecisionBody(BaseModel):
     decision: Literal["approve", "reject"]
-    note: Optional[str] = None
-    approver_name: Optional[str] = None
+    note: Optional[str] = Field(default=None, max_length=MAX_NOTE_CHARS)
+    approver_name: Optional[str] = Field(default=None, max_length=MAX_PERSON_NAME_CHARS)
     pii_acknowledged: bool = False
     findings_acknowledged: bool = False
 
