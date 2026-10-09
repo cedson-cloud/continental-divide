@@ -75,7 +75,8 @@ def _unauthenticated(monkeypatch) -> None:
 
 # /session is how a demo visitor gets an identity, so it cannot require one. Outside demo
 # mode it answers 404 and sets nothing; see the assertion below and docs/adr/0010.
-_OPEN_ROUTES = {"/health", "/session"}
+# /demo/echo checks the proxy path before a visitor has an identity; off, it is a 404.
+_OPEN_ROUTES = {"/health", "/session", "/demo/echo"}
 
 
 def _app_routes():
@@ -104,6 +105,9 @@ def test_with_auth_unset_every_route_but_health_is_a_401_and_writes_nothing(
     session = client.post("/session")
     assert session.status_code == 404
     assert "set-cookie" not in session.headers
+    echo = client.get("/demo/echo")
+    assert echo.status_code == 404
+    assert "set-cookie" not in echo.headers
     assert storage.list_requests() == []
 
 

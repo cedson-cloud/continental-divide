@@ -6,6 +6,7 @@ here. The Anthropic key is not used in this layer.
 
 from __future__ import annotations
 
+import hmac
 import re
 from functools import lru_cache
 from typing import Literal, Optional
@@ -172,6 +173,55 @@ def start_session(request: Request, response: Response) -> dict:
         discard_idle_sandboxes()
         _set_workspace_cookie(response, new_workspace_id())
     return {"status": "ok"}
+
+
+PROXY_SECRET_HEADER = "x-demo-proxy-secret"
+# Every header a proxy might carry the client's address in, in the order to prefer them.
+IP_HEADER_CANDIDATES = ("x-real-ip", "x-vercel-forwarded-for", "x-forwarded-for")
+_FORWARDING_HINTS = ("forward", "real-ip", "x-vercel-", "via", "client-ip", "cf-")
+ECHO_COOKIE = "cd_echo"
+
+
+def proxy_secret_matches(request: Request) -> bool:
+    """Whether the request carries the configured proxy secret. Unconfigured never
+    matches, so a deploy that forgot to set it fails closed."""
+    expected = get_settings().demo_proxy_secret
+    if not expected:
+        return False
+    supplied = request.headers.get(PROXY_SECRET_HEADER, "")
+    return hmac.compare_digest(supplied.encode(), expected.encode())
+
+
+@session_router.get("/demo/echo")
+def demo_echo(request: Request, response: Response) -> dict:
+    """What the backend sees through the frontend host's proxy: header names, address
+    candidates, and cookie names, never a cookie or secret value. The cookie it sets is a
+    harmless probe, so a second call shows whether cookies make the round trip."""
+    settings = get_settings()
+    if not settings.demo_echo_route:
+        raise HTTPException(status_code=404, detail="Not Found")
+    response.set_cookie(
+        ECHO_COOKIE,
+        "1",
+        max_age=_HOUR,
+        httponly=True,
+        secure=settings.demo_cookie_secure,
+        samesite="lax",
+    )
+    names = sorted({name.lower() for name in request.headers.keys()})
+    return {
+        "forwarding_headers": [
+            name for name in names if any(hint in name for hint in _FORWARDING_HINTS)
+        ],
+        "ip_candidates": {
+            name: request.headers.get(name) for name in IP_HEADER_CANDIDATES
+        },
+        "socket_address": request.client.host if request.client else None,
+        "limiter_address": _client_key(request),
+        "configured_ip_header": settings.demo_client_ip_header.strip() or None,
+        "proxy_secret_matched": proxy_secret_matches(request),
+        "cookie_names": sorted(request.cookies.keys()),
+    }
 
 _settings = get_settings()
 _limiter = RateLimiter(_settings.rate_limit_max, _settings.rate_limit_window_seconds)
