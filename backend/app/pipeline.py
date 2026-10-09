@@ -260,6 +260,23 @@ def _engine_duplicates(request_id: int, storage: Storage) -> set:
     }
 
 
+_REQUESTER_STEPS = ("intake_received", "submitted")
+
+
+def _self_approval(request_id: int, storage: Storage) -> Optional[bool]:
+    """Whether the approver made or submitted this request, recovered from the audit log
+    and never typed (docs/adr/0004). None when no requester entry names an actor, as in
+    logs written before actors were recorded: unknown is not the same as someone else."""
+    requesters = {
+        e["detail"]["actor"]["email"].casefold()
+        for e in storage.get_audit_log(request_id)
+        if e["step"] in _REQUESTER_STEPS and (e["detail"] or {}).get("actor")
+    }
+    if not requesters or storage.actor is None:
+        return None
+    return storage.actor.email.casefold() in requesters
+
+
 def recorded_pii_hits(request: dict, storage: Storage) -> dict[str, str]:
     """The PII hits the rules found on this request, from its ``rules_evaluated``
     entry, so the reasons asked for are the ones the judging profile flagged. Entries
@@ -813,7 +830,8 @@ def decide(
     findings, requires ``findings_acknowledged``. That holds on every intake path,
     including ``POST /requests/raw``, which skips requester confirmation and so has no
     earlier point at which anyone sees the collision. Approve publishes and moves to
-    ``published``; reject moves to ``rejected``. Raises
+    ``published``; reject moves to ``rejected``. An approval's ``decision_received``
+    entry records ``self_approval`` (see :func:`_self_approval`). Raises
     :class:`RequestNotFound`, :class:`InvalidTransition`,
     :class:`PiiAcknowledgmentRequired`, or :class:`DuplicateAcknowledgmentRequired` for
     the caller to map to HTTP.
@@ -846,17 +864,17 @@ def decide(
             "required to approve"
         )
 
+    received = {"decision": decision, "approver": approver_name, "note": note}
+    if decision == "approve":
+        received["self_approval"] = _self_approval(request_id, storage)
+
     to_status = "approved" if decision == "approve" else Decision.rejected.value
     if not storage.transition(request_id, DECIDABLE_STATUSES, to_status):
         raise InvalidTransition(
             f"request {request_id} was decided by someone else first and cannot be decided"
         )
 
-    storage.add_audit_entry(
-        request_id,
-        "decision_received",
-        {"decision": decision, "approver": approver_name, "note": note},
-    )
+    storage.add_audit_entry(request_id, "decision_received", received)
 
     if decision == "approve":
         if request["pii_flagged"]:

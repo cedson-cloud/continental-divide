@@ -54,3 +54,48 @@ describe("AuditTimeline actor", () => {
     expect(screen.getByText("clear the cart")).toBeInTheDocument();
   });
 });
+
+describe("AuditTimeline self-approval", () => {
+  const DEMO_ACTOR = { email: "anonymous visitor", method: "demo", verified: false };
+
+  it("marks an approval by its own requester, never as raw detail", () => {
+    render(
+      <AuditTimeline
+        entries={[
+          entry(1, "decision_received", {
+            decision: "approve",
+            self_approval: true,
+            actor: DEMO_ACTOR,
+          }),
+        ]}
+      />,
+    );
+
+    expect(
+      screen.getByText("by anonymous visitor · unverified · self-approval"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("self_approval")).not.toBeInTheDocument();
+  });
+
+  it("adds nothing when someone else requested it, or nobody knows who did", () => {
+    render(
+      <AuditTimeline
+        entries={[
+          entry(1, "decision_received", {
+            decision: "approve",
+            self_approval: false,
+            actor: LOCAL_ACTOR,
+          }),
+          entry(2, "decision_received", {
+            decision: "approve",
+            self_approval: null,
+            actor: LOCAL_ACTOR,
+          }),
+        ]}
+      />,
+    );
+
+    expect(screen.getAllByText("by dev@example.com · unverified")).toHaveLength(2);
+    expect(screen.queryByText(/self/)).not.toBeInTheDocument();
+  });
+});

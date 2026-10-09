@@ -103,6 +103,12 @@ against a signed token, or claimed by local configuration and marked unverified.
 audit entry names one. A typed name on a form is not an actor.
 _Avoid_: User, approver name, author
 
+**Self-approval**:
+An approval whose actor also made or submitted the request, compared by email. Derived
+from the audit log, never typed. Allowed, and always marked; when the request's entries
+name no actor, the marker says unknown rather than no.
+_Avoid_: Auto-approval, own approval
+
 **Impact**:
 Whether an event matters to the whole business or to one team. Chosen by a person, never
 by the model, and it never blocks.
