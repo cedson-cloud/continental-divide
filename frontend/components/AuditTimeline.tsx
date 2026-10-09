@@ -27,9 +27,9 @@ type Actor = { email: string; verified: boolean };
 
 function actorLine(entry: AuditEntry): string {
   const actor = entry.detail?.actor as Actor | undefined;
-  return actor
-    ? `by ${actor.email}${actor.verified ? "" : " · unverified"}`
-    : "actor not recorded";
+  if (!actor) return "actor not recorded";
+  const self = entry.detail?.self_approval === true ? " · self-approval" : "";
+  return `by ${actor.email}${actor.verified ? "" : " · unverified"}${self}`;
 }
 
 export function ProposedDefinition({
@@ -115,7 +115,7 @@ function DetailBody({ entry }: { entry: AuditEntry }) {
   }
 
   const entries = Object.entries(detail).filter(
-    ([key, v]) => key !== "actor" && v !== null && v !== "",
+    ([key, v]) => key !== "actor" && key !== "self_approval" && v !== null && v !== "",
   );
   if (entries.length === 0) return null;
   return (

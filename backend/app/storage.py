@@ -119,6 +119,12 @@ class Storage(ABC):
         """The same storage, recording ``identity`` as the actor of every audit entry."""
         ...
 
+    @property
+    @abstractmethod
+    def actor(self) -> Optional[Identity]:
+        """The identity bound by :meth:`acting_as`, or None if none is bound."""
+        ...
+
     @abstractmethod
     def create_request(
         self,
@@ -209,6 +215,10 @@ class SqliteStorage(Storage):
         bound = copy.copy(self)
         bound._actor = identity
         return bound
+
+    @property
+    def actor(self) -> Optional[Identity]:
+        return self._actor
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path)
