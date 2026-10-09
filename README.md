@@ -213,8 +213,8 @@ a datastore for the audit log and request history.
   (see the known limits below). Before exposing it, add authentication and a usage cap.
 - **Environment variables.** Backend: `ANTHROPIC_API_KEY` (required for intake),
   `ANTHROPIC_MODEL`, `DATABASE_PATH`, `MAX_INTAKE_CHARS`, `RATE_LIMIT_MAX`,
-  `RATE_LIMIT_WINDOW_SECONDS`, and (for the approval-board push) `NOTION_TOKEN` and
-  `NOTION_APPROVAL_DB_ID`. Frontend: `NEXT_PUBLIC_API_BASE` (the backend's URL).
+  `RATE_LIMIT_WINDOW_SECONDS`, `GENERAL_RATE_LIMIT_MAX`, `GENERAL_RATE_LIMIT_WINDOW_SECONDS`,
+  and (for the approval-board push) `NOTION_TOKEN` and `NOTION_APPROVAL_DB_ID`. Frontend: `NEXT_PUBLIC_API_BASE` (the backend's URL).
 
 ## Status
 

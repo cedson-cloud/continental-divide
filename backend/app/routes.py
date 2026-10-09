@@ -52,6 +52,7 @@ from .pipeline import (
 from .publisher import get_publisher
 from .rate_limit import RateLimiter
 from .recourse import (
+    AlreadyDisputed,
     NameNotOffered,
     RuleNotFailing,
     name_suggestions,
@@ -125,7 +126,19 @@ def _require_model_budget() -> None:
         raise HTTPException(status_code=503, detail=str(exc))
 
 
-router = APIRouter(dependencies=[Depends(current_identity)])
+def _route_limit(
+    request: Request, identity: Identity = Depends(current_identity)
+) -> None:
+    """One budget for everything a caller does, reads included: keyed by their
+    workspace cookie, or by address when they have no workspace."""
+    key = identity.workspace or _client_key(request)
+    if not _route_limiter.allow(key):
+        raise HTTPException(
+            status_code=429, detail="too many requests; wait a moment and try again"
+        )
+
+
+router = APIRouter(dependencies=[Depends(current_identity), Depends(_route_limit)])
 # The one route a demo visitor reaches before they have an identity.
 session_router = APIRouter()
 
@@ -162,6 +175,9 @@ def start_session(request: Request, response: Response) -> dict:
 
 _settings = get_settings()
 _limiter = RateLimiter(_settings.rate_limit_max, _settings.rate_limit_window_seconds)
+_route_limiter = RateLimiter(
+    _settings.general_rate_limit_max, _settings.general_rate_limit_window_seconds
+)
 
 
 SubmitterTeam = Literal["Product", "Marketing", "Data", "Engineering"]
@@ -635,15 +651,17 @@ def dispute_rule(
     request_id: int, body: DisputeBody, storage: Storage = Depends(acting_storage)
 ) -> dict:
     """Record that a rule looks wrong for this team. Amends nothing: no profile
-    change, no file write, no status change, no model call — and therefore no rate
-    limit. Authoring a convention happens in the governance wizard; this route only
-    files the disagreement for the data team to read."""
+    change, no file write, no status change, no model call. Authoring a convention
+    happens in the governance wizard; this route only files the disagreement for the
+    data team to read, once per rule per request."""
     try:
         detail = record_rule_dispute(request_id, body.rule, body.note, storage)
     except RequestNotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     except RuleNotFailing as exc:
         raise HTTPException(status_code=422, detail=str(exc))
+    except AlreadyDisputed as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
 
     saved = storage.get_request(request_id)
     return {"id": request_id, "status": saved["status"], "dispute": detail}

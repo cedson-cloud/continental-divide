@@ -48,6 +48,10 @@ class RuleNotFailing(Exception):
     """The caller disputed a rule that did not fail on this request."""
 
 
+class AlreadyDisputed(Exception):
+    """The caller disputed a rule this request already has a dispute on record for."""
+
+
 def profile_digest(profile: GovernanceProfile) -> str:
     """A short, stable fingerprint of a profile's contents.
 
@@ -75,6 +79,15 @@ def _rule_checks(storage: Storage, request_id: int) -> list[dict]:
 
 def failed_rules(storage: Storage, request_id: int) -> list[str]:
     return [c["rule"] for c in _rule_checks(storage, request_id) if not c.get("passed")]
+
+
+def disputed_rules(storage: Storage, request_id: int) -> list[str]:
+    """Every rule a dispute has been recorded against on this request."""
+    return [
+        (entry.get("detail") or {}).get("rule")
+        for entry in storage.get_audit_log(request_id)
+        if entry["step"] == "rule_disputed"
+    ]
 
 
 def failed_naming_rule(storage: Storage, request_id: int) -> Optional[str]:
@@ -243,10 +256,11 @@ def record_rule_dispute(
     Writes one ``rule_disputed`` audit entry and nothing else. No profile is amended,
     no file is written, no status changes, and no model is called — the request stays
     exactly as the rules left it. ``rule`` must be a rule that actually failed on this
-    request, so a dispute is always anchored to a real outcome.
+    request, so a dispute is always anchored to a real outcome. A request takes one
+    dispute per rule: the record is the disagreement, not a thread.
 
-    Returns the recorded detail; raises :class:`RequestNotFound` or
-    :class:`RuleNotFailing` for the caller to map to HTTP.
+    Returns the recorded detail; raises :class:`RequestNotFound`,
+    :class:`RuleNotFailing` or :class:`AlreadyDisputed` for the caller to map to HTTP.
     """
     request = storage.get_request(request_id)
     if request is None:
@@ -257,6 +271,11 @@ def record_rule_dispute(
             f"rule '{rule}' did not fail on request {request_id} "
             f"({', '.join(failed) or 'no rule failed'}); a dispute must name a rule "
             "that decided this request"
+        )
+    if rule in disputed_rules(storage, request_id):
+        raise AlreadyDisputed(
+            f"rule '{rule}' is already disputed on request {request_id}; a request "
+            "takes one dispute per rule"
         )
 
     if profile is None:

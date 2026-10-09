@@ -30,6 +30,7 @@ def storage(tmp_path, monkeypatch):
     monkeypatch.setenv("AUTH_MODE", "local")
     monkeypatch.setenv("LOCAL_IDENTITY_EMAIL", TESTER_EMAIL)
     get_settings.cache_clear()
+    _fresh_route_limiter(monkeypatch)
     yield reset_storage().acting_as(TESTER)
     get_settings.cache_clear()
     get_storage.cache_clear()
@@ -63,9 +64,18 @@ def demo_env(tmp_path, monkeypatch):
     from app.rate_limit import RateLimiter
 
     monkeypatch.setattr("app.routes._limiter", RateLimiter(10, 60))
+    _fresh_route_limiter(monkeypatch)
     _clear_demo_caches()
     yield tmp_path
     _clear_demo_caches()
+
+
+def _fresh_route_limiter(monkeypatch):
+    """The general limiter is process-wide and keyed by address in local mode, so
+    without a fresh one every test would share one budget."""
+    from app.rate_limit import RateLimiter
+
+    monkeypatch.setattr("app.routes._route_limiter", RateLimiter(120, 60))
 
 
 def _clear_demo_caches():
