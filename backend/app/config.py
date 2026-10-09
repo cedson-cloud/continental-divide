@@ -24,6 +24,8 @@ class Settings(BaseSettings):
 
     database_path: str = "backend/data/continental_divide.db"
     sandbox_dir: str = "backend/data/sandboxes"
+    # A sandbox and its cookie are discarded this long after the visitor last used them.
+    demo_sandbox_idle_days: int = 7
 
     # The public demo's spend controls (docs/adr/0010). Demo mode calls the model only
     # when the budget and both prices are set; check the prices for ANTHROPIC_MODEL.

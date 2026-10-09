@@ -3,7 +3,8 @@
 Store-first: the local event is already persisted when this runs. The push is
 best-effort and one-way — the app sets Status=Pending and never reads back. The Notion
 token is read server-side from :class:`Settings` and never leaves the backend. When no
-token is configured the push is skipped silently.
+token is configured, or the app is the public demo (docs/adr/0010), the push is skipped
+silently.
 
 Select properties are guarded: a missing value is omitted rather than passed as ``null``
 into a Notion select (which the API rejects).
@@ -79,7 +80,7 @@ def row_from_request(request: dict) -> ApprovalRow:
 
 def _client():
     settings = get_settings()
-    if not settings.notion_token:
+    if not settings.notion_token or settings.auth_mode == "demo":
         return None
     from notion_client import Client
 
@@ -89,7 +90,7 @@ def _client():
 def push_request(request: dict) -> Optional[str]:
     """Push a stored request to the approval board as a Pending row.
 
-    Returns the Notion page URL, or ``None`` when no token is configured (skipped). Any
+    Returns the Notion page URL, or ``None`` when skipped: no token, or demo mode. Any
     error when a token is set propagates for the caller to record.
     """
     client = _client()
