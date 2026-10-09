@@ -173,7 +173,7 @@ In build order, and the order is also the cut order: whatever is unfinished when
 
 **Hosting**
 
-- [ ] **16. Update `next` from 14.2.5 to the latest 14.2.x.**
+- [x] **16. Update `next` from 14.2.5 to the latest 14.2.x.** Done: 14.2.35, the last 14.2 release (December 2025). Every `next` advisory published since then is fixed only in 15.5.x and 16.x, so staying on 14.2 for the public demo is an open decision under D5.
 - [ ] **17. Hosting:** edge auth plus in-app token verification, a role allowlist in deployment config, a per-user rate limit covering every model path and `POST /requests/raw`, one hostname with `/api` forwarding, verified identity in audit entries, and the self-approval marker. A test proves a bare email header is not trusted. Decide whether `/docs` and `/openapi.json` stay reachable without a token: they expose the API's shape, not its data. [ADR 0004](docs/adr/0004-a-hosted-single-organization-instance.md).
 - [ ] **18. Admin backup download** (a consistent copy, audited) and a recorded entry after a restore.
 - [ ] **18a. A public demo anyone can try.** Every feature works on sample data without an account. Decide in an ADR: where state lives (Vercel's serverless functions keep no SQLite file between requests, so either the backend runs on a host with a disk, or the storage layer gains its Postgres implementation, append-only triggers included); a demo identity that marks every visitor unverified; a daily model-spend cap with a per-visitor rate limit, and a recorded example shown once the cap is reached; and a regular reset of demo data. Builds on items 15 and 17.
