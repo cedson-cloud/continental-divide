@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     max_intake_chars: int = 2000
     rate_limit_max: int = 10
     rate_limit_window_seconds: int = 60
+    # Every authenticated route, reads included, per workspace cookie — per client
+    # address when there is no workspace.
+    general_rate_limit_max: int = 120
+    general_rate_limit_window_seconds: int = 60
 
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]

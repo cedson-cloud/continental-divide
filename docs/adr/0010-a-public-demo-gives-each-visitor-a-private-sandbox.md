@@ -45,6 +45,10 @@ and its history are discarded after 7 days. Those are the demo's terms. On a rea
   frontend host sets. If the real client IP cannot be read reliably through the rewrite, the
   limit falls back to a global creation rate. It slows a script; the daily cap is what stops
   one.
+- **Every authenticated route is rate limited per workspace cookie**, reads included, with
+  its own settings (`GENERAL_RATE_LIMIT_MAX`, `GENERAL_RATE_LIMIT_WINDOW_SECONDS`). A caller
+  with no workspace is keyed by address. The intake limiter on the model routes stays as a
+  second, tighter budget. A request takes one dispute per rule; a repeat answers 409.
 - **A separate Anthropic key for the demo**, with a monthly limit set in the Anthropic console.
   A ceiling that holds even if the app's own count is wrong.
 - **A size cap on every write route**, `POST /requests/raw` included.
