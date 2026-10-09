@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { Fragment, use, useCallback, useEffect, useState } from "react";
 import {
   RequestDetail,
   ReviewFinding,
@@ -72,8 +72,12 @@ function auditNumber(
   return typeof value === "number" ? value : null;
 }
 
-export default function RequestDetailPage({ params }: { params: { id: string } }) {
-  const id = Number(params.id);
+export default function RequestDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const id = Number(use(params).id);
   const router = useRouter();
   const [detail, setDetail] = useState<RequestDetail | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
