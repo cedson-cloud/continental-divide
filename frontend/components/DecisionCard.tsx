@@ -1,7 +1,8 @@
 "use client";
 
 import { Fragment, useState } from "react";
-import { DecisionOptions, RequestDetail, ReviewFinding } from "@/lib/api";
+import { DecisionOptions, RequestDetail, ReviewFinding, RuleCheck } from "@/lib/api";
+import { engineDuplicateCheck } from "@/lib/gating";
 
 const KIND_PHRASES: Record<string, string> = {
   duplicate_event: "possible duplicates",
@@ -9,7 +10,7 @@ const KIND_PHRASES: Record<string, string> = {
   property_already_exists: "possibly existing properties",
 };
 
-function acknowledgeText(findings: ReviewFinding[]): { title: string; detail: string } {
+function findingsText(findings: ReviewFinding[]): { title: string; detail: string } {
   const kinds = Array.from(
     new Set(findings.map((f) => f.kind ?? "duplicate_event")),
   );
@@ -27,15 +28,32 @@ function acknowledgeText(findings: ReviewFinding[]): { title: string; detail: st
   };
 }
 
+// The engine's check sentence is shown as written, so the approver acknowledges the
+// same words the rule checks panel shows. One checkbox covers both sources, because
+// the server takes one acknowledgment for every duplicate tier.
+function acknowledgeText(
+  findings: ReviewFinding[],
+  engineCheck: RuleCheck | undefined,
+): { title: string; detail: string } | null {
+  const text = findings.length > 0 ? findingsText(findings) : null;
+  if (!engineCheck) return text;
+  const engine = `${engineCheck.detail}.`;
+  return text
+    ? { ...text, detail: `${engine} ${text.detail}` }
+    : { title: "Duplicate name reviewed", detail: engine };
+}
+
 // The approver's side of the page. Approve is gated on the same acknowledgments the
 // server requires; Reject never is. onDecide resolves true when the decision landed.
 export function DecisionCard({
   detail,
+  checks,
   deciding,
   error,
   onDecide,
 }: {
   detail: RequestDetail;
+  checks: RuleCheck[];
   deciding: boolean;
   error: string | null;
   onDecide: (decision: "approve" | "reject", body: DecisionOptions) => Promise<boolean>;
@@ -47,11 +65,11 @@ export function DecisionCard({
 
   const findings = detail.duplicate_candidates;
   const needsPii = detail.pii_flagged;
-  const needsFindings = findings.length > 0;
+  const ack = acknowledgeText(findings, engineDuplicateCheck(checks));
+  const needsFindings = ack !== null;
   const required = Number(needsPii) + Number(needsFindings);
   const remaining =
     Number(needsPii && !piiAcknowledged) + Number(needsFindings && !findingsAcknowledged);
-  const ack = needsFindings ? acknowledgeText(findings) : null;
 
   async function decide(decision: "approve" | "reject") {
     const landed = await onDecide(decision, {
