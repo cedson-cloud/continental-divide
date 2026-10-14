@@ -112,6 +112,16 @@ Decided 2026-10-08: the next milestone is a link a stranger can open and try, po
 
 In build order, which is also the cut order. Items from the parked phase below that the demo needs are pulled in by number and not worked twice.
 
+**Launch order.** The PRs between here and the LinkedIn post, one branch at a time:
+
+1. D7 PR 4, intake and the "Try a scenario" card. Merged as #25.
+2. D5 PR 4: enforce the proxy secret, set the client-IP header in the middleware, re-run the forge check, turn the echo route off. Then the Anthropic key and the $2 daily budget go on Render.
+3. D7 PRs 5–7: queue (including the table overflow on a phone), catalog, Governance/admin, folding in D2's missing pre-Approve self-approval notice.
+4. D6, with D4's 7-day sandbox notice.
+5. D10, then the post. The walkthrough video can follow it.
+
+D8 and D9 move to after launch, so the CSV promised above arrives after the post. D5 PR 4 goes before the rest of D7 because the design pass and the Render work do not depend on each other.
+
 **Safe to host — nothing deploys until all five are done**
 
 - [x] **D1. Sandboxed storage.** A workspace id from a signed cookie picks its own SQLite file; `acting_storage` is the only place a request is bound to one. A test proves two workspaces never see each other's requests or audit entries. Done: `app/workspace.py` (HMAC-signed `cd_workspace` cookie, HttpOnly, SameSite=Lax, Secure by default); `storage.workspace_storage()` refuses any id that is not 32 hex characters; `POST /session` issues or keeps a sandbox and is a 404 outside demo mode; the frontend's `request()` sends credentials and, on a 401, starts a session and retries once. `backend/tests/test_sandboxes.py`, `frontend/lib/api.test.ts`. `test_identity.py`'s every-route-is-401 guard now names `/session` as open alongside `/health`, and asserts it is a 404 that sets no cookie outside demo mode. Not done: a new sandbox is empty — the catalog already reads the bundled sample plan, but the queue has no example requests to look at (D7).
@@ -123,12 +133,15 @@ In build order, which is also the cut order. Items from the parked phase below t
 **Worth a click**
 
 - [ ] **D6. Landing page.** What it is in one screen, the 60-second story, a "Try it" button, and links to the repo and the ADRs.
-- [ ] **D7. Visual pass** across the request, queue, detail and catalog screens.
-- [ ] **D8. CSV export** of the workspace's plan. This is item 13, CSV first; XLSX and the "how this plan is wired" section follow.
-- [ ] **D9. Snippet generator** (item 12). Engineering's end of the loop.
+- [ ] **D7. Visual pass** across the app shell and the request, queue, detail, catalog and Governance screens, in seven PRs. Done: PR 1 tokens, type, contrast and focus; PR 2 app shell; PR 3 detail page with the progress bar; PR 4 intake with the "Try a scenario" card (#25). Not done: PR 5 queue, PR 6 catalog, PR 7 Governance/admin.
 - [ ] **D10. README, screenshots and walkthrough** pointing at the live link: the Credibility items under v1, plus item 20's public claim.
 
-**After launch:** items 5c, 5d, and 6–11, 14 below, in their existing order.
+**After launch**
+
+- [ ] **D8. CSV export** of the workspace's plan. This is item 13, CSV first; XLSX and the "how this plan is wired" section follow.
+- [ ] **D9. Snippet generator** (item 12). Engineering's end of the loop.
+
+Then items 5c, 5d, and 6–11, 14 below, in their existing order.
 
 ---
 
