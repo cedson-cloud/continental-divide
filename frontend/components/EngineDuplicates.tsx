@@ -5,6 +5,9 @@ import { RuleCheck } from "@/lib/api";
 // a mechanical judgment about spelling, the agent panel makes an argument about
 // meaning. See docs/adr/0001.
 //
+// Solid where the agent's box is dashed: the line style separates the engine's
+// fact or deterministic judgment from the agent's inference.
+//
 // The flag sentences come from the engine verbatim rather than being reassembled here,
 // so the wording the audit log records and the wording the requester reads are the
 // same string.
@@ -26,8 +29,8 @@ export function EngineDuplicates({
   if (!hit || flags.length === 0) return null;
 
   return (
-    <div className="agent-review">
-      <div className="agent-review-label">Engine check — the name itself</div>
+    <div className="engine-finding">
+      <div className="engine-finding-label">Engine check — the name itself</div>
       <div className="finding-group">
         <div className="finding-group-heading">{HEADINGS[hit.rule]}</div>
         <div className="flags">

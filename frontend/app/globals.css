@@ -31,6 +31,8 @@
   --neutral-fg: #4b5563;
   --neutral-bg: #ebeeeb;
   --neutral-line: #c7cec9;
+  --advisory-surface: #fcfbfe;
+  --accent-faint: #f6faf7;
 
   --radius: 12px;
   --radius-sm: 8px;
@@ -452,6 +454,9 @@ table.prop-table {
   font-family: var(--mono);
   font-size: 13px;
 }
+.prop-table td:nth-child(3) {
+  font-family: var(--sans);
+}
 .prop-table tr:last-child td {
   border-bottom: none;
 }
@@ -463,6 +468,11 @@ table.prop-table {
   padding: 1px 7px;
   border-radius: 5px;
   font-family: var(--mono);
+}
+/* A category or call type: a word, not a name from code. */
+.tag-text {
+  font-family: var(--sans);
+  font-size: 12px;
 }
 
 .checks {
@@ -507,6 +517,40 @@ table.prop-table {
 .check-detail {
   color: var(--muted);
 }
+/* Rule checks as tiles. A check that did not pass takes the full row, so the one that
+   matters is never side by side with a pass. */
+.checks-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 8px;
+}
+.checks-grid .check {
+  padding: 10px 12px;
+  border-radius: 9px;
+  background: var(--bg);
+}
+.checks-grid .check.fail {
+  grid-column: 1 / -1;
+  background: var(--rejected-bg);
+}
+.checks-grid .check.advisory {
+  grid-column: 1 / -1;
+  background: var(--flagged-bg);
+}
+.checks-grid .check-mark {
+  width: 22px;
+  height: 22px;
+  margin-top: 0;
+  background: var(--panel);
+}
+.checks-grid .check-rule,
+.checks-grid .check-detail {
+  display: block;
+}
+.checks-grid .check-detail {
+  font-size: 13px;
+}
+
 .flags {
   margin-top: 12px;
   padding-top: 12px;
@@ -604,8 +648,8 @@ table.prop-table {
   letter-spacing: -0.005em;
 }
 .timeline-time {
-  font-family: var(--mono);
-  font-size: 11.5px;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
   color: var(--faint);
   white-space: nowrap;
 }
@@ -622,17 +666,15 @@ table.prop-table {
 }
 .kv {
   display: grid;
-  grid-template-columns: max-content 1fr;
+  grid-template-columns: fit-content(40%) minmax(0, 1fr);
   gap: 4px 16px;
   font-size: 13px;
 }
 .kv dt {
   color: var(--faint);
-  font-family: var(--mono);
 }
 .kv dd {
   margin: 0;
-  font-family: var(--mono);
   word-break: break-word;
 }
 .mini-check {
@@ -686,7 +728,6 @@ table.prop-table {
   font-size: 15px;
 }
 .ticket-key {
-  font-family: var(--mono);
   font-weight: 650;
   color: var(--accent);
 }
@@ -746,7 +787,7 @@ table.prop-table {
   border-left: 3px solid var(--flagged-line);
   border-radius: var(--radius-sm);
   padding: 14px 16px;
-  background: #fcfbfe;
+  background: var(--advisory-surface);
 }
 .agent-review-label {
   font-size: 13.5px;
@@ -754,6 +795,32 @@ table.prop-table {
   color: var(--flagged-fg);
   margin-bottom: 8px;
 }
+.engine-finding {
+  border: 1px solid var(--flagged-line);
+  border-left: 3px solid var(--flagged-fg);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  background: var(--panel);
+}
+.panel > .engine-finding {
+  margin-top: 16px;
+}
+.engine-finding-label {
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--flagged-fg);
+  margin-bottom: 8px;
+}
+.engine-finding .flags {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+.panel-agent {
+  border: 1.5px dashed var(--flagged-line);
+  background: var(--advisory-surface);
+}
+
 .finding-group + .finding-group {
   margin-top: 14px;
 }
@@ -835,4 +902,328 @@ table.prop-table {
 .kind-card-hint {
   font-size: 12.5px;
   color: var(--muted);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Request detail page */
+.container-wide {
+  max-width: 1180px;
+}
+.crumb {
+  font-size: 13.5px;
+  color: var(--muted);
+}
+.detail-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin: 10px 0 22px;
+}
+.detail-head .page-title {
+  margin: 0;
+}
+.detail-asked {
+  margin: 8px 0 0;
+  color: var(--muted);
+  max-width: 70ch;
+}
+.detail-asker {
+  color: var(--text);
+  font-weight: 600;
+}
+.detail-head .badge {
+  flex: none;
+  margin-top: 6px;
+}
+.detail-note {
+  margin-bottom: 16px;
+}
+
+.progress {
+  list-style: none;
+  display: flex;
+  margin: 0 0 22px;
+  padding: 0;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.progress-step {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  font-size: 14px;
+  color: var(--muted);
+}
+.progress-step + .progress-step {
+  border-left: 1px solid var(--border);
+}
+.progress-dot {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border-strong);
+  display: grid;
+  place-items: center;
+}
+.progress-step.done {
+  color: var(--text);
+}
+.progress-step.done .progress-dot {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.progress-step.current {
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: inset 0 -3px 0 var(--accent);
+}
+.progress-step.current:not(.done) .progress-dot {
+  border: 2px solid var(--accent);
+}
+.progress-step.current:not(.done) .progress-dot::after {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.progress-step.current.stop {
+  color: var(--rejected-fg);
+  box-shadow: inset 0 -3px 0 var(--rejected-fg);
+}
+.progress-step.current.stop .progress-dot {
+  border-color: var(--rejected-fg);
+}
+.progress-step.current.stop .progress-dot::after {
+  background: var(--rejected-fg);
+}
+.progress-step.current.end {
+  color: var(--neutral-fg);
+  box-shadow: inset 0 -3px 0 var(--neutral-fg);
+}
+.progress-step.current.end .progress-dot {
+  border-color: var(--neutral-fg);
+}
+.progress-step.current.end .progress-dot::after {
+  background: var(--neutral-fg);
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  grid-template-areas:
+    "main rail"
+    "trail rail";
+  gap: 18px 24px;
+  align-items: start;
+}
+.detail-grid.no-rail {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    "main"
+    "trail";
+}
+.detail-main {
+  grid-area: main;
+}
+.detail-trail {
+  grid-area: trail;
+}
+/* Sticky beside the content, and scrolls on its own when it is taller than the
+   window, so Submit and Approve can always be reached. */
+.detail-rail {
+  grid-area: rail;
+  position: sticky;
+  top: 24px;
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  padding: 0 2px 20px;
+}
+.panel-title + .panel-sub {
+  margin-top: -10px;
+}
+.panel-sub {
+  color: var(--muted);
+  font-size: 13.5px;
+  margin: 0 0 14px;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 8px 20px;
+  margin: 0;
+  font-size: 14px;
+}
+.facts dt {
+  color: var(--muted);
+}
+.facts dd {
+  margin: 0;
+  word-break: break-word;
+}
+.facts-why {
+  margin: 14px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  font-size: 14px;
+}
+.facts-why-label {
+  font-weight: 600;
+}
+
+.rail-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px;
+  box-shadow:
+    0 1px 2px rgba(22, 33, 27, 0.05),
+    0 12px 28px -16px rgba(22, 33, 27, 0.25);
+}
+.role-hint {
+  display: inline-flex;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 999px;
+  padding: 2px 10px;
+}
+.rail-title {
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  margin: 10px 0 4px;
+}
+.rail-lede {
+  color: var(--muted);
+  font-size: 14px;
+  margin: 0 0 6px;
+}
+.rail-foot {
+  color: var(--muted);
+  font-size: 12.5px;
+  margin: 12px 0 0;
+}
+.ack {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  margin-top: 10px;
+}
+.ack:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--accent-faint);
+}
+.ack-check {
+  display: flex;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.ack-check input {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+}
+.ack-title {
+  display: block;
+  font-weight: 600;
+}
+.ack-detail {
+  display: block;
+  color: var(--muted);
+  font-size: 13px;
+}
+.ack-reasons {
+  margin: 8px 0 0 28px;
+  font-size: 13px;
+}
+.ack-reasons dt {
+  font-weight: 500;
+}
+.ack-reasons dd {
+  margin: 0 0 6px;
+  color: var(--muted);
+}
+.rail-card textarea {
+  min-height: 72px;
+}
+.decision-buttons {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+.decision-buttons .btn-approve {
+  flex: 1;
+}
+
+@media (max-width: 1100px) {
+  .detail-grid {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "main"
+      "rail"
+      "trail";
+  }
+  .detail-rail {
+    position: static;
+    max-height: none;
+    overflow: visible;
+    padding: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .detail-head {
+    flex-direction: column;
+    gap: 10px;
+  }
+  .detail-head .page-title {
+    font-size: 25px;
+  }
+  .progress {
+    flex-direction: column;
+  }
+  .progress-step + .progress-step {
+    border-left: none;
+    border-top: 1px solid var(--border);
+  }
+  .progress-step.current {
+    box-shadow: inset 3px 0 0 var(--accent);
+  }
+  .progress-step.current.stop {
+    box-shadow: inset 3px 0 0 var(--rejected-fg);
+  }
+  .progress-step.current.end {
+    box-shadow: inset 3px 0 0 var(--neutral-fg);
+  }
+  .facts {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+  .facts dd + dt {
+    margin-top: 8px;
+  }
+  .timeline-head {
+    flex-direction: column;
+    gap: 0;
+  }
 }

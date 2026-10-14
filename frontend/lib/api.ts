@@ -379,15 +379,17 @@ export function convertRequest(
   });
 }
 
+export type DecisionOptions = {
+  note?: string;
+  approver_name?: string;
+  pii_acknowledged?: boolean;
+  findings_acknowledged?: boolean;
+};
+
 export function decideRequest(
   id: number,
   decision: "approve" | "reject",
-  opts: {
-    note?: string;
-    approver_name?: string;
-    pii_acknowledged?: boolean;
-    findings_acknowledged?: boolean;
-  } = {},
+  opts: DecisionOptions = {},
 ): Promise<{ id: number; status: string; published_artifact: PublishArtifact | null }> {
   return request(`/requests/${id}/decision`, {
     method: "POST",

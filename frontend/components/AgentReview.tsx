@@ -17,16 +17,21 @@ export function AgentReview({
   variant,
   onConvert,
   convertingEvent,
+  bare = false,
 }: {
   findings: ReviewFinding[];
   variant: "requester" | "approver";
+  // For a host that already frames and titles the review itself.
+  bare?: boolean;
   onConvert?: (existingEvent: string) => void;
   convertingEvent?: string | null;
 }) {
   if (findings.length === 0) return null;
   return (
-    <div className="agent-review">
-      <div className="agent-review-label">Agent review — judgment required</div>
+    <div className={bare ? undefined : "agent-review"}>
+      {!bare && (
+        <div className="agent-review-label">Agent review — judgment required</div>
+      )}
       {KIND_ORDER.map((kind) => {
         const group = findings.filter(
           (f) => (f.kind ?? "duplicate_event") === kind,
@@ -40,7 +45,7 @@ export function AgentReview({
                 <div className="candidate" key={i}>
                   <div className="row" style={{ gap: 8 }}>
                     <span className="candidate-event">{finding.existing_event}</span>
-                    <span className="tag">{finding.category}</span>
+                    <span className="tag tag-text">{finding.category}</span>
                     {(finding.property_names || []).map((name) => (
                       <span className="tag" key={name}>
                         {name}
