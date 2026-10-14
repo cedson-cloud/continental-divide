@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
+import { Instrument_Sans, JetBrains_Mono } from "next/font/google";
 import Link from "next/link";
 import "./globals.css";
+
+const sans = Instrument_Sans({ subsets: ["latin"], variable: "--font-sans" });
+const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono" });
 
 export const metadata: Metadata = {
   title: "Continental Divide",
@@ -13,7 +17,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${sans.variable} ${mono.variable}`}>
       <body>
         <header className="site-header">
           <div className="site-header-inner">
