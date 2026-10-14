@@ -17,15 +17,14 @@ from app.config import get_settings
 from app.storage import discard_idle_sandboxes
 from app.workspace import COOKIE_NAME, new_workspace_id
 
+from .conftest import demo_client
 from .test_spend_controls import _draft, _fake_model, _raw, priced  # noqa: F401
 
 DAY = 24 * 60 * 60
 
 
 def _visitor() -> TestClient:
-    from app.main import app
-
-    client = TestClient(app)
+    client = demo_client()
     assert client.post("/session").status_code == 200
     return client
 

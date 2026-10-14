@@ -36,11 +36,9 @@ class Settings(BaseSettings):
     spend_ledger_path: str = "backend/data/model_spend.db"
     demo_sessions_per_ip_per_hour: int = 10
     demo_sessions_per_hour: int = 300
-    # The header the frontend host puts the client's address in. Unset uses the socket
-    # address, which behind a proxy is the proxy's.
-    demo_client_ip_header: str = ""
     # The frontend host's proxy sends this in X-Demo-Proxy-Secret on every request it
-    # forwards. The echo route reports whether it matched; PR 4 makes it required.
+    # forwards. In demo mode every route but /health requires it, and only a request
+    # carrying it is trusted for the visitor's address.
     demo_proxy_secret: str = ""
     # GET /demo/echo, for checking what reaches the backend through the proxy. Off, the
     # route answers 404.

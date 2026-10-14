@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .config import get_settings
-from .routes import router, session_router
+from .routes import proxy_secret_matches, router, session_router
 from .storage import RequestQuotaReached
 
 
@@ -45,6 +45,41 @@ class BodySizeLimit:
         await self.app(scope, limited_receive, send)
 
 
+class ProxySecretRequired:
+    """In demo mode, refuses every request but /health that lacks the frontend host's
+    proxy secret, so the backend cannot be called around the proxy, and the visitor's
+    address it sends can be trusted (docs/adr/0010). Render's health check calls /health
+    directly. Read per request, so it follows AUTH_MODE."""
+
+    def __init__(self, app) -> None:
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        settings = get_settings()
+        if (
+            scope["type"] != "http"
+            or scope["path"] == "/health"
+            or settings.auth_mode != "demo"
+        ):
+            await self.app(scope, receive, send)
+            return
+        if not settings.demo_proxy_secret:
+            response = JSONResponse(
+                {"detail": "the demo's proxy secret is not configured"}, status_code=503
+            )
+            await response(scope, receive, send)
+            return
+        if not proxy_secret_matches(Request(scope)):
+            response = JSONResponse(
+                {"detail": "this service answers only through the demo site"},
+                status_code=403,
+            )
+            await response(scope, receive, send)
+            return
+
+        await self.app(scope, receive, send)
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(
@@ -54,6 +89,7 @@ def create_app() -> FastAPI:
     )
 
     app.add_middleware(BodySizeLimit)
+    app.add_middleware(ProxySecretRequired)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["http://localhost:3000"],

@@ -7,9 +7,17 @@ and service addresses live in the Render and Vercel dashboards, never in this re
 ## How a request travels
 
 The browser calls `/api/...` on the Vercel site. `frontend/middleware.ts` removes the
-`/api` prefix, forwards the call to the Render backend, and adds the `x-demo-proxy-secret`
-header. Because the browser only ever sees the Vercel origin, the workspace cookie is
+`/api` prefix, forwards the call to the Render backend, and adds two headers:
+`x-demo-proxy-secret`, and `x-demo-client-ip` carrying the address Vercel received the
+request from (its `x-real-ip`). Any value the client sent for either header is replaced or
+dropped. Because the browser only ever sees the Vercel origin, the workspace cookie is
 first-party and the backend needs no CORS entry for Vercel.
+
+In demo mode the backend refuses every request but `/health` that lacks the proxy secret,
+with a 403, so it answers only through Vercel. It trusts `x-demo-client-ip` for its
+per-address limits only on a request carrying the secret. If `DEMO_PROXY_SECRET` is unset
+on Render, every route but `/health` answers 503 with "the demo's proxy secret is not
+configured".
 
 If either Vercel setting the middleware needs is missing, every `/api/*` call answers 503
 with "the demo proxy is not configured" and nothing reaches the backend.
@@ -44,7 +52,7 @@ Environment variables:
 | `SANDBOX_DIR` | A folder under `/var/data` |
 | `DATABASE_PATH` | A file under `/var/data` |
 | `SPEND_LEDGER_PATH` | A file under `/var/data` |
-| `DEMO_ECHO_ROUTE` | `true` only while running the echo check below, then `false` |
+| `DEMO_ECHO_ROUTE` | `false`. `true` only while running the echo check below |
 
 Added later, when the model is turned on:
 
@@ -54,7 +62,6 @@ Added later, when the model is turned on:
 | `ANTHROPIC_MODEL` | The pinned model |
 | `DEMO_DAILY_BUDGET_USD` | `2` |
 | `MODEL_INPUT_USD_PER_MTOK`, `MODEL_OUTPUT_USD_PER_MTOK` | The pinned model's prices |
-| `DEMO_CLIENT_IP_HEADER` | The header the echo check shows Vercel sets outright |
 
 Until the key, the budget and both prices are set, every model call is refused and the
 model-free path still works.
@@ -82,26 +89,44 @@ takes effect only after a redeploy. `DEMO_BACKEND_ORIGIN` and `DEMO_PROXY_SECRET
 
 ## The echo check
 
-This shows what the backend actually receives through the rewrite, before the backend
-starts relying on it.
+This shows what the backend actually receives through the rewrite. Run it after any change
+to the proxy path.
 
 1. Set `DEMO_ECHO_ROUTE=true` on Render and wait for the redeploy.
 2. Open `https://<vercel-site-address>/api/demo/echo` in a browser. Save the JSON.
 3. Reload the page. Save the JSON again.
-4. Set `DEMO_ECHO_ROUTE=false` on Render.
+4. Run the forge check below.
+5. Set `DEMO_ECHO_ROUTE=false` on Render.
 
 What to read in the result:
 
-- `proxy_secret_matched` should be `true`. If it is `false`, the secret did not survive
-  the rewrite, and the backend must not start enforcing it.
-- `ip_candidates` shows which headers carry your address. Choose one Vercel sets outright
-  (`x-real-ip` or `x-vercel-forwarded-for`), never the first entry of `x-forwarded-for`,
-  which a client can write.
+- `proxy_secret_matched` should be `true`. With the secret enforced, a `false` cannot
+  reach the route at all: the call answers 403 instead.
+- `limiter_address` should be your own public address, the same as
+  `ip_candidates["x-demo-client-ip"]`. If `x-demo-client-ip` is `null`, `limiter_address`
+  is an address of Vercel's: the middleware found no `x-real-ip`, and every visitor shares
+  one per-address limit.
 - `cookie_names` should be empty on the first load and include `cd_echo` on the second.
   That shows cookies make the round trip.
 
-Before trusting a header, send the same request with a made-up value for it and confirm
-the echo still shows your real address.
+### The forge check
+
+A client must not be able to choose the address the limits key on, or call the backend
+around Vercel. From a terminal:
+
+```
+curl -s https://<vercel-site-address>/api/demo/echo -H "x-demo-client-ip: 198.51.100.66" -H "x-real-ip: 198.51.100.66" -H "x-forwarded-for: 198.51.100.66" -H "x-vercel-forwarded-for: 198.51.100.66"
+```
+
+`limiter_address` must be the same address as in the JSON saved at step 2, never
+`198.51.100.66`, and `x-demo-client-ip` must not be `null`.
+
+```
+curl -s -o /dev/null -w "%{http_code}\n" https://<render-service-address>/requests
+```
+
+This calls Render directly, without the secret, and must print `403`.
+`https://<render-service-address>/health` must still answer 200, for Render's health check.
 
 ## Running the proxy locally
 
@@ -115,9 +140,6 @@ DEMO_PROXY_SECRET=<the same local value>
 ```
 
 Leave `NEXT_PUBLIC_API_BASE` unset to go back to calling the backend directly on port 8000.
-
-## Not yet in place
-
-- The backend reports whether the proxy secret matched but does not yet refuse a request
-  without it, so the Render address can still be called directly.
-- `DEMO_CLIENT_IP_HEADER` is unset, so per-address limits key on the address Render sees.
+That works only with `AUTH_MODE=local`: in demo mode the backend refuses any call that did
+not come through the proxy. If the local server sets no `x-real-ip`, per-address limits
+key on the local socket address.

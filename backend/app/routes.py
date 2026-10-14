@@ -105,13 +105,12 @@ def acting_storage(
 
 
 def _client_key(request: Request) -> str:
-    """The client's address for rate limiting: the first entry of DEMO_CLIENT_IP_HEADER
-    when one is configured and present, else the socket address."""
-    header = get_settings().demo_client_ip_header.strip()
-    if header:
-        first = request.headers.get(header, "").split(",")[0].strip()
-        if first:
-            return first
+    """The client's address for rate limiting: CLIENT_IP_HEADER when the request carries
+    the proxy secret, since only the proxy can have written it, else the socket address."""
+    if proxy_secret_matches(request):
+        address = request.headers.get(CLIENT_IP_HEADER, "").strip()
+        if address:
+            return address
     return request.client.host if request.client else "unknown"
 
 
@@ -176,8 +175,16 @@ def start_session(request: Request, response: Response) -> dict:
 
 
 PROXY_SECRET_HEADER = "x-demo-proxy-secret"
-# Every header a proxy might carry the client's address in, in the order to prefer them.
-IP_HEADER_CANDIDATES = ("x-real-ip", "x-vercel-forwarded-for", "x-forwarded-for")
+# The frontend host's middleware writes the visitor's address here, replacing any value
+# the client sent (frontend/middleware.ts).
+CLIENT_IP_HEADER = "x-demo-client-ip"
+# Every header that might carry the client's address, so a forge check can see each one.
+IP_HEADER_CANDIDATES = (
+    CLIENT_IP_HEADER,
+    "x-real-ip",
+    "x-vercel-forwarded-for",
+    "x-forwarded-for",
+)
 _FORWARDING_HINTS = ("forward", "real-ip", "x-vercel-", "via", "client-ip", "cf-")
 ECHO_COOKIE = "cd_echo"
 
@@ -218,7 +225,6 @@ def demo_echo(request: Request, response: Response) -> dict:
         },
         "socket_address": request.client.host if request.client else None,
         "limiter_address": _client_key(request),
-        "configured_ip_header": settings.demo_client_ip_header.strip() or None,
         "proxy_secret_matched": proxy_secret_matches(request),
         "cookie_names": sorted(request.cookies.keys()),
     }

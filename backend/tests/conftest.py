@@ -44,6 +44,7 @@ def client(storage):
 
 
 DEMO_SECRET = "test-only-signing-key-" + "x" * 32
+PROXY_SECRET = "test-only-proxy-secret-" + "y" * 32
 
 
 @pytest.fixture
@@ -53,6 +54,7 @@ def demo_env(tmp_path, monkeypatch):
     monkeypatch.setenv("AUTH_MODE", "demo")
     monkeypatch.setenv("DEMO_COOKIE_SECRET", DEMO_SECRET)
     monkeypatch.setenv("DEMO_COOKIE_SECURE", "false")
+    monkeypatch.setenv("DEMO_PROXY_SECRET", PROXY_SECRET)
     monkeypatch.setenv("SANDBOX_DIR", str(tmp_path / "sandboxes"))
     monkeypatch.setenv("SPEND_LEDGER_PATH", str(tmp_path / "spend.db"))
     monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "shared.db"))
@@ -68,6 +70,22 @@ def demo_env(tmp_path, monkeypatch):
     _clear_demo_caches()
     yield tmp_path
     _clear_demo_caches()
+
+
+def demo_client(**headers) -> TestClient:
+    """A client arriving the way the frontend host's proxy sends every demo request:
+    with the proxy secret. ``headers`` are added to every call."""
+    from app.main import app
+    from app.routes import PROXY_SECRET_HEADER
+
+    return TestClient(app, headers={PROXY_SECRET_HEADER: PROXY_SECRET, **headers})
+
+
+def bare_client(**headers) -> TestClient:
+    """A client calling the backend directly, without the proxy secret."""
+    from app.main import app
+
+    return TestClient(app, headers=headers)
 
 
 def _fresh_route_limiter(monkeypatch):

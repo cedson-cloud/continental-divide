@@ -41,10 +41,13 @@ and its history are discarded after 7 days. Those are the demo's terms. On a rea
   drafting stops with a plain message and an audit entry, the semantic review fails advisory
   (ADR 0004's rule that an advisory call never blocks intake), and the model-free path and every
   screen without a model call keep working.
-- **Workspace creation is rate limited per client IP**, read from the forwarded header the
-  frontend host sets. If the real client IP cannot be read reliably through the rewrite, the
-  limit falls back to a global creation rate. It slows a script; the daily cap is what stops
-  one.
+- **Workspace creation is rate limited per client IP and by a global creation rate.** The
+  frontend host's proxy sends the address it received the request from in a header of its
+  own, replacing any value the client sent, and the backend trusts that header only alongside
+  the proxy secret. The header name is fixed in code, not configured, so it cannot be pointed
+  at one a client can write. If the proxy sends no address, the per-IP limit keys on the
+  proxy's own address and becomes a second global rate. It slows a script; the daily cap is
+  what stops one.
 - **Every authenticated route is rate limited per workspace cookie**, reads included, with
   its own settings (`GENERAL_RATE_LIMIT_MAX`, `GENERAL_RATE_LIMIT_WINDOW_SECONDS`). A caller
   with no workspace is keyed by address. The intake limiter on the model routes stays as a
@@ -60,7 +63,10 @@ and its history are discarded after 7 days. Those are the demo's terms. On a rea
 - Vercel rewrites `/api/*` to the backend, so the browser sees one origin and the workspace
   cookie is first-party.
 - The Notion push is off. Publishing uses MockPublisher only.
-- The demo backend holds two secrets: the demo Anthropic key and the cookie-signing key.
+- The demo backend holds three secrets: the demo Anthropic key, the cookie-signing key, and
+  the proxy secret, which Vercel also holds and adds to every call it forwards. In demo mode
+  every route but the health check refuses a call without it, so the backend answers only
+  through Vercel.
 
 ## Considered and rejected
 
