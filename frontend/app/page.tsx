@@ -18,7 +18,8 @@ import {
   submitRequest,
   withdrawRequest,
 } from "@/lib/api";
-import { NATURAL_LANGUAGE_EXAMPLES, RAW_EXAMPLES } from "@/lib/examples";
+import { NaturalLanguageExample, fillFromExample } from "@/lib/examples";
+import { ruleInSentence } from "@/lib/format";
 import { ProposedDefinition } from "@/components/AuditTimeline";
 import { AgentReview } from "@/components/AgentReview";
 import { EventPicker } from "@/components/EventPicker";
@@ -33,6 +34,7 @@ import {
 import { PiiReasons } from "@/components/PiiReasons";
 import { RejectedRecourse } from "@/components/RejectedRecourse";
 import { RuleChecks } from "@/components/RuleChecks";
+import { ScenarioCard } from "@/components/ScenarioCard";
 import { StatusBadge } from "@/components/StatusBadge";
 
 function findEntry(log: AuditEntry[], step: string): AuditEntry | undefined {
@@ -57,7 +59,9 @@ export default function IntakePage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<RequestDetail | null>(null);
-  const [showRaw, setShowRaw] = useState(false);
+  const [scenarioStatus, setScenarioStatus] = useState<string | null>(null);
+  const outcomeRef = useRef<HTMLDivElement>(null);
+  const errorRef = useRef<HTMLDivElement>(null);
   // Synchronous guard: two clicks in the same frame both render with
   // submitting=false, so the disabled prop alone cannot stop the second one.
   const inFlight = useRef(false);
@@ -70,6 +74,15 @@ export default function IntakePage() {
       .catch(() => setAllowedDestinations([]));
   }, []);
 
+  // The result and any error render below a long form, and a scenario is started from
+  // above it. Moving focus there brings it into view and tells a screen reader it arrived.
+  useEffect(() => {
+    if (outcome) outcomeRef.current?.focus();
+  }, [outcome]);
+  useEffect(() => {
+    if (error) errorRef.current?.focus();
+  }, [error]);
+
   function toggleDestination(d: string) {
     setDestinations((prev) =>
       prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d],
@@ -80,6 +93,7 @@ export default function IntakePage() {
     if (inFlight.current) return;
     inFlight.current = true;
     setError(null);
+    setScenarioStatus(null);
     setOutcome(null);
     setSubmitting(true);
     try {
@@ -93,8 +107,25 @@ export default function IntakePage() {
     }
   }
 
+  function fillScenario(example: NaturalLanguageExample) {
+    const next = fillFromExample({ text, businessValue }, example);
+    setText(next.text);
+    setBusinessValue(next.businessValue);
+    const keptTyping =
+      next.text !== example.text || next.businessValue !== example.businessValue;
+    const missingWho = submitterName.trim().length === 0 || submitterTeam === "";
+    setScenarioStatus(
+      `Filled the form with “${example.label}”.` +
+        (keptTyping ? " Fields you typed in were left alone." : "") +
+        (missingWho
+          ? " Add your name and team, then select Draft my request."
+          : " Select Draft my request to send it."),
+    );
+  }
+
   return (
     <main className="container">
+      <span className="role-hint page-role-hint">You&apos;re the requester</span>
       <h1 className="page-title">New event request</h1>
       <p className="page-subtitle">
         Describe the event you want to track in plain language. A model drafts a
@@ -104,6 +135,20 @@ export default function IntakePage() {
       <div className="msg msg-info" style={{ marginBottom: 16 }}>
         New to this? <Link href="/request/new">Use the guided request →</Link>
       </div>
+
+      <ScenarioCard
+        busy={submitting}
+        status={scenarioStatus}
+        onFill={fillScenario}
+        onRun={(ex) =>
+          run(() =>
+            submitRawDefinition(ex.definition, undefined, {
+              business_value:
+                "Demo: exercises the deterministic rules with a pre-built definition",
+            }),
+          )
+        }
+      />
 
       <div className="panel">
         <div className="panel-title">Describe the event</div>
@@ -296,64 +341,24 @@ export default function IntakePage() {
           </button>
         </div>
 
-        <div className="raw-affordance">
-          <button className="link-button" onClick={() => setShowRaw((v) => !v)}>
-            {showRaw ? "▾" : "▸"} Demo: load a raw definition (skips the model step)
-          </button>
-          {showRaw && (
-            <div className="mt-12">
-              <span className="field-label">Load an example request</span>
-              <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>
-                Fills empty form fields with an example. Anything you have already typed
-                is left alone.
-              </p>
-              <div className="row">
-                {NATURAL_LANGUAGE_EXAMPLES.map((ex) => (
-                  <button
-                    key={ex.key}
-                    className="btn btn-ghost"
-                    onClick={() => {
-                      if (text.trim().length === 0) setText(ex.text);
-                      if (businessValue.trim().length === 0)
-                        setBusinessValue(ex.businessValue);
-                    }}
-                    disabled={submitting}
-                  >
-                    {ex.label}
-                  </button>
-                ))}
-              </div>
-              <p className="muted" style={{ fontSize: 13, marginTop: 12 }}>
-                Posts a pre-built definition straight to the rules. Used for violations a
-                faithful model would not author from plain English.
-              </p>
-              <div className="row">
-                {RAW_EXAMPLES.map((ex) => (
-                  <button
-                    key={ex.key}
-                    className="btn btn-ghost"
-                    onClick={() =>
-                      run(() =>
-                        submitRawDefinition(ex.definition, undefined, {
-                          business_value:
-                            "Demo: exercises the deterministic rules with a pre-built definition",
-                        }),
-                      )
-                    }
-                    disabled={submitting}
-                  >
-                    {ex.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {error && <div className="msg msg-error mt-16">{error}</div>}
+        {error && (
+          <div ref={errorRef} tabIndex={-1} className="msg msg-error mt-16">
+            {error}
+          </div>
+        )}
       </div>
 
-      {outcome && <Outcome detail={outcome} />}
+      {outcome && (
+        <div
+          ref={outcomeRef}
+          tabIndex={-1}
+          className="outcome"
+          role="region"
+          aria-label="Result"
+        >
+          <Outcome detail={outcome} />
+        </div>
+      )}
     </main>
   );
 }
@@ -466,7 +471,7 @@ function Outcome({ detail }: { detail: RequestDetail }) {
       <div className="panel">
         <div className="panel-title">Sent to the data team</div>
         <p style={{ marginTop: 0 }}>
-          Your disagreement with {disputedRule} is recorded against request #
+          Your disagreement with {ruleInSentence(disputedRule)} is recorded against request #
           {detail.id}, along with the version of the profile it applies to. Nothing
           changed: the request stays rejected and the rules stay as they are.
         </p>

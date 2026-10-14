@@ -136,7 +136,7 @@ describe("RejectedRecourse", () => {
       screen.getByRole("button", { name: "This rule looks wrong for us" }),
     );
     expect(
-      screen.getByText("Why does event_naming look wrong for your team? *"),
+      screen.getByText("Why does the event name rule look wrong for your team? *"),
     ).toBeInTheDocument();
   });
 

@@ -17,7 +17,7 @@ import {
   submitRequest,
   withdrawRequest,
 } from "@/lib/api";
-import { definitionTitle, isActionable, ruleLabel } from "@/lib/format";
+import { definitionTitle, isActionable, ruleInSentence } from "@/lib/format";
 import { AuditTimeline } from "@/components/AuditTimeline";
 import { DefinitionView } from "@/components/DefinitionView";
 import { AgentReview } from "@/components/AgentReview";
@@ -275,7 +275,7 @@ export default function RequestDetailPage({
                 : "its rejected name"}{" "}
               by the requester after{" "}
               {typeof renameEntry.detail?.failed_rule === "string"
-                ? `the ${ruleLabel(renameEntry.detail.failed_rule)} rule`
+                ? ruleInSentence(renameEntry.detail.failed_rule)
                 : "a rule"}{" "}
               rejected it. The name was chosen from the set the engine derived, not
               drafted by the model.
