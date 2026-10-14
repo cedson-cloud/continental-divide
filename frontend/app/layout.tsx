@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Instrument_Sans, JetBrains_Mono } from "next/font/google";
-import Link from "next/link";
+import { AppNav } from "@/components/AppNav";
 import "./globals.css";
 
 const sans = Instrument_Sans({ subsets: ["latin"], variable: "--font-sans" });
@@ -19,20 +19,15 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${sans.variable} ${mono.variable}`}>
       <body>
-        <header className="site-header">
-          <div className="site-header-inner">
-            <div className="brand">
-              Continental Divide<span>tracking governance</span>
-            </div>
-            <nav className="nav">
-              <Link href="/">Intake</Link>
-              <Link href="/catalog">Catalog</Link>
-              <Link href="/queue">Queue</Link>
-              <Link href="/admin">Governance</Link>
-            </nav>
+        <a href="#content" className="skip-link">
+          Skip to content
+        </a>
+        <div className="app">
+          <AppNav />
+          <div id="content" className="app-main" tabIndex={-1}>
+            {children}
           </div>
-        </header>
-        {children}
+        </div>
       </body>
     </html>
   );
