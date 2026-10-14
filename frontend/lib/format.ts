@@ -76,6 +76,11 @@ export function ruleLabel(rule: string): string {
   return RULE_LABELS[rule] || rule;
 }
 
+// A rule named mid-sentence: "the event name rule".
+export function ruleInSentence(rule: string): string {
+  return `the ${ruleLabel(rule).toLowerCase()} rule`;
+}
+
 const AUDIT_KEY_LABELS: Record<string, string> = {
   raw_intake_text: "Request text",
   submitter_name: "Requested by",

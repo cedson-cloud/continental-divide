@@ -16,6 +16,8 @@ const PATHS = {
   menu: <path d="M3.5 6h13M3.5 10h13M3.5 14h13" />,
   close: <path d="M5.5 5.5l9 9M14.5 5.5l-9 9" />,
   check: <path d="M4.5 10.5l3.5 3.5 7.5-8" />,
+  pencil: <path d="M13 4.5l2.5 2.5L7.5 15H5v-2.5z" />,
+  play: <path d="M7 5l8 5-8 5z" />,
 };
 
 export type IconName = keyof typeof PATHS;

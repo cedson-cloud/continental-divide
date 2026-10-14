@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { RuleCheck } from "@/lib/api";
 import { RuleChecks, decidingFailures } from "@/components/RuleChecks";
+import { ruleInSentence } from "@/lib/format";
 
 // The one component every rejection renders — wizard step 4, the single-screen
 // outcome, and the request detail page all share it, so the doors cannot exist on one
@@ -86,7 +87,7 @@ export function RejectedRecourse({
             <>
               <label className="field">
                 <span className="field-label">
-                  Why does {disputableRule} look wrong for your team? *
+                  Why does {ruleInSentence(disputableRule)} look wrong for your team? *
                 </span>
                 <textarea
                   value={note}

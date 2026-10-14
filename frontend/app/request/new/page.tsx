@@ -22,6 +22,7 @@ import {
   wizardReducer,
 } from "@/lib/wizard";
 import { missingPiiReasons, piiReasonsToSend } from "@/lib/gating";
+import { ruleInSentence } from "@/lib/format";
 import { EventPicker } from "@/components/EventPicker";
 import { PiiReasons } from "@/components/PiiReasons";
 import { RejectedRecourse } from "@/components/RejectedRecourse";
@@ -217,7 +218,7 @@ export default function GuidedRequestPage() {
         <div className="panel">
           <div className="panel-title">Sent to the data team</div>
           <p style={{ marginTop: 0 }}>
-            Your disagreement with {phase.rule} is recorded against request #
+            Your disagreement with {ruleInSentence(phase.rule)} is recorded against request #
             {state.detail.id}, along with the version of the profile it applies to.
             Nothing changed: the request stays rejected and the rules stay as they
             are. Changing a rule happens in the governance profile, by a human.
@@ -266,6 +267,7 @@ export default function GuidedRequestPage() {
 
   return (
     <main className="container">
+      <span className="role-hint page-role-hint">You&apos;re the requester</span>
       <h1 className="page-title">Guided request</h1>
       <p className="page-subtitle">
         Step {state.step} of 5 — {STEP_TITLES[state.step - 1]}
