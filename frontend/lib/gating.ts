@@ -27,6 +27,13 @@ export function hasNearDuplicate(checks: RuleCheck[]): boolean {
   return checks.some((c) => c.rule === "near_duplicate" && !c.passed);
 }
 
+// Either engine tier fired: an exact duplicate or a near duplicate.
+export function hasEngineDuplicate(checks: RuleCheck[]): boolean {
+  return checks.some(
+    (c) => !c.passed && (c.rule === "duplicate" || c.rule === "near_duplicate"),
+  );
+}
+
 export function submissionNeedsAnswer(
   findings: ReviewFinding[],
   checks: RuleCheck[],

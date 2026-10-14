@@ -1,5 +1,12 @@
-import { AuditEntry, EventDefinition, RuleCheck } from "@/lib/api";
-import { definitionTitle, formatTimestamp, stepLabel } from "@/lib/format";
+import { AuditEntry, EventDefinition, ReviewFinding, RuleCheck } from "@/lib/api";
+import {
+  auditKeyLabel,
+  definitionTitle,
+  formatTimestamp,
+  ruleLabel,
+  statusMeta,
+  stepLabel,
+} from "@/lib/format";
 
 function dotTone(entry: AuditEntry): string {
   const detail = entry.detail || {};
@@ -23,6 +30,48 @@ function dotTone(entry: AuditEntry): string {
   return "info";
 }
 
+// Keys whose values are event or property names, the only audit values set in code.
+const NAME_KEYS = new Set([
+  "name",
+  "existing_event",
+  "original_name",
+  "new_name",
+  "properties",
+  "traits",
+  "candidates",
+]);
+
+const DECISION_LABELS: Record<string, string> = { approve: "Approve", reject: "Reject" };
+
+function auditValue(key: string, value: unknown): string {
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (key === "rule" || key === "failed_rule") return ruleLabel(String(value));
+  if (key === "decision") {
+    return DECISION_LABELS[String(value)] ?? statusMeta(String(value)).label;
+  }
+  if (Array.isArray(value) && value.every((v) => typeof v === "string")) {
+    return value.join(", ");
+  }
+  if (key === "findings" && Array.isArray(value)) {
+    return (value as ReviewFinding[])
+      .map(
+        (f) => `${f.existing_event} (${f.confidence ?? "high"} confidence): ${f.reason}`,
+      )
+      .join("; ");
+  }
+  if (
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Object.values(value).every((v) => typeof v === "string")
+  ) {
+    return Object.entries(value as Record<string, string>)
+      .map(([k, v]) => `${k}: ${v}`)
+      .join("; ");
+  }
+  return typeof value === "object" ? JSON.stringify(value) : String(value);
+}
+
 type Actor = { email: string; verified: boolean };
 
 function actorLine(entry: AuditEntry): string {
@@ -44,8 +93,10 @@ export function ProposedDefinition({
       <div className="row" style={{ gap: 8 }}>
         <span style={{ fontWeight: 600 }}>{definitionTitle(definition)}</span>
         {isTrack
-          ? definition.category && <span className="tag">{definition.category}</span>
-          : <span className="tag">{definition.call_type}</span>}
+          ? definition.category && (
+              <span className="tag tag-text">{definition.category}</span>
+            )
+          : <span className="tag tag-text">{definition.call_type}</span>}
       </div>
       {fields.length > 0 && (
         <div className="row" style={{ gap: 6, marginTop: 6 }}>
@@ -94,7 +145,7 @@ function DetailBody({ entry }: { entry: AuditEntry }) {
           {checks.map((c) => (
             <span className="mini-check" key={c.rule}>
               <span className={`mini-dot ${c.passed ? "pass" : "fail"}`} />
-              {c.rule}
+              {ruleLabel(c.rule)}
             </span>
           ))}
         </div>
@@ -102,7 +153,7 @@ function DetailBody({ entry }: { entry: AuditEntry }) {
           .filter((c) => !c.passed)
           .map((c) => (
             <div className="muted" key={`r-${c.rule}`} style={{ marginTop: 4 }}>
-              {c.rule}: {c.detail}
+              {ruleLabel(c.rule)}: {c.detail}
             </div>
           ))}
         {flags.map((f, i) => (
@@ -115,15 +166,22 @@ function DetailBody({ entry }: { entry: AuditEntry }) {
   }
 
   const entries = Object.entries(detail).filter(
-    ([key, v]) => key !== "actor" && key !== "self_approval" && v !== null && v !== "",
+    ([key, v]) =>
+      key !== "actor" &&
+      key !== "self_approval" &&
+      v !== null &&
+      v !== "" &&
+      !(Array.isArray(v) && v.length === 0),
   );
   if (entries.length === 0) return null;
   return (
     <dl className="kv">
       {entries.map(([key, value]) => (
         <div key={key} style={{ display: "contents" }}>
-          <dt>{key}</dt>
-          <dd>{typeof value === "object" ? JSON.stringify(value) : String(value)}</dd>
+          <dt>{auditKeyLabel(key)}</dt>
+          <dd className={NAME_KEYS.has(key) ? "mono" : undefined}>
+            {auditValue(key, value)}
+          </dd>
         </div>
       ))}
     </dl>

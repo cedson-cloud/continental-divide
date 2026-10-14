@@ -1,4 +1,5 @@
 import { RuleCheck } from "@/lib/api";
+import { ruleLabel } from "@/lib/format";
 
 // Rules that report without rejecting. The engine gives one boolean per check, so
 // these arrive as passed:false — but they route to a human rather than ending the
@@ -13,6 +14,13 @@ function checkState(check: RuleCheck): "pass" | "fail" | "advisory" {
   return ADVISORY_RULES.has(check.rule) ? "advisory" : "fail";
 }
 
+// What stopped or flagged the request reads first; the passes follow.
+const ORDER: Record<"pass" | "fail" | "advisory", number> = {
+  fail: 0,
+  advisory: 1,
+  pass: 2,
+};
+
 const MARKS: Record<"pass" | "fail" | "advisory", string> = {
   pass: "✓",
   fail: "✕",
@@ -26,26 +34,29 @@ export function RuleChecks({
   checks: RuleCheck[];
   flags: string[];
 }) {
+  const sorted = [...checks].sort(
+    (a, b) => ORDER[checkState(a)] - ORDER[checkState(b)],
+  );
   return (
     <div>
-      <div className="checks">
-        {checks.map((check) => {
+      <div className="checks checks-grid">
+        {sorted.map((check) => {
           const state = checkState(check);
           return (
-            <div className="check" key={check.rule}>
+            <div className={`check ${state}`} key={check.rule}>
               <span
                 className={`check-mark ${state}`}
                 data-state={state}
+                role="img"
                 aria-label={state}
               >
                 {MARKS[state]}
               </span>
               <span>
-                <span className="check-rule">{check.rule}</span>
-                <span className="check-detail"> — {check.detail}</span>
+                <span className="check-rule">{ruleLabel(check.rule)}</span>
+                <span className="check-detail">{check.detail}</span>
                 {state === "advisory" && (
                   <span className="check-detail">
-                    {" "}
                     (advisory — this did not stop the request)
                   </span>
                 )}

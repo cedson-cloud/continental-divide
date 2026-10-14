@@ -15,16 +15,17 @@ const PATHS = {
   shield: <path d="M10 3l6 2.5V10c0 3.5-2.6 6-6 7-3.4-1-6-3.5-6-7V5.5z" />,
   menu: <path d="M3.5 6h13M3.5 10h13M3.5 14h13" />,
   close: <path d="M5.5 5.5l9 9M14.5 5.5l-9 9" />,
+  check: <path d="M4.5 10.5l3.5 3.5 7.5-8" />,
 };
 
 export type IconName = keyof typeof PATHS;
 
-export function Icon({ name }: { name: IconName }) {
+export function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
   return (
     <svg
       viewBox="0 0 20 20"
-      width={18}
-      height={18}
+      width={size}
+      height={size}
       fill="none"
       stroke="currentColor"
       strokeWidth={1.8}

@@ -99,3 +99,73 @@ describe("AuditTimeline self-approval", () => {
     expect(screen.queryByText(/self/)).not.toBeInTheDocument();
   });
 });
+
+describe("AuditTimeline labels", () => {
+  it("says detail keys and values in plain words", () => {
+    render(
+      <AuditTimeline
+        entries={[
+          entry(1, "submitted", { decision: "pending_approval", duplicate_unsure: true }),
+          entry(2, "rule_disputed", { rule: "event_naming", note: "a product concept" }),
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("Submitted for approval")).toBeInTheDocument();
+    expect(screen.getByText("Asked the approver to decide")).toBeInTheDocument();
+    expect(screen.getByText("Yes")).toBeInTheDocument();
+    expect(screen.getByText("Pending approval")).toBeInTheDocument();
+    expect(screen.getByText("Event name")).toBeInTheDocument();
+    expect(screen.queryByText(/duplicate_unsure|pending_approval|event_naming/)).not.toBeInTheDocument();
+  });
+
+  it("keeps the code font for event names and nothing else", () => {
+    render(
+      <AuditTimeline
+        entries={[entry(1, "withdrawn", { existing_event: "User Signed Up", reason: "same thing" })]}
+      />,
+    );
+
+    expect(screen.getByText("User Signed Up")).toHaveClass("mono");
+    expect(screen.getByText("same thing")).not.toHaveClass("mono");
+  });
+
+  it("names rule checks the way the rule-check panel does", () => {
+    render(
+      <AuditTimeline
+        entries={[
+          entry(1, "rules_evaluated", {
+            checks: [{ rule: "event_naming", passed: false, detail: "word 'in' must be Title Case" }],
+            flags: [],
+          }),
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("Event name")).toBeInTheDocument();
+    expect(screen.getByText("Event name: word 'in' must be Title Case")).toBeInTheDocument();
+  });
+});
+
+describe("AuditTimeline structured values", () => {
+  it("reads findings and per-property reasons as sentences, not JSON", () => {
+    render(
+      <AuditTimeline
+        entries={[
+          entry(1, "duplicate_review", {
+            findings: [
+              { existing_event: "User Signed Up", confidence: "high", reason: "both are signups" },
+            ],
+          }),
+          entry(2, "submitted", { pii_reasons: { email: "joins the email platform" } }),
+        ]}
+      />,
+    );
+
+    expect(
+      screen.getByText("User Signed Up (high confidence): both are signups"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("email: joins the email platform")).toBeInTheDocument();
+    expect(screen.queryByText(/[{}]/)).not.toBeInTheDocument();
+  });
+});

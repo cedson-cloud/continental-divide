@@ -9,7 +9,7 @@ export function PublishCards({ artifact }: { artifact: PublishArtifact }) {
         <div className="card-head">Confluence doc · {confluence_doc.id}</div>
         <div className="card-body">
           <h4>{confluence_doc.title}</h4>
-          <span className="tag">
+          <span className="tag tag-text">
             {confluence_doc.category ?? confluence_doc.call_type}
           </span>
           {confluence_doc.description && (
@@ -46,8 +46,13 @@ export function PublishCards({ artifact }: { artifact: PublishArtifact }) {
           <div className="ticket-key">{jira_ticket.key}</div>
           <h4 style={{ marginTop: 4 }}>{jira_ticket.summary}</h4>
           <pre
-            className="mono muted"
-            style={{ fontSize: 12.5, whiteSpace: "pre-wrap", margin: "8px 0 0" }}
+            className="muted"
+            style={{
+              fontFamily: "inherit",
+              fontSize: 13,
+              whiteSpace: "pre-wrap",
+              margin: "8px 0 0",
+            }}
           >
             {jira_ticket.body}
           </pre>

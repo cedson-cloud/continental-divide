@@ -9,7 +9,7 @@ export function DefinitionView({ definition }: { definition: EventDefinition }) 
     <div>
       <div className="row spread">
         <h3 style={{ margin: 0, fontSize: 17 }}>{definitionTitle(definition)}</h3>
-        <span className="tag">
+        <span className="tag tag-text">
           {isTrack ? definition.category : definition.call_type}
         </span>
       </div>
