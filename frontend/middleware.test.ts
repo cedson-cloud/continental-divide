@@ -5,7 +5,7 @@ import {
   getRewrittenUrl,
   unstable_doesMiddlewareMatch,
 } from "next/experimental/testing/server";
-import { PROXY_SECRET_HEADER, config, middleware } from "./middleware";
+import { CLIENT_IP_HEADER, PROXY_SECRET_HEADER, config, middleware } from "./middleware";
 
 const ORIGIN = "https://backend.example.test";
 const SECRET = "test-proxy-secret";
@@ -68,6 +68,30 @@ describe("middleware", () => {
     configure();
     const response = call("/api/session", { [PROXY_SECRET_HEADER]: "forged" });
     expect(forwardedHeader(response, PROXY_SECRET_HEADER)).toBe(SECRET);
+  });
+
+  it("sends the address Vercel saw as the client-IP header", () => {
+    configure();
+    const response = call("/api/session", { "x-real-ip": "203.0.113.7" });
+    expect(forwardedHeader(response, CLIENT_IP_HEADER)).toBe("203.0.113.7");
+  });
+
+  it("replaces a client-IP header the client sent", () => {
+    configure();
+    const response = call("/api/session", {
+      "x-real-ip": "203.0.113.7",
+      [CLIENT_IP_HEADER]: "198.51.100.66",
+    });
+    expect(forwardedHeader(response, CLIENT_IP_HEADER)).toBe("203.0.113.7");
+  });
+
+  it("drops a client-IP header the client sent when there is no address to set", () => {
+    configure();
+    const response = call("/api/session", { [CLIENT_IP_HEADER]: "198.51.100.66" });
+    expect(forwardedHeader(response, CLIENT_IP_HEADER)).toBeNull();
+    expect(response.headers.get("x-middleware-override-headers")).not.toContain(
+      CLIENT_IP_HEADER,
+    );
   });
 
   it("passes the request's other headers through unchanged", () => {

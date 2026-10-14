@@ -16,13 +16,13 @@ from app.config import get_settings
 from app.storage import workspace_storage
 from app.workspace import COOKIE_NAME, sign_workspace
 
+from .conftest import demo_client
+
 CLEAN_EXAMPLE = Path(__file__).parents[1] / "examples" / "clean_cart_cleared.json"
 
 
 def _visitor() -> TestClient:
-    from app.main import app
-
-    return TestClient(app)
+    return demo_client()
 
 
 def _start(client: TestClient) -> None:

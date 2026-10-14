@@ -2,27 +2,25 @@
 (docs/adr/0010, TASKS D5).
 
 Off by default and 404 when off. On, it names the forwarding headers and cookies that
-arrived and echoes the address candidates, so the right DEMO_CLIENT_IP_HEADER can be
-chosen from evidence. It reports whether the proxy secret matched as a boolean and never
-echoes the secret or a cookie value. It needs no identity, because the point is to check
-the path before a visitor has one. Nothing here calls a model.
+arrived, echoes the address candidates, and shows the address the limiter keys on, so a
+forged address can be checked from evidence. It reports whether the proxy secret matched
+as a boolean and never echoes the secret or a cookie value. It needs no identity, because
+the point is to check the path before a visitor has one. In demo mode it sits behind the
+proxy secret like every other route, so the unmatched cases run in local mode. Nothing
+here calls a model.
 """
 
 import pytest
-from fastapi.testclient import TestClient
 
 from app.config import get_settings
-from app.routes import ECHO_COOKIE, IP_HEADER_CANDIDATES, PROXY_SECRET_HEADER
+from app.routes import (
+    CLIENT_IP_HEADER,
+    ECHO_COOKIE,
+    IP_HEADER_CANDIDATES,
+    PROXY_SECRET_HEADER,
+)
 
-from .conftest import DEMO_SECRET
-
-PROXY_SECRET = "proxy-secret-for-tests-" + "y" * 32
-
-
-def _client(**headers) -> TestClient:
-    from app.main import app
-
-    return TestClient(app, headers=headers)
+from .conftest import DEMO_SECRET, PROXY_SECRET, bare_client, demo_client
 
 
 @pytest.fixture
@@ -33,17 +31,30 @@ def echo_on(demo_env, monkeypatch):
     get_settings.cache_clear()
 
 
+@pytest.fixture
+def echo_on_locally(storage, monkeypatch):
+    monkeypatch.setenv("DEMO_ECHO_ROUTE", "true")
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
 def test_the_route_is_off_by_default(demo_env):
-    assert _client().get("/demo/echo").status_code == 404
+    assert demo_client().get("/demo/echo").status_code == 404
 
 
 def test_the_route_is_off_in_local_mode_too(storage):
-    assert _client().get("/demo/echo").status_code == 404
+    assert bare_client().get("/demo/echo").status_code == 404
+
+
+def test_in_demo_mode_it_needs_the_proxy_secret_like_every_route(echo_on):
+    assert bare_client().get("/demo/echo").status_code == 403
 
 
 def test_on_it_names_forwarding_headers_and_echoes_the_address_candidates(echo_on):
-    response = _client(
+    response = demo_client(
         **{
+            CLIENT_IP_HEADER: "203.0.113.7",
             "x-forwarded-for": "203.0.113.7, 10.0.0.1",
             "x-real-ip": "203.0.113.7",
             "x-vercel-forwarded-for": "203.0.113.7",
@@ -54,38 +65,45 @@ def test_on_it_names_forwarding_headers_and_echoes_the_address_candidates(echo_o
     assert response.status_code == 200
     body = response.json()
     assert body["forwarding_headers"] == [
+        CLIENT_IP_HEADER,
         "x-forwarded-for",
         "x-forwarded-proto",
         "x-real-ip",
         "x-vercel-forwarded-for",
     ]
     assert body["ip_candidates"] == {
+        CLIENT_IP_HEADER: "203.0.113.7",
         "x-real-ip": "203.0.113.7",
         "x-vercel-forwarded-for": "203.0.113.7",
         "x-forwarded-for": "203.0.113.7, 10.0.0.1",
     }
     assert set(body["ip_candidates"]) == set(IP_HEADER_CANDIDATES)
     assert body["socket_address"] == "testclient"
-    assert body["configured_ip_header"] is None
-    assert body["limiter_address"] == "testclient"
+    assert body["limiter_address"] == "203.0.113.7"
 
 
 def test_a_missing_candidate_is_null_not_absent(echo_on):
-    body = _client().get("/demo/echo").json()
+    body = demo_client().get("/demo/echo").json()
     assert body["ip_candidates"] == {name: None for name in IP_HEADER_CANDIDATES}
     assert body["forwarding_headers"] == []
 
 
-def test_it_shows_what_the_limiter_would_key_on(echo_on, monkeypatch):
-    monkeypatch.setenv("DEMO_CLIENT_IP_HEADER", "x-real-ip")
-    get_settings.cache_clear()
-    body = _client(**{"x-real-ip": "203.0.113.9"}).get("/demo/echo").json()
-    assert body["configured_ip_header"] == "x-real-ip"
+def test_the_limiter_keys_on_the_proxys_header_and_no_other(echo_on):
+    forged = {"x-real-ip": "198.51.100.66", "x-forwarded-for": "198.51.100.66"}
+    body = demo_client(**forged, **{CLIENT_IP_HEADER: "203.0.113.9"}).get("/demo/echo").json()
     assert body["limiter_address"] == "203.0.113.9"
+    body = demo_client(**forged).get("/demo/echo").json()
+    assert body["limiter_address"] == "testclient", "no proxy header falls back to the socket"
+
+
+def test_without_the_proxy_secret_the_address_header_is_ignored(echo_on_locally):
+    body = bare_client(**{CLIENT_IP_HEADER: "198.51.100.66"}).get("/demo/echo").json()
+    assert body["proxy_secret_matched"] is False
+    assert body["limiter_address"] == "testclient"
 
 
 def test_it_sets_a_probe_cookie_and_reports_cookie_names_on_the_way_back(echo_on):
-    client = _client()
+    client = demo_client()
     first = client.get("/demo/echo")
     assert first.json()["cookie_names"] == []
     set_cookie = first.headers["set-cookie"]
@@ -102,28 +120,26 @@ def test_it_sets_a_probe_cookie_and_reports_cookie_names_on_the_way_back(echo_on
 def test_the_probe_cookie_is_secure_by_default(echo_on, monkeypatch):
     monkeypatch.setenv("DEMO_COOKIE_SECURE", "true")
     get_settings.cache_clear()
-    assert "Secure" in _client().get("/demo/echo").headers["set-cookie"]
+    assert "Secure" in demo_client().get("/demo/echo").headers["set-cookie"]
 
 
-def test_the_secret_matches_only_when_configured_and_sent(echo_on, monkeypatch):
-    assert _client().get("/demo/echo").json()["proxy_secret_matched"] is False
+def test_the_secret_matches_only_when_configured_and_sent(echo_on_locally, monkeypatch):
+    assert bare_client().get("/demo/echo").json()["proxy_secret_matched"] is False
     sent = {PROXY_SECRET_HEADER: PROXY_SECRET}
-    assert _client(**sent).get("/demo/echo").json()["proxy_secret_matched"] is False, (
+    assert bare_client(**sent).get("/demo/echo").json()["proxy_secret_matched"] is False, (
         "unconfigured never matches"
     )
 
     monkeypatch.setenv("DEMO_PROXY_SECRET", PROXY_SECRET)
     get_settings.cache_clear()
-    assert _client(**sent).get("/demo/echo").json()["proxy_secret_matched"] is True
-    assert _client().get("/demo/echo").json()["proxy_secret_matched"] is False
+    assert bare_client(**sent).get("/demo/echo").json()["proxy_secret_matched"] is True
+    assert bare_client().get("/demo/echo").json()["proxy_secret_matched"] is False
     wrong = {PROXY_SECRET_HEADER: PROXY_SECRET[:-1] + "z"}
-    assert _client(**wrong).get("/demo/echo").json()["proxy_secret_matched"] is False
+    assert bare_client(**wrong).get("/demo/echo").json()["proxy_secret_matched"] is False
 
 
-def test_no_secret_or_cookie_value_ever_appears_in_the_body(echo_on, monkeypatch):
-    monkeypatch.setenv("DEMO_PROXY_SECRET", PROXY_SECRET)
-    get_settings.cache_clear()
-    client = _client(**{PROXY_SECRET_HEADER: PROXY_SECRET})
+def test_no_secret_or_cookie_value_ever_appears_in_the_body(echo_on):
+    client = demo_client()
     client.post("/session")
     workspace_cookie = client.cookies["cd_workspace"]
     text = client.get("/demo/echo").text

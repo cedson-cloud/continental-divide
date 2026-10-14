@@ -13,11 +13,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.config import get_settings
+from app.routes import CLIENT_IP_HEADER
 from app.spend import get_meter
 from app.storage import RequestQuotaReached, workspace_storage
 from app.workspace import new_workspace_id
 
-from .conftest import TESTER
+from .conftest import TESTER, demo_client
 
 CLEAN_EXAMPLE = json.loads(
     (Path(__file__).parents[1] / "examples" / "clean_cart_cleared.json").read_text()
@@ -58,9 +59,7 @@ def _fake_model(monkeypatch, calls):
 
 
 def _visitor(**headers) -> TestClient:
-    from app.main import app
-
-    client = TestClient(app, headers=headers)
+    client = demo_client(**headers)
     assert client.post("/session").status_code == 200
     return client
 
@@ -205,28 +204,24 @@ def test_localhost_is_not_metered(storage):
 
 def test_new_sandboxes_are_limited_per_client(demo_env, monkeypatch):
     monkeypatch.setenv("DEMO_SESSIONS_PER_IP_PER_HOUR", "2")
-    monkeypatch.setenv("DEMO_CLIENT_IP_HEADER", "x-forwarded-for")
     get_settings.cache_clear()
-    from app.main import app
 
-    first = _visitor(**{"x-forwarded-for": "203.0.113.7, 10.0.0.1"})
-    _visitor(**{"x-forwarded-for": "203.0.113.7"})
-    third = TestClient(app, headers={"x-forwarded-for": "203.0.113.7"})
+    first = _visitor(**{CLIENT_IP_HEADER: "203.0.113.7"})
+    _visitor(**{CLIENT_IP_HEADER: "203.0.113.7"})
+    third = demo_client(**{CLIENT_IP_HEADER: "203.0.113.7"})
     assert third.post("/session").status_code == 429
 
     assert first.post("/session").status_code == 200, "a returning visitor is not counted"
-    _visitor(**{"x-forwarded-for": "198.51.100.4"})
+    _visitor(**{CLIENT_IP_HEADER: "198.51.100.4"})
 
 
 def test_new_sandboxes_are_limited_across_all_clients(demo_env, monkeypatch):
     monkeypatch.setenv("DEMO_SESSIONS_PER_HOUR", "2")
-    monkeypatch.setenv("DEMO_CLIENT_IP_HEADER", "x-forwarded-for")
     get_settings.cache_clear()
-    from app.main import app
 
-    _visitor(**{"x-forwarded-for": "203.0.113.1"})
-    _visitor(**{"x-forwarded-for": "203.0.113.2"})
-    third = TestClient(app, headers={"x-forwarded-for": "203.0.113.3"})
+    _visitor(**{CLIENT_IP_HEADER: "203.0.113.1"})
+    _visitor(**{CLIENT_IP_HEADER: "203.0.113.2"})
+    third = demo_client(**{CLIENT_IP_HEADER: "203.0.113.3"})
     assert third.post("/session").status_code == 429
 
 

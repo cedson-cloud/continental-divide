@@ -9,13 +9,13 @@ import json
 import sqlite3
 from pathlib import Path
 
-from fastapi.testclient import TestClient
-
 from app.catalog import DuplicateReview
 from app.identity import Identity
 from app.interpreter import Interpretation
 from app.pipeline import decide, ingest, interpret_intake, submit_request
 from app.publisher import get_publisher
+
+from .conftest import demo_client
 
 CLEAN_EXAMPLE = Path(__file__).parents[1] / "examples" / "clean_cart_cleared.json"
 BOOKMARKED = {
@@ -114,9 +114,7 @@ def test_a_rejection_carries_no_self_approval_marker(storage):
 
 
 def test_every_approval_in_the_demo_is_a_self_approval(demo_env):
-    from app.main import app
-
-    visitor = TestClient(app)
+    visitor = demo_client()
     assert visitor.post("/session").status_code == 200
     created = visitor.post(
         "/requests/raw",

@@ -19,6 +19,7 @@ from app.pipeline import interpret_intake
 from app.rate_limit import RateLimiter
 from app.recourse import AlreadyDisputed, disputed_rules, record_rule_dispute
 
+from .conftest import demo_client
 from .test_rename_and_dispute import _rejected, _steps, stub_no_findings
 
 MODEL = "claude-sonnet-4-6"
@@ -59,9 +60,7 @@ def _dispute(client, rid, rule="event_naming"):
 
 
 def _visitor() -> TestClient:
-    from app.main import app
-
-    client = TestClient(app)
+    client = demo_client()
     assert client.post("/session").status_code == 200
     return client
 
@@ -155,10 +154,8 @@ def test_a_refused_write_changes_nothing(client, storage, monkeypatch):
 
 
 def test_health_and_session_stay_outside_it(demo_env, monkeypatch):
-    from app.main import app
-
     monkeypatch.setattr("app.routes._route_limiter", RateLimiter(0, 60))
-    client = TestClient(app)
+    client = demo_client()
     assert client.get("/health").status_code == 200
     assert client.post("/session").status_code == 200
     assert client.get("/requests").status_code == 429
