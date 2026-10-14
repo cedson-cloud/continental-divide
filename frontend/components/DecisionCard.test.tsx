@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { RequestDetail, ReviewFinding } from "@/lib/api";
+import { RequestDetail, ReviewFinding, RuleCheck } from "@/lib/api";
 import { DecisionCard } from "./DecisionCard";
 
 afterEach(cleanup);
@@ -54,8 +54,55 @@ const GATED = detail({
   duplicate_candidates: [FINDING],
 });
 
-function renderCard(d: RequestDetail, onDecide = vi.fn().mockResolvedValue(true)) {
-  render(<DecisionCard detail={d} deciding={false} error={null} onDecide={onDecide} />);
+const CLEAN_CHECKS: RuleCheck[] = [
+  {
+    rule: "duplicate",
+    passed: true,
+    detail: "'Newsletter Signed Up' is not already in the tracking plan",
+  },
+  { rule: "near_duplicate", passed: true, detail: "no near duplicate in the tracking plan" },
+];
+
+const NEAR_DUPLICATE: RuleCheck[] = [
+  {
+    rule: "duplicate",
+    passed: true,
+    detail: "'order completed' is not already in the tracking plan",
+  },
+  {
+    rule: "near_duplicate",
+    passed: false,
+    detail: "'order completed' is the same name as 'Order Completed' written differently",
+  },
+];
+
+const EXACT_DUPLICATE: RuleCheck[] = [
+  {
+    rule: "duplicate",
+    passed: false,
+    detail: "'Order Completed' already exists in the tracking plan",
+  },
+  {
+    rule: "near_duplicate",
+    passed: true,
+    detail: "not checked: an exact match already answers the question",
+  },
+];
+
+function renderCard(
+  d: RequestDetail,
+  onDecide = vi.fn().mockResolvedValue(true),
+  checks: RuleCheck[] = CLEAN_CHECKS,
+) {
+  render(
+    <DecisionCard
+      detail={d}
+      checks={checks}
+      deciding={false}
+      error={null}
+      onDecide={onDecide}
+    />,
+  );
   return onDecide;
 }
 
@@ -122,5 +169,47 @@ describe("DecisionCard gating", () => {
 
     await waitFor(() => expect(onDecide).toHaveBeenCalled());
     expect(screen.getByRole("checkbox", { name: /Personal data reviewed/ })).toBeChecked();
+  });
+
+  // A raw-path request has no agent findings, so the engine is the only thing that
+  // fired. The server still refuses Approve without the acknowledgment.
+  it("gates Approve on an engine-only near duplicate until it is acknowledged", async () => {
+    const onDecide = renderCard(detail(), undefined, NEAR_DUPLICATE);
+
+    expect(screen.getByText("Acknowledge 1 item to approve.")).toBeInTheDocument();
+    expect(approve()).toBeDisabled();
+
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: /same name as 'Order Completed' written differently/,
+      }),
+    );
+    expect(approve()).toBeEnabled();
+    fireEvent.click(approve());
+
+    await waitFor(() => expect(onDecide).toHaveBeenCalledTimes(1));
+    expect(onDecide).toHaveBeenCalledWith(
+      "approve",
+      expect.objectContaining({ findings_acknowledged: true }),
+    );
+  });
+
+  it("gates Approve on an engine-only exact duplicate", () => {
+    renderCard(detail(), undefined, EXACT_DUPLICATE);
+    expect(
+      screen.getByRole("checkbox", { name: /Duplicate name reviewed/ }),
+    ).toBeInTheDocument();
+    expect(approve()).toBeDisabled();
+  });
+
+  it("asks once when the engine and the duplicate review both fired", () => {
+    renderCard(detail({ duplicate_candidates: [FINDING] }), undefined, NEAR_DUPLICATE);
+
+    expect(screen.getAllByRole("checkbox")).toHaveLength(1);
+    const box = screen.getByRole("checkbox", {
+      name: /written differently.*This event is not User Signed Up/,
+    });
+    fireEvent.click(box);
+    expect(approve()).toBeEnabled();
   });
 });

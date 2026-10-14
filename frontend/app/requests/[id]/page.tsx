@@ -469,6 +469,7 @@ export default function RequestDetailPage({
             ) : (
               <DecisionCard
                 detail={detail}
+                checks={evaluation.checks}
                 deciding={deciding}
                 error={decisionError}
                 onDecide={decide}

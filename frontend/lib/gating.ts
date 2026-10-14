@@ -27,11 +27,16 @@ export function hasNearDuplicate(checks: RuleCheck[]): boolean {
   return checks.some((c) => c.rule === "near_duplicate" && !c.passed);
 }
 
-// Either engine tier fired: an exact duplicate or a near duplicate.
-export function hasEngineDuplicate(checks: RuleCheck[]): boolean {
-  return checks.some(
+// Either engine tier fired: an exact duplicate or a near duplicate. The engine
+// suppresses the near flag when the exact one fires, so at most one check fails.
+export function engineDuplicateCheck(checks: RuleCheck[]): RuleCheck | undefined {
+  return checks.find(
     (c) => !c.passed && (c.rule === "duplicate" || c.rule === "near_duplicate"),
   );
+}
+
+export function hasEngineDuplicate(checks: RuleCheck[]): boolean {
+  return engineDuplicateCheck(checks) !== undefined;
 }
 
 export function submissionNeedsAnswer(
