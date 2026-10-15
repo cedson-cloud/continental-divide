@@ -18,6 +18,7 @@ import {
   DataKind,
   canAdvance,
   initialWizardState,
+  missingForStep,
   toIntakePayload,
   wizardReducer,
 } from "@/lib/wizard";
@@ -29,6 +30,7 @@ import {
   fillFromExample,
 } from "@/lib/examples";
 import { ruleInSentence } from "@/lib/format";
+import { SIDE_HINT, SIDE_OPTIONS, missingFieldsSentence } from "@/lib/intake";
 import { EventPicker } from "@/components/EventPicker";
 import { PiiReasons } from "@/components/PiiReasons";
 import { RejectedRecourse } from "@/components/RejectedRecourse";
@@ -276,10 +278,12 @@ export default function GuidedRequestPage() {
         <div className="panel">
           <div className="panel-title">Request submitted</div>
           <p style={{ marginTop: 0 }}>
-            Request #{state.detail.id} is now in the approval queue.
+            Request #{state.detail.id} is now in the approval queue. In a real team
+            someone else decides. Here, you do: open the queue and decide it as the
+            approver.
           </p>
           <div className="row">
-            <Link href="/queue">View the queue →</Link>
+            <Link href="/queue">Open the queue →</Link>
             <Link href={`/requests/${state.detail.id}`}>
               View request #{state.detail.id} →
             </Link>
@@ -294,6 +298,7 @@ export default function GuidedRequestPage() {
   const rejected = detail != null && detail.status !== "draft";
   const piiHits = detail?.pii_hits ?? {};
   const piiBlocked = missingPiiReasons(piiHits, piiReasons).length > 0;
+  const missing = state.drafting ? null : missingFieldsSentence(missingForStep(state));
   const piiPanel = (
     <PiiReasons
       hits={piiHits}
@@ -357,7 +362,7 @@ export default function GuidedRequestPage() {
             <div className="panel-title">Who&apos;s asking, where, and when</div>
             <div className="fields">
               <label className="field">
-                <span className="field-label">Submitted By *</span>
+                <span className="field-label">Your name *</span>
                 <input
                   type="text"
                   placeholder="Your name"
@@ -379,14 +384,16 @@ export default function GuidedRequestPage() {
                 </select>
               </label>
               <label className="field">
-                <span className="field-label">Server Side or Client Side</span>
+                <span className="field-label">Where does it happen?</span>
                 <select
                   value={state.side}
                   onChange={(e) => set("side", e.target.value)}
                 >
-                  <option value="Unsure">I&apos;m not sure</option>
-                  <option value="Client">Client</option>
-                  <option value="Server">Server</option>
+                  {SIDE_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
                 </select>
               </label>
               <label className="field">
@@ -399,8 +406,7 @@ export default function GuidedRequestPage() {
               </label>
             </div>
             <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>
-              Browser = the user&apos;s device. Server = your backend. Not sure is
-              fine — the approver decides.
+              {SIDE_HINT}
             </p>
             {allowedDestinations.length > 0 && (
               <div className="mt-12">
@@ -494,7 +500,7 @@ export default function GuidedRequestPage() {
         {state.step === 4 && detail && !rejected && (
           <>
             <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>
-              Before you look at the draft: here is what the catalog already has.
+              Before you look at the draft: here is what the tracking plan already has.
             </p>
             <StepExists
               findings={detail.duplicate_candidates}
@@ -568,12 +574,18 @@ export default function GuidedRequestPage() {
               </button>
             )}
           </div>
-          <div>
+          <div className="row">
+            {missing && (
+              <span id="next-missing" className="missing-fields">
+                {missing}
+              </span>
+            )}
             {(state.step === 1 || state.step === 2) && (
               <button
                 className="btn btn-primary"
                 onClick={() => dispatch({ type: "NEXT" })}
                 disabled={!canAdvance(state)}
+                aria-describedby={missing ? "next-missing" : undefined}
               >
                 Next
               </button>
@@ -583,6 +595,7 @@ export default function GuidedRequestPage() {
                 className="btn btn-primary"
                 onClick={draft}
                 disabled={!canAdvance(state) || state.drafting}
+                aria-describedby={missing ? "next-missing" : undefined}
               >
                 {state.drafting ? "Drafting…" : "Next"}
               </button>

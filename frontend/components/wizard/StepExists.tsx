@@ -75,7 +75,7 @@ export function StepExists({
   return (
     <div>
       <p style={{ marginTop: 0 }}>
-        Nothing in the catalog looks like this yet.
+        Nothing in the tracking plan looks like this yet.
       </p>
       <div className="row mt-16">
         <button className="btn btn-primary" onClick={onNext} disabled={busy}>

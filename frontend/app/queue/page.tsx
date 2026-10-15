@@ -20,6 +20,7 @@ export default function QueuePage() {
       <h1 className="page-title">Request queue</h1>
       <p className="page-subtitle">
         Requests waiting on a decision come first. Open one to approve or reject it.
+        In this demo you play both parts: you made these requests, and you decide them.
       </p>
 
       {error && <div className="msg msg-error">{error}</div>}

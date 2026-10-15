@@ -34,7 +34,7 @@ describe("ScenarioCard", () => {
   it("runs a pre-built definition straight through the rules and says so on the tile", () => {
     const { onFill, onRun } = renderCard();
     const tile = screen.getByRole("button", { name: "A badly named event" });
-    expect(tile).toHaveAccessibleDescription(/Skips the model and your review$/);
+    expect(tile).toHaveAccessibleDescription(/Skips the model, goes straight to the rules$/);
 
     fireEvent.click(tile);
     expect(onRun).toHaveBeenCalledWith(RAW_EXAMPLES[0]);

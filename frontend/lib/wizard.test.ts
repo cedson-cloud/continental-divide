@@ -4,6 +4,7 @@ import {
   WizardState,
   canAdvance,
   initialWizardState,
+  missingForStep,
   toIntakePayload,
   wizardReducer,
 } from "./wizard";
@@ -43,6 +44,16 @@ describe("request_kind derivation", () => {
     for (const kind of ["revenue", "user_action", "user_trait", "unknown"] as const) {
       expect(toIntakePayload(stateAt({ kind })).request_kind).toBe("new_event");
     }
+  });
+});
+
+describe("missingForStep", () => {
+  it("names what each step still needs, so the disabled Next says why", () => {
+    expect(missingForStep(stateAt({ step: 1 }))).toEqual(["the kind of data"]);
+    expect(missingForStep(stateAt({ step: 2, submitterName: "Sam" }))).toEqual(["your team"]);
+    expect(missingForStep(stateAt({ step: 3, text: "t", businessValue: "b", urgent: true }))).toEqual([
+      "why it's urgent",
+    ]);
   });
 });
 

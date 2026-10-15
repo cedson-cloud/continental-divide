@@ -4,6 +4,7 @@
 // exist?" before they see a drafted event name.
 
 import type { IntakeMeta, RequestDetail } from "./api";
+import { missingIntakeFields } from "./intake";
 
 export type DataKind =
   | "revenue"
@@ -71,25 +72,32 @@ export const initialWizardState: WizardState = {
   detail: null,
 };
 
-export function canAdvance(state: WizardState): boolean {
+// What the current step still needs before Next works. canAdvance and the
+// "Still needed" line both read it, so the reason shown is always the real one.
+export function missingForStep(state: WizardState): string[] {
   switch (state.step) {
     case 1:
-      return state.kind !== null;
+      return state.kind === null ? ["the kind of data"] : [];
     case 2:
-      return (
-        state.submitterName.trim().length > 0 && state.submitterTeam !== ""
-      );
+      return missingIntakeFields({
+        submitterName: state.submitterName,
+        submitterTeam: state.submitterTeam,
+      });
     case 3:
-      return (
-        state.text.trim().length > 0 &&
-        state.businessValue.trim().length > 0 &&
-        (!state.urgent || state.urgencyReason.trim().length > 0)
-      );
-    case 4:
-      return true;
+      return missingIntakeFields({
+        text: state.text,
+        businessValue: state.businessValue,
+        urgent: state.urgent,
+        urgencyReason: state.urgencyReason,
+      });
     default:
-      return false;
+      return [];
   }
+}
+
+export function canAdvance(state: WizardState): boolean {
+  if (state.step >= 5) return false;
+  return missingForStep(state).length === 0;
 }
 
 export function wizardReducer(

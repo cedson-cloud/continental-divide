@@ -87,7 +87,7 @@ const AUDIT_KEY_LABELS: Record<string, string> = {
   submitter_name: "Requested by",
   submitter_team: "Team",
   call_type: "Call type",
-  side: "Fires on",
+  side: "Where it happens",
   business_value: "Why it matters",
   urgent: "Urgent",
   urgency_reason: "Why it is urgent",
@@ -135,6 +135,20 @@ export function auditKeyLabel(key: string): string {
   if (AUDIT_KEY_LABELS[key]) return AUDIT_KEY_LABELS[key];
   const words = key.replace(/_/g, " ");
   return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+// The mock publisher sends nothing outside the app, so its output reads as what a
+// connected setup would write, never as a ticket someone can go and find.
+export function publishedHeading(publisher: string): { title: string; note: string | null } {
+  if (publisher === "mock") {
+    return {
+      title: "What a connected setup would write",
+      note:
+        "Nothing was sent anywhere. With Confluence and Jira connected, approving " +
+        "would create this page and this ticket.",
+    };
+  }
+  return { title: `Published via the ${publisher} publisher`, note: null };
 }
 
 export function isActionable(status: string): boolean {

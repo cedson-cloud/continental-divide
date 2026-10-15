@@ -9,6 +9,7 @@ import { Icon, IconName, Logo } from "./icons";
 type NavItem = { href: string; label: string; icon: IconName; matches: (path: string) => boolean };
 
 const NAV_ITEMS: NavItem[] = [
+  { href: "/guide", label: "How to use this", icon: "help", matches: (p) => p.startsWith("/guide") },
   {
     href: "/",
     label: "New request",
@@ -21,7 +22,12 @@ const NAV_ITEMS: NavItem[] = [
     icon: "inbox",
     matches: (p) => p.startsWith("/queue") || p.startsWith("/requests/"),
   },
-  { href: "/catalog", label: "Catalog", icon: "book", matches: (p) => p.startsWith("/catalog") },
+  {
+    href: "/catalog",
+    label: "Tracking plan",
+    icon: "book",
+    matches: (p) => p.startsWith("/catalog"),
+  },
   { href: "/admin", label: "Governance", icon: "shield", matches: (p) => p.startsWith("/admin") },
 ];
 

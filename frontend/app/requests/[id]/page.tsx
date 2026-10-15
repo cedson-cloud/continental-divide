@@ -17,7 +17,8 @@ import {
   submitRequest,
   withdrawRequest,
 } from "@/lib/api";
-import { definitionTitle, isActionable, ruleInSentence } from "@/lib/format";
+import { definitionTitle, isActionable, publishedHeading, ruleInSentence } from "@/lib/format";
+import { sideLabel } from "@/lib/intake";
 import { AuditTimeline } from "@/components/AuditTimeline";
 import { DefinitionView } from "@/components/DefinitionView";
 import { ForEngineers } from "@/components/ForEngineers";
@@ -34,6 +35,7 @@ import {
 } from "@/lib/gating";
 import { PiiReasons } from "@/components/PiiReasons";
 import { PublishCards } from "@/components/PublishCards";
+import { PublishedNote } from "@/components/PublishedNote";
 import { RequestProgress } from "@/components/RequestProgress";
 import { RejectedRecourse } from "@/components/RejectedRecourse";
 import { RuleChecks } from "@/components/RuleChecks";
@@ -222,6 +224,9 @@ export default function RequestDetailPage({
   const checkFlags = hasEngineDuplicate(evaluation.checks) ? [] : evaluation.flags;
   const canDecide = !isDraft && isActionable(detail.status);
   const hasRail = isDraft || canDecide;
+  const published = detail.published_artifact
+    ? publishedHeading(detail.published_artifact.publisher)
+    : null;
 
   return (
     <main className={hasRail ? "container container-wide" : "container"}>
@@ -247,6 +252,10 @@ export default function RequestDetailPage({
       </header>
 
       <RequestProgress status={detail.status} auditLog={detail.audit_log} />
+
+      {detail.status === "published" && (
+        <PublishedNote hasSnippets={detail.snippets.length > 0} />
+      )}
 
       {(isSuperseded || (isRejected && supersededById !== null)) && (
         <div className="msg msg-info detail-note">
@@ -321,7 +330,7 @@ export default function RequestDetailPage({
             <section className="panel">
               <h2 className="panel-title">Rule checks</h2>
               <p className="panel-sub">
-                The engine&apos;s verdicts. Fixed rules, no model involved.
+                Fixed rules, checked the same way every time. No model involved.
               </p>
               {isRejected ? (
                 // The same component the wizard and the single-screen form render: a
@@ -392,11 +401,12 @@ export default function RequestDetailPage({
               </dd>
               <dt>Needed by</dt>
               <dd>{detail.needed_by || "—"}</dd>
-              <dt>Fires on</dt>
+              <dt>Where it happens</dt>
               <dd>
                 {detail.side === "Unsure"
-                  ? "Open question — the requester wasn't sure whether this fires client or server side."
-                  : detail.side || "—"}
+                  ? "Open question — the requester wasn't sure whether this happens " +
+                    "in the browser or app, or on your servers."
+                  : sideLabel(detail.side)}
               </dd>
               {detail.urgent && (
                 <>
@@ -425,11 +435,10 @@ export default function RequestDetailPage({
             )}
           </section>
 
-          {!isDraft && detail.published_artifact && (
+          {!isDraft && detail.published_artifact && published && (
             <section className="panel">
-              <h2 className="panel-title">
-                Published via the {detail.published_artifact.publisher} publisher
-              </h2>
+              <h2 className="panel-title">{published.title}</h2>
+              {published.note && <p className="panel-sub">{published.note}</p>}
               <PublishCards artifact={detail.published_artifact} />
             </section>
           )}

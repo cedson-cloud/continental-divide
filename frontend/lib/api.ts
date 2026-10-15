@@ -484,7 +484,7 @@ export function friendlyError(err: unknown): string {
   if (err instanceof ApiError) {
     switch (err.status) {
       case 0:
-        return "Cannot reach the API server. Is the backend running?";
+        return "Can't reach the server. Try again in a moment.";
       case 404:
         return "Request not found.";
       case 409:
@@ -492,9 +492,31 @@ export function friendlyError(err: unknown): string {
       case 422:
         return err.detail || "The request was not accepted.";
       case 429:
-        return "Rate limit reached. Wait a moment and try again.";
+        // A full sandbox stays full, so waiting a moment would not help (docs/adr/0010).
+        if (err.detail.includes("requests the demo allows")) {
+          return (
+            "This demo sandbox has used all its requests. You can still decide what's " +
+            "waiting in the queue and read the tracking plan."
+          );
+        }
+        return "Too many actions at once. Wait a moment and try again.";
       case 502:
-        return "The model could not draft a definition. Try rephrasing, or check the server's API key.";
+        if (err.detail.startsWith("could not draft")) {
+          return "The model couldn't draft a definition. Try rephrasing it, or try again in a moment.";
+        }
+        // The decision and publish routes answer 502 when publishing fails after an approval.
+        if (err.detail.includes("publishing failed")) {
+          return "The approval is recorded, but publishing failed. The audit trail shows why.";
+        }
+        return err.detail || "Something went wrong.";
+      case 503:
+        if (err.detail.includes("model budget is used up")) {
+          return (
+            "The demo's model budget for today is used up; it resets at midnight UTC. " +
+            "The scenarios that skip the model still work."
+          );
+        }
+        return err.detail || "Something went wrong.";
       default:
         return err.detail || "Something went wrong.";
     }

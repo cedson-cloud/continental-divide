@@ -73,7 +73,7 @@ describe("StepExists", () => {
     renderStep([]);
 
     expect(
-      screen.getByText("Nothing in the catalog looks like this yet."),
+      screen.getByText("Nothing in the tracking plan looks like this yet."),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Next" })).toBeInTheDocument();
   });

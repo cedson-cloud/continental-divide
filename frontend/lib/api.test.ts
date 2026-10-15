@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, listRequests } from "./api";
+import { ApiError, friendlyError, listRequests } from "./api";
 
 function reply(status: number, body: unknown = null) {
   return new Response(body === null ? "" : JSON.stringify(body), { status });
@@ -45,5 +45,41 @@ describe("request", () => {
     expect(error).toBeInstanceOf(ApiError);
     expect(error).toMatchObject({ status: 401, message: "authentication is not configured" });
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("friendlyError", () => {
+  it("never asks a visitor about a backend they cannot see", () => {
+    expect(friendlyError(new ApiError(0, ""))).toBe(
+      "Can't reach the server. Try again in a moment.",
+    );
+  });
+
+  it("tells a full sandbox apart from a moment's rate limit", () => {
+    const full = new ApiError(429, "this sandbox has used all 5 requests the demo allows");
+    expect(friendlyError(full)).toMatch(/^This demo sandbox has used all its requests\./);
+    expect(friendlyError(new ApiError(429, "rate limit exceeded"))).toBe(
+      "Too many actions at once. Wait a moment and try again.",
+    );
+  });
+
+  it("tells a failed drafting apart from a failed publish", () => {
+    const drafting = new ApiError(502, "could not draft a definition (request 4): timeout");
+    expect(friendlyError(drafting)).toMatch(/^The model couldn't draft a definition\./);
+    const publish = new ApiError(
+      502,
+      "request 4 is approved but publishing failed (TimeoutError: slow)",
+    );
+    expect(friendlyError(publish)).toBe(
+      "The approval is recorded, but publishing failed. The audit trail shows why.",
+    );
+  });
+
+  it("says the model-free scenarios still work once the day's budget is spent", () => {
+    const spent = new ApiError(
+      503,
+      "the demo's daily model budget is used up; it resets at midnight UTC",
+    );
+    expect(friendlyError(spent)).toMatch(/The scenarios that skip the model still work\.$/);
   });
 });
