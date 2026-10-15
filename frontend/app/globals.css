@@ -719,6 +719,365 @@ table.prop-table {
   }
 }
 
+.catalog-intro {
+  margin: -12px 0 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+.catalog-intro summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 18px;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+  list-style: none;
+  border-radius: var(--radius);
+}
+.catalog-intro summary::-webkit-details-marker {
+  display: none;
+}
+.catalog-intro summary:hover {
+  background: var(--accent-faint);
+}
+.catalog-intro[open] > summary > svg {
+  transform: rotate(90deg);
+}
+.catalog-intro-body {
+  padding: 0 18px 4px 42px;
+  max-width: 68ch;
+  font-size: 14px;
+  line-height: 1.55;
+}
+.catalog-intro-body p {
+  margin: 0 0 12px;
+}
+.catalog-intro-body .mono {
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+/* Catalog. One row per event: the toggle stretches over the row's head, and the
+   source tag sits above it so its link stays clickable. */
+.catalog-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+.catalog-filter {
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 6px 13px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+}
+.catalog-filter:hover {
+  border-color: var(--accent);
+  background: var(--accent-faint);
+}
+.catalog-filter[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+.catalog-filter-count {
+  font-weight: 500;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.catalog-filter[aria-pressed="true"] .catalog-filter-count {
+  color: var(--accent-soft);
+}
+.catalog-summary {
+  margin: 14px 0 0;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+.catalog-summary + .catalog-summary {
+  margin-top: 4px;
+}
+.catalog-note {
+  margin: 14px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  max-width: 72ch;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.catalog-group {
+  padding: 4px 0;
+  overflow: hidden;
+}
+.catalog-group-title {
+  margin: 0;
+}
+.catalog-group-toggle {
+  font: inherit;
+  font-size: 16.5px;
+  font-weight: 650;
+  letter-spacing: -0.005em;
+  color: var(--text);
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  background: none;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+}
+/* The panel clips to its rounded corners, so the ring sits inside the toggle. */
+.catalog-group-toggle:focus-visible {
+  outline-offset: -2px;
+  border-radius: var(--radius);
+}
+.catalog-group-count {
+  margin-left: auto;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.catalog-group-toggle svg,
+.catalog-event-toggle svg,
+.catalog-shape-toggle svg {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .catalog-group-toggle svg,
+  .catalog-event-toggle svg,
+  .catalog-shape-toggle svg {
+    transition: transform 0.15s ease;
+  }
+}
+.catalog-group-toggle[aria-expanded="true"] > svg,
+.catalog-event-toggle[aria-expanded="true"] > svg,
+.catalog-shape-toggle[aria-expanded="true"] > svg {
+  transform: rotate(90deg);
+}
+
+.catalog-event {
+  border-top: 1px solid var(--border);
+}
+.catalog-event-head {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 16px;
+  row-gap: 2px;
+  align-items: baseline;
+  padding: 12px 24px;
+}
+.catalog-event-head:hover {
+  background: var(--accent-faint);
+}
+.catalog-event-toggle {
+  font: inherit;
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0;
+  background: none;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+}
+.catalog-event-toggle::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+.catalog-event-head:hover .catalog-event-name {
+  color: var(--accent);
+  text-decoration: underline;
+}
+@supports selector(:has(a)) {
+  .catalog-event-toggle:focus-visible {
+    outline: none;
+  }
+  .catalog-event-head:has(.catalog-event-toggle:focus-visible) {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+}
+.catalog-event-name {
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.catalog-source-tag {
+  position: relative;
+  z-index: 1;
+  justify-self: end;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--faint);
+}
+/* The sample plan is the default and stays quiet; anything else is a pill. */
+.catalog-source-tag-system,
+.catalog-source-tag-request {
+  padding: 2px 10px;
+  border-radius: 999px;
+  color: var(--neutral-fg);
+  background: var(--neutral-bg);
+}
+.catalog-source-tag-request {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.catalog-event-meta {
+  grid-column: 1;
+  margin: 0;
+  padding-left: 22px;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.catalog-event-count {
+  grid-column: 2;
+  justify-self: end;
+  font-size: 12.5px;
+  white-space: nowrap;
+  color: var(--faint);
+}
+.catalog-warning {
+  margin: 0 24px 12px;
+  font-size: 13.5px;
+}
+.catalog-event-body {
+  padding: 2px 24px 18px 46px;
+}
+.catalog-event-body > .catalog-event-meta {
+  padding-left: 0;
+}
+.catalog-shape-toggle {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--accent);
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 8px;
+  padding: 0;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.catalog-shape-toggle:hover {
+  text-decoration: underline;
+}
+.catalog-shape-toggle svg {
+  color: var(--accent);
+}
+.catalog-request-link {
+  font-weight: 600;
+}
+.catalog-also {
+  margin-left: 6px;
+  font-size: 12.5px;
+}
+.catalog-shape {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--accent-faint);
+}
+.catalog-shape-lede {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.catalog-empty-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.catalog-empty-action:hover {
+  text-decoration: none;
+}
+
+@media (max-width: 640px) {
+  .catalog-filter {
+    min-height: 44px;
+  }
+  .catalog-group-toggle {
+    padding: 12px 16px;
+  }
+  .catalog-event-head {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 12px 16px;
+  }
+  .catalog-source-tag,
+  .catalog-event-count {
+    grid-column: 1;
+    justify-self: start;
+    margin-left: 22px;
+  }
+  .catalog-source-tag {
+    margin-top: 4px;
+    margin-bottom: 2px;
+  }
+  .catalog-warning {
+    margin: 0 16px 12px;
+  }
+  .catalog-event-body {
+    padding: 2px 16px 16px;
+  }
+  .catalog-props thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .catalog-props,
+  .catalog-props tbody {
+    display: block;
+  }
+  .catalog-props tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 12px;
+    row-gap: 2px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .catalog-props tr:last-child {
+    border-bottom: none;
+  }
+  .catalog-props td {
+    padding: 0;
+    border-bottom: none;
+    overflow-wrap: anywhere;
+  }
+  .catalog-prop-type {
+    text-align: right;
+  }
+  .catalog-prop-source {
+    grid-column: 1 / -1;
+  }
+}
+
 .timeline {
   position: relative;
   margin: 0;
