@@ -17,6 +17,10 @@ jobs:
           python-version: "3.14"
           cache: pip
           cache-dependency-path: backend/requirements.txt
+      # tests/test_snippets.py parse-checks the generated JavaScript with Node.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "20"
       - run: pip install -r requirements.txt
       - run: pytest
 

@@ -63,6 +63,7 @@ from .recourse import (
     rename_and_resubmit,
 )
 from .rules import effective_categories, event_name_error
+from .snippets import request_snippets
 from .spend import SpendCapReached, get_meter
 from .storage import Storage, discard_idle_sandboxes, get_storage, use_sandbox
 from .workspace import (
@@ -637,6 +638,11 @@ def get_request(request_id: int, storage: Storage = Depends(acting_storage)) -> 
     # What approving now would record, from the same function the decision uses, so
     # the approver is told before deciding exactly what the audit entry will say.
     request["would_be_self_approval"] = self_approval(request_id, storage)
+    # Engineering's half of the output, rendered from the approved definition and the
+    # platform file each time, never stored (ADR 0008).
+    request["snippets"] = [
+        s.model_dump() for s in request_snippets(request, _active_profile().platform)
+    ]
     return request
 
 

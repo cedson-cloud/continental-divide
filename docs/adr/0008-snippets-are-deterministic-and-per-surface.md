@@ -46,6 +46,7 @@ to generate.
 
 ## Consequences
 
-- The JavaScript parse test needs Node in CI. The frontend job already has it.
+- The JavaScript parse test needs Node in CI. The snippets are rendered by the backend,
+  so the backend job sets Node up for it.
 - Platform files from an instance directory are configuration, controlled by whoever
   operates the instance. They are not requester input.

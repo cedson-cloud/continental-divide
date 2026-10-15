@@ -4,7 +4,8 @@ A platform is a YAML file under ``platforms/``, not code (ADR 0008). It lists th
 platform's libraries; the common fields their events carry; its system events, each
 under the plan name a tracking plan shows it by, with the name or call the SDK actually
 sends, its properties and any equivalent names; and its reserved names, which the
-platform's spec defines but its libraries do not send. Every common field, named system
+platform's spec defines but its libraries do not send; and how its libraries are called,
+for the snippets an approved definition is rendered to. Every common field, named system
 event and reserved name records its sources, and every claim records whether it rests on the docs, on SDK code, or on sources that disagree. Loading
 fails loudly on a missing file, malformed YAML, or an invalid schema, the same as
 governance profiles.
@@ -118,6 +119,41 @@ class ReservedName(BaseModel):
         return self
 
 
+class SnippetSurface(BaseModel):
+    """How one library is called, for the snippets an approved definition is rendered
+    to (ADR 0008). ``style`` picks the call's shape, which lives in app/snippets.py;
+    the library, setup lines and notes it prints come from here. The surface is the
+    library's own."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    label: str
+    name: str
+    library: str
+    package: str
+    version: str
+    # positional: analytics.track(event, properties).
+    # params: analytics.track({ userId, event, properties }).
+    style: Literal["positional", "params"]
+    setup: list[str] = []
+    notes: list[str] = []
+    checked: str
+    sources: list[str] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _printed_lines_are_single(self) -> "SnippetSurface":
+        # Each of these is printed on a line of its own, most of them after "//", so
+        # a line break in one would turn the rest of it into code.
+        printed = [self.name, self.package, self.version, self.checked, self.sources[0]]
+        for line in [*printed, *self.setup, *self.notes]:
+            if not line or line != " ".join(line.split()):
+                raise ValueError(
+                    f"'{self.label}': a printed line is empty, or has a line break "
+                    "or extra spaces"
+                )
+        return self
+
+
 class Platform(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -133,6 +169,7 @@ class Platform(BaseModel):
     not_listed_yet: list[str] = []
     system_events: list[SystemEvent]
     reserved_names: list[ReservedName] = []
+    snippets: list[SnippetSurface] = []
 
     @model_validator(mode="after")
     def _names_are_unambiguous(self) -> "Platform":
@@ -161,10 +198,17 @@ class Platform(BaseModel):
         named = [
             *(lib for f in self.common_fields for lib in f.libraries),
             *(lib for e in self.system_events for lib in e.default_on),
+            *(s.library for s in self.snippets),
         ]
         unknown = sorted(set(named) - set(ids))
         if unknown:
             raise ValueError(f"unknown library: {', '.join(unknown)}")
+        surfaces = {lib.id: lib.surface for lib in self.libraries}
+        for snippet in self.snippets:
+            if surfaces[snippet.library] == "mobile":
+                raise ValueError(
+                    f"'{snippet.label}': snippets cover browser and server libraries only"
+                )
         paths = [f.path for f in self.common_fields]
         if len(paths) != len(set(paths)):
             raise ValueError("two common fields share a path")

@@ -85,6 +85,17 @@ export type PublishArtifact = {
   jira_ticket: JiraTicket;
 };
 
+// One surface's code for an approved definition, rendered server-side from the
+// platform file (ADR 0008). `code` is exactly what Copy puts on the clipboard; its
+// header comments name the library and version.
+export type Snippet = {
+  surface: "browser" | "server";
+  label: string;
+  checked: string;
+  sources: string[];
+  code: string;
+};
+
 export type RequestDetail = {
   id: number;
   raw_intake_text: string;
@@ -121,6 +132,8 @@ export type RequestDetail = {
   // What approving now would record as the decision's self_approval: true when the
   // viewer made or submitted this request, null when no requester was recorded.
   would_be_self_approval: boolean | null;
+  // One per surface the request fires on, once it is approved; empty before then.
+  snippets: Snippet[];
 };
 
 export type Dispute = {

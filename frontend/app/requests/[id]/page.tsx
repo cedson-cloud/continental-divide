@@ -20,6 +20,7 @@ import {
 import { definitionTitle, isActionable, ruleInSentence } from "@/lib/format";
 import { AuditTimeline } from "@/components/AuditTimeline";
 import { DefinitionView } from "@/components/DefinitionView";
+import { ForEngineers } from "@/components/ForEngineers";
 import { AgentReview } from "@/components/AgentReview";
 import { DecisionCard } from "@/components/DecisionCard";
 import { DuplicateResolution } from "@/components/DuplicateResolution";
@@ -313,6 +314,8 @@ export default function RequestDetailPage({
               <DefinitionView definition={detail.parsed_definition} />
             </section>
           )}
+
+          <ForEngineers snippets={detail.snippets} side={detail.side} />
 
           {evaluation.checks.length > 0 && (
             <section className="panel">

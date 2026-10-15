@@ -1378,6 +1378,51 @@ ul.checks,
   }
 }
 
+/* For engineers: one snippet per surface, the code itself the one strong element. */
+.snippet {
+  margin-top: 18px;
+}
+.snippet + .snippet {
+  margin-top: 26px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+.snippet-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+.snippet-title {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 650;
+}
+.snippet-code {
+  margin: 10px 0 0;
+  padding: 14px 16px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text);
+  background: var(--accent-faint);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
+  overflow-x: auto;
+  white-space: pre;
+  tab-size: 2;
+}
+.snippet-comment {
+  color: var(--muted);
+}
+@media (max-width: 640px) {
+  .snippet-copy {
+    min-height: 44px;
+  }
+}
+
 .timeline {
   position: relative;
   margin: 0;

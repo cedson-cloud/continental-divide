@@ -43,6 +43,7 @@ function detail(overrides: Partial<RequestDetail> = {}): RequestDetail {
     pii_hits: {},
     pii_reasons: {},
     would_be_self_approval: false,
+    snippets: [],
     ...overrides,
   };
 }
