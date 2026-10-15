@@ -96,6 +96,8 @@ def test_an_approved_request_carries_its_source_id_and_approval_time(client, sto
             "source": "approved_request",
             "request_id": request_id,
             "also_requested_by": [],
+            "evidence": None,
+            "note": None,
         }
     ]
 
@@ -270,6 +272,8 @@ def test_product_item_is_a_shape_reference_returned_once(client, storage):
                 "source",
                 "request_id",
                 "also_requested_by",
+                "evidence",
+                "note",
             }
 
 

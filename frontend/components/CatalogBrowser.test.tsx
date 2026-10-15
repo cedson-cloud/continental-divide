@@ -1,6 +1,11 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { CatalogView, CatalogViewEvent, CatalogViewProperty } from "@/lib/api";
+import {
+  CatalogPlatform,
+  CatalogView,
+  CatalogViewEvent,
+  CatalogViewProperty,
+} from "@/lib/api";
 import {
   CatalogBrowser,
   COLLISION_WARNING,
@@ -17,6 +22,8 @@ function prop(overrides: Partial<CatalogViewProperty>): CatalogViewProperty {
     source: "sample_plan",
     request_id: null,
     also_requested_by: [],
+    evidence: null,
+    note: null,
     ...overrides,
   };
 }
@@ -36,13 +43,22 @@ function event(overrides: Partial<CatalogViewEvent>): CatalogViewEvent {
     unresolved_target: false,
     sent_as: null,
     sent_by: null,
+    properties_listed: true,
+    default_on: {},
+    evidence: null,
+    note: null,
+    sources: [],
     ...overrides,
   };
 }
 
-function catalog(events: CatalogViewEvent[]): CatalogView {
+function catalog(
+  events: CatalogViewEvent[],
+  platform: CatalogPlatform | null = null,
+): CatalogView {
   return {
     events,
+    platform,
     shapes: {
       product_item: {
         description: "Shared product shape.",
@@ -149,6 +165,8 @@ describe("CatalogBrowser", () => {
                 source: "approved_request",
                 request_id: 8,
                 also_requested_by: [13],
+                evidence: null,
+                note: null,
               }),
             ],
           }),
@@ -196,6 +214,7 @@ describe("CatalogBrowser", () => {
             source: "system_event",
             sent_as: "a page call",
             sent_by: "analytics.js, by default",
+            properties_listed: false,
           }),
         ])}
       />,
@@ -327,5 +346,178 @@ describe("CatalogBrowser", () => {
     fireEvent.click(category);
     expect(category).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByRole("button", { name: "Cart Viewed" })).toBeNull();
+  });
+});
+
+const PLATFORM: CatalogPlatform = {
+  name: "segment",
+  checked: "2026-10-15",
+  libraries: [
+    { id: "analytics.js", name: "Analytics.js", surface: "browser", note: null },
+    { id: "analytics-swift", name: "Swift", surface: "mobile", note: null },
+    {
+      id: "analytics-kotlin",
+      name: "Kotlin",
+      surface: "mobile",
+      note: "Its context fields aren't listed yet.",
+    },
+  ],
+  common_fields: [
+    {
+      path: "context.campaign.source",
+      plain_name: "Campaign source (utm_source)",
+      group: "Campaign",
+      type: null,
+      libraries: ["analytics.js"],
+      note: "Only on events from a page load whose URL carried it.",
+      evidence: "docs",
+      sources: ["https://www.twilio.com/docs/segment/connections/spec/common"],
+    },
+    {
+      path: "context.app.version",
+      plain_name: "App version",
+      group: "App",
+      type: null,
+      libraries: ["analytics-swift", "analytics-kotlin"],
+      note: null,
+      evidence: "sdk_code",
+      sources: ["https://github.com/segmentio/analytics-swift/blob/main/Context.swift"],
+    },
+  ],
+  reserved_names: [
+    {
+      name: "Install Attributed",
+      records: "an install being attributed to a campaign",
+      sent_by: "an attribution provider",
+      properties: [
+        { name: "provider", type: "string", note: null, evidence: "docs" },
+        { name: "action", type: null, note: 'Defaults to "Open".', evidence: "docs" },
+      ],
+      note: null,
+      evidence: "docs",
+      sources: ["https://www.twilio.com/docs/segment/connections/spec/mobile"],
+    },
+  ],
+  not_listed_yet: ["context.channel, which Segment's pages place differently."],
+};
+
+const OPENED = event({
+  name: "Application Opened",
+  category: "System events",
+  description: "The app being opened",
+  source: "system_event",
+  sent_as: "Application Opened",
+  sent_by: "Segment's mobile libraries",
+  properties: [
+    prop({ name: "from_background", type: "boolean", source: "system_event", evidence: "docs" }),
+    prop({
+      name: "version",
+      type: null,
+      source: "system_event",
+      evidence: "sdk_code",
+      note: "Kotlin sends it on first launch only.",
+    }),
+  ],
+  default_on: { "analytics-swift": true, "analytics-kotlin": false },
+  sources: ["https://www.twilio.com/docs/segment/connections/spec/mobile"],
+});
+
+describe("CatalogBrowser, what the platform sends", () => {
+  it("shows a system event's properties with how each is known", () => {
+    render(<CatalogBrowser catalog={catalog([OPENED], PLATFORM)} />);
+    fireEvent.click(screen.getByRole("button", { name: "Application Opened" }));
+
+    const table = screen.getByRole("table", { name: "Application Opened properties" });
+    expect(within(table).getByText("Kotlin sends it on first launch only.")).toBeInTheDocument();
+    expect(within(table).getByText("not listed yet")).toBeInTheDocument();
+    expect(within(table).getByText("From SDK code")).toBeInTheDocument();
+    expect(within(table).getAllByText("Segment")).toHaveLength(2);
+    expect(
+      screen.getByText("On by default in Swift. Off by default in Kotlin."),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Sources, checked 15 October 2026/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /twilio\.com\/…\/mobile/ })).toHaveAttribute(
+      "target",
+      "_blank",
+    );
+  });
+
+  it("says when the sources give a system event no properties of its own", () => {
+    const backgrounded = event({
+      name: "Application Backgrounded",
+      category: "System events",
+      source: "system_event",
+      properties: [],
+      properties_listed: true,
+    });
+    render(<CatalogBrowser catalog={catalog([backgrounded], PLATFORM)} />);
+    expect(screen.getByText("No properties of its own")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Application Backgrounded" }));
+    expect(
+      screen.getByText("The sources list no properties of its own for this event."),
+    ).toBeInTheDocument();
+  });
+
+  it("says how the sources disagree on a disputed event", () => {
+    const updated = event({
+      ...OPENED,
+      name: "Application Updated",
+      evidence: "disputed",
+      note: "The spec and the code disagree on ordering.",
+    });
+    render(<CatalogBrowser catalog={catalog([updated], PLATFORM)} />);
+    fireEvent.click(screen.getByRole("button", { name: "Application Updated" }));
+    expect(screen.getByText("Sources disagree")).toBeInTheDocument();
+    expect(screen.getByText(/disagree on ordering/)).toBeInTheDocument();
+  });
+
+  it("keeps the common fields collapsed until opened, grouped with their libraries", () => {
+    render(<CatalogBrowser catalog={catalog([OPENED], PLATFORM)} />);
+    const toggle = screen.getByRole("button", { name: "Sent with every event 2 fields" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("App version")).toBeNull();
+
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    const app = screen.getByRole("table", { name: "App fields" });
+    expect(within(app).getByText("context.app.version")).toBeInTheDocument();
+    expect(within(app).getByText("Swift")).toBeInTheDocument();
+    expect(within(app).getByText("From SDK code")).toBeInTheDocument();
+    expect(screen.getByText(/Its context fields aren't listed yet/)).toBeInTheDocument();
+    expect(screen.getByText(/context.channel/)).toBeInTheDocument();
+  });
+
+  it("finds a common field by search instead of saying nothing matches", () => {
+    render(<CatalogBrowser catalog={catalog([OPENED], PLATFORM)} />);
+    fireEvent.change(screen.getByLabelText("Search events"), { target: { value: "utm" } });
+
+    expect(screen.queryByText("No events match")).toBeNull();
+    const toggle = screen.getByRole("button", { name: "Sent with every event 1 field" });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("context.campaign.source")).toBeInTheDocument();
+    expect(screen.queryByText("context.app.version")).toBeNull();
+    expect(
+      screen.getByText(
+        "0 of 1 events shown, plus 1 match among the fields and names the platform sends",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("lists reserved names as names to use, not duplicates", () => {
+    render(<CatalogBrowser catalog={catalog([OPENED], PLATFORM)} />);
+    fireEvent.click(screen.getByRole("button", { name: "Reserved names 1 name" }));
+    expect(screen.getByRole("heading", { name: "Install Attributed" })).toBeInTheDocument();
+    const props = screen.getByRole("table", { name: "Install Attributed properties" });
+    expect(within(props).getByText('Defaults to "Open".')).toBeInTheDocument();
+    expect(within(props).getByText("not listed yet")).toBeInTheDocument();
+    expect(screen.getByText(/Who sends it: an attribution provider/)).toBeInTheDocument();
+    expect(screen.getByText(/isn't a duplicate/)).toBeInTheDocument();
+  });
+
+  it("leaves the platform out when showing only the sample plan", () => {
+    render(<CatalogBrowser catalog={catalog([event({}), OPENED], PLATFORM)} />);
+    fireEvent.click(screen.getByRole("button", { name: /^Sample plan/ }));
+    expect(screen.queryByRole("button", { name: /Sent with every event/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Reserved names/ })).toBeNull();
   });
 });

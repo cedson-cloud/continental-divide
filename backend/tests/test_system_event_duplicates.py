@@ -152,7 +152,9 @@ def test_the_data_dictionary_lists_system_events_and_merges_properties_into_them
     assert page_viewed["source"] == "system_event"
     assert page_viewed["category"] == "System events"
     assert page_viewed["sent_as"] == "a page call"
-    assert [p["name"] for p in page_viewed["properties"]] == ["page_section"]
+    added = [p for p in page_viewed["properties"] if p["source"] == "approved_request"]
+    assert [p["name"] for p in added] == ["page_section"]
+    assert page_viewed["properties"][-1] == added[0]
     assert events["Experiment Viewed"]["source"] == "system_event"
     assert catalog["counts"]["system_events"] == 10
     assert catalog["counts"]["property_additions_merged"] == 1

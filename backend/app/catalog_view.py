@@ -4,8 +4,10 @@ This module deliberately does not touch :mod:`catalog`. ``CatalogEntry`` and
 ``catalog_entries()`` are rendered verbatim into the duplicate-review system prompt,
 so widening either would change model behaviour. The dictionary builds its own
 response models from the same sources instead — the bundled sample plan and the
-requests a human has approved — and marks where each entry came from. It performs
-no writes, no model call, and no Notion push.
+requests a human has approved — and marks where each entry came from. The profile's
+platform adds its system events, with the properties its file lists, and comes back once
+beside them with its common fields and reserved names (ADR 0011). It performs no
+writes, no model call, and no Notion push.
 
 Two kinds of approved request compose differently. A ``new_event`` request is its
 own entry, even when its name collides with an existing one — a rival definition
@@ -22,7 +24,16 @@ from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
 from .governance import GovernanceProfile
-from .platforms import plan_named_events
+from .platforms import (
+    CommonField,
+    Evidence,
+    EventProperty,
+    Library,
+    ReservedName,
+    SystemEvent,
+    load_platform,
+    plan_named_events,
+)
 from .rules import load_plan
 from .storage import Storage
 
@@ -38,7 +49,8 @@ _APPROVED_STATUSES = ("approved", "published")
 
 class CatalogViewProperty(BaseModel):
     name: str
-    type: str
+    # None only on a system event's property whose sources give no type.
+    type: Optional[str] = None
     # For array properties, the shared shape its items follow (e.g. "product_item").
     # The shape itself is returned once under CatalogView.shapes, never inlined here.
     shape: Optional[str] = None
@@ -48,6 +60,9 @@ class CatalogViewProperty(BaseModel):
     # the dictionary's view of the review's property_already_exists case. The
     # property renders once; showing it twice would be lying.
     also_requested_by: list[int] = Field(default_factory=list)
+    # For a property the platform sends: how the claim is known, and any caveat.
+    evidence: Optional[Evidence] = None
+    note: Optional[str] = None
 
 
 class ShapeProperty(BaseModel):
@@ -75,6 +90,13 @@ class CatalogViewEvent(BaseModel):
     # For a system event: the name or call the SDK sends, and which SDK sends it.
     sent_as: Optional[str] = None
     sent_by: Optional[str] = None
+    # False when the platform file has not listed the event's properties yet, so an
+    # empty list is never read as "none".
+    properties_listed: bool = True
+    default_on: dict[str, bool] = Field(default_factory=dict)
+    evidence: Optional[Evidence] = None
+    note: Optional[str] = None
+    sources: list[str] = Field(default_factory=list)
 
 
 class CatalogCounts(BaseModel):
@@ -86,10 +108,22 @@ class CatalogCounts(BaseModel):
     system_events: int
 
 
+class CatalogPlatform(BaseModel):
+    """What the profile's platform sends beside its system events, returned once."""
+
+    name: str
+    checked: str
+    libraries: list[Library]
+    common_fields: list[CommonField]
+    reserved_names: list[ReservedName]
+    not_listed_yet: list[str]
+
+
 class CatalogView(BaseModel):
     events: list[CatalogViewEvent]
     shapes: dict[str, SharedShape] = Field(default_factory=dict)
     counts: CatalogCounts
+    platform: Optional[CatalogPlatform] = None
 
 
 def _view_properties(
@@ -125,22 +159,55 @@ def _sample_plan_events(plan: dict) -> list[CatalogViewEvent]:
     ]
 
 
+def _platform_properties(properties: list[EventProperty]) -> list[CatalogViewProperty]:
+    return [
+        CatalogViewProperty(
+            name=p.name,
+            type=p.type,
+            source="system_event",
+            evidence=p.evidence,
+            note=p.note,
+        )
+        for p in properties
+    ]
+
+
+def _system_event(name: str, event: SystemEvent) -> CatalogViewEvent:
+    return CatalogViewEvent(
+        name=name,
+        category=SYSTEM_EVENTS_CATEGORY,
+        description=event.records[:1].upper() + event.records[1:],
+        properties=_platform_properties(event.properties or []),
+        source="system_event",
+        sent_as=event.sent_as,
+        sent_by=event.sent_by,
+        properties_listed=event.properties is not None,
+        default_on=event.default_on,
+        evidence=event.evidence,
+        note=event.note,
+        sources=event.sources,
+    )
+
+
 def _system_events(profile: Optional[GovernanceProfile]) -> list[CatalogViewEvent]:
     if profile is None:
         return []
     named = plan_named_events(profile.platform, profile.event_naming.convention)
-    return [
-        CatalogViewEvent(
-            name=name,
-            category=SYSTEM_EVENTS_CATEGORY,
-            description=event.records[:1].upper() + event.records[1:],
-            properties=[],
-            source="system_event",
-            sent_as=event.sent_as,
-            sent_by=event.sent_by,
-        )
-        for name, event in named.items()
-    ]
+    return [_system_event(name, event) for name, event in named.items()]
+
+
+def _platform(profile: Optional[GovernanceProfile]) -> Optional[CatalogPlatform]:
+    if profile is None or profile.platform is None:
+        return None
+    platform = load_platform(profile.platform)
+    return CatalogPlatform(
+        name=platform.name,
+        checked=platform.checked,
+        libraries=platform.libraries,
+        common_fields=platform.common_fields,
+        reserved_names=platform.reserved_names,
+        not_listed_yet=platform.not_listed_yet,
+    )
 
 
 def _approved_at(storage: Storage, request_id: int, fallback: Optional[str]) -> Optional[str]:
@@ -276,4 +343,5 @@ def build_catalog_view(
             unresolved_targets=len(unresolved),
             system_events=len(system),
         ),
+        platform=_platform(profile),
     )
