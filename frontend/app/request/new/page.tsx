@@ -22,10 +22,17 @@ import {
   wizardReducer,
 } from "@/lib/wizard";
 import { missingPiiReasons, piiReasonsToSend } from "@/lib/gating";
+import {
+  KIND_PLACEHOLDERS,
+  NaturalLanguageExample,
+  clearUntouchedExample,
+  fillFromExample,
+} from "@/lib/examples";
 import { ruleInSentence } from "@/lib/format";
 import { EventPicker } from "@/components/EventPicker";
 import { PiiReasons } from "@/components/PiiReasons";
 import { RejectedRecourse } from "@/components/RejectedRecourse";
+import { StepExamples } from "@/components/wizard/StepExamples";
 import { StepExists } from "@/components/wizard/StepExists";
 import { StepReview } from "@/components/wizard/StepReview";
 
@@ -63,6 +70,7 @@ export default function GuidedRequestPage() {
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [piiReasons, setPiiReasons] = useState<Record<string, string>>({});
+  const [exampleStatus, setExampleStatus] = useState<string | null>(null);
   // Synchronous guard: two clicks in the same frame both render with
   // busy=false, so the disabled prop alone cannot stop the second one.
   const inFlight = useRef(false);
@@ -76,6 +84,7 @@ export default function GuidedRequestPage() {
   async function draft() {
     if (inFlight.current || !canAdvance(state)) return;
     inFlight.current = true;
+    setExampleStatus(null);
     dispatch({ type: "DRAFT_STARTED" });
     try {
       const { id } = await submitIntake(state.text, toIntakePayload(state));
@@ -153,6 +162,34 @@ export default function GuidedRequestPage() {
       inFlight.current = false;
       setBusy(false);
     }
+  }
+
+  function fillExample(example: NaturalLanguageExample) {
+    const next = fillFromExample(
+      { text: state.text, businessValue: state.businessValue },
+      example,
+    );
+    set("text", next.text);
+    set("businessValue", next.businessValue);
+    const keptTyping =
+      next.text !== example.text || next.businessValue !== example.businessValue;
+    setExampleStatus(
+      `Filled this step with “${example.label}”.` +
+        (keptTyping ? " Fields you typed in were left alone." : "") +
+        " Select Next to draft it.",
+    );
+  }
+
+  function selectKind(kind: DataKind) {
+    if (kind !== state.kind) {
+      const cleared = clearUntouchedExample({
+        text: state.text,
+        businessValue: state.businessValue,
+      });
+      set("text", cleared.text);
+      set("businessValue", cleared.businessValue);
+    }
+    dispatch({ type: "SELECT_KIND", kind });
   }
 
   function set(
@@ -252,6 +289,7 @@ export default function GuidedRequestPage() {
     );
   }
 
+  const kind = state.kind ?? "unknown";
   const detail = state.detail;
   const rejected = detail != null && detail.status !== "draft";
   const piiHits = detail?.pii_hits ?? {};
@@ -282,13 +320,18 @@ export default function GuidedRequestPage() {
                 <button
                   key={card.kind}
                   className={`kind-card ${state.kind === card.kind ? "selected" : ""}`}
-                  onClick={() => dispatch({ type: "SELECT_KIND", kind: card.kind })}
+                  onClick={() => selectKind(card.kind)}
                 >
                   <span className="kind-card-title">{card.title}</span>
                   <span className="kind-card-hint">{card.hint}</span>
                 </button>
               ))}
             </div>
+            <p className="muted mt-12" style={{ fontSize: 13, marginBottom: 0 }}>
+              Step 3 has examples for the kind you pick. Two scenarios that skip the
+              model and go straight to the rules are on the{" "}
+              <Link href="/">single-screen form</Link>.
+            </p>
             {state.kind === "user_trait" && (
               <div className="msg msg-info mt-16">
                 We only support track calls today, so this will be captured as an
@@ -383,12 +426,21 @@ export default function GuidedRequestPage() {
         {state.step === 3 && (
           <>
             <div className="panel-title">Describe it</div>
+            <StepExamples
+              kind={kind}
+              busy={state.drafting}
+              status={exampleStatus}
+              onFill={fillExample}
+            />
             <label className="field">
               <span className="field-label">What to track *</span>
               <textarea
                 value={state.text}
-                onChange={(e) => set("text", e.target.value)}
-                placeholder="e.g. track when a shopper empties their entire cart"
+                onChange={(e) => {
+                  setExampleStatus(null);
+                  set("text", e.target.value);
+                }}
+                placeholder={KIND_PLACEHOLDERS[kind].text}
                 disabled={state.drafting}
               />
             </label>
@@ -398,8 +450,11 @@ export default function GuidedRequestPage() {
               </span>
               <textarea
                 value={state.businessValue}
-                onChange={(e) => set("businessValue", e.target.value)}
-                placeholder="e.g. tells merchandising which promotions actually drive checkout"
+                onChange={(e) => {
+                  setExampleStatus(null);
+                  set("businessValue", e.target.value);
+                }}
+                placeholder={KIND_PLACEHOLDERS[kind].businessValue}
                 rows={2}
                 disabled={state.drafting}
               />
@@ -501,7 +556,10 @@ export default function GuidedRequestPage() {
             {state.step > 1 && (
               <button
                 className="btn"
-                onClick={() => dispatch({ type: "BACK" })}
+                onClick={() => {
+                  setExampleStatus(null);
+                  dispatch({ type: "BACK" });
+                }}
                 disabled={state.drafting || busy}
               >
                 Back

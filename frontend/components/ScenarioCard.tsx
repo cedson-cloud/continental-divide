@@ -63,7 +63,7 @@ export function ScenarioCard({
 
 // The title is the button's name; the summary and what the click does are read after it
 // as its description, rather than as one long name.
-function ScenarioTile({
+export function ScenarioTile({
   example,
   icon,
   action,
