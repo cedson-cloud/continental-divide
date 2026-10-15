@@ -70,6 +70,11 @@ export function DecisionCard({
   const required = Number(needsPii) + Number(needsFindings);
   const remaining =
     Number(needsPii && !piiAcknowledged) + Number(needsFindings && !findingsAcknowledged);
+  const selfApproval = detail.would_be_self_approval === true;
+  const approveDescribedBy =
+    [required > 0 && "decision-remaining", selfApproval && "decision-self"]
+      .filter(Boolean)
+      .join(" ") || undefined;
 
   async function decide(decision: "approve" | "reject") {
     const landed = await onDecide(decision, {
@@ -169,12 +174,19 @@ export function DecisionCard({
         />
       </label>
 
+      {selfApproval && (
+        <p id="decision-self" className="self-approval-note">
+          You made or submitted this request, so approving it will be recorded as a
+          self-approval.
+        </p>
+      )}
+
       <div className="decision-buttons">
         <button
           className="btn btn-approve"
           onClick={() => decide("approve")}
           disabled={deciding || remaining > 0}
-          aria-describedby={required > 0 ? "decision-remaining" : undefined}
+          aria-describedby={approveDescribedBy}
         >
           {deciding ? "Working…" : "Approve & publish"}
         </button>

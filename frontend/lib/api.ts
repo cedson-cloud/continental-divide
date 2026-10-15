@@ -118,6 +118,9 @@ export type RequestDetail = {
   // reasons were required have hits and no reasons.
   pii_hits: Record<string, string>;
   pii_reasons: Record<string, string>;
+  // What approving now would record as the decision's self_approval: true when the
+  // viewer made or submitted this request, null when no requester was recorded.
+  would_be_self_approval: boolean | null;
 };
 
 export type Dispute = {

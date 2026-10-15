@@ -267,7 +267,7 @@ def _engine_duplicates(request_id: int, storage: Storage) -> set:
 _REQUESTER_STEPS = ("intake_received", "submitted")
 
 
-def _self_approval(request_id: int, storage: Storage) -> Optional[bool]:
+def self_approval(request_id: int, storage: Storage) -> Optional[bool]:
     """Whether the approver made or submitted this request, recovered from the audit log
     and never typed (docs/adr/0004). None when no requester entry names an actor, as in
     logs written before actors were recorded: unknown is not the same as someone else."""
@@ -846,7 +846,7 @@ def decide(
     including ``POST /requests/raw``, which skips requester confirmation and so has no
     earlier point at which anyone sees the collision. Approve publishes and moves to
     ``published``; reject moves to ``rejected``. An approval's ``decision_received``
-    entry records ``self_approval`` (see :func:`_self_approval`). Raises
+    entry records ``self_approval`` (see :func:`self_approval`). Raises
     :class:`RequestNotFound`, :class:`InvalidTransition`,
     :class:`PiiAcknowledgmentRequired`, or :class:`DuplicateAcknowledgmentRequired` for
     the caller to map to HTTP.
@@ -881,7 +881,7 @@ def decide(
 
     received = {"decision": decision, "approver": approver_name, "note": note}
     if decision == "approve":
-        received["self_approval"] = _self_approval(request_id, storage)
+        received["self_approval"] = self_approval(request_id, storage)
 
     to_status = "approved" if decision == "approve" else Decision.rejected.value
     if not storage.transition(request_id, DECIDABLE_STATUSES, to_status):

@@ -136,3 +136,29 @@ def test_every_approval_in_the_demo_is_a_self_approval(demo_env):
         "method": "demo",
         "verified": False,
     }
+
+
+def test_the_detail_says_approving_your_own_request_would_be_a_self_approval(
+    storage, client
+):
+    request_id = _raw(storage)
+
+    assert client.get(f"/requests/{request_id}").json()["would_be_self_approval"] is True
+
+
+def test_the_detail_says_approving_someone_elses_request_would_not(storage, client):
+    request_id = _raw(storage.acting_as(REQUESTER))
+
+    assert client.get(f"/requests/{request_id}").json()["would_be_self_approval"] is False
+
+
+def test_the_detail_matches_what_the_decision_then_records(storage, client):
+    request_id = _draft(storage.acting_as(REQUESTER))
+    submit_request(request_id, storage)
+    told = client.get(f"/requests/{request_id}").json()["would_be_self_approval"]
+
+    assert client.post(
+        f"/requests/{request_id}/decision", json={"decision": "approve"}
+    ).status_code == 200
+    assert told is True
+    assert _decision(storage, request_id)["self_approval"] is told

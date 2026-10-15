@@ -42,6 +42,7 @@ function detail(overrides: Partial<RequestDetail> = {}): RequestDetail {
     name_suggestions: [],
     pii_hits: {},
     pii_reasons: {},
+    would_be_self_approval: false,
     ...overrides,
   };
 }
@@ -211,5 +212,26 @@ describe("DecisionCard gating", () => {
     });
     fireEvent.click(box);
     expect(approve()).toBeEnabled();
+  });
+});
+
+describe("DecisionCard self-approval notice", () => {
+  it("tells the approver before they approve that it will be a self-approval", () => {
+    renderCard({ ...GATED, would_be_self_approval: true });
+
+    const note = /made or submitted this request, so approving it will be recorded as a self-approval/;
+    expect(screen.getByText(note)).toBeInTheDocument();
+    expect(approve()).toHaveAccessibleDescription(
+      expect.stringMatching(/Acknowledge 2 items to approve\. .*self-approval/),
+    );
+  });
+
+  it("says nothing when the approver is someone else, or the requester is unknown", () => {
+    renderCard(detail({ would_be_self_approval: false }));
+    expect(screen.queryByText(/self-approval/)).not.toBeInTheDocument();
+    cleanup();
+    renderCard(detail({ would_be_self_approval: null }));
+    expect(screen.queryByText(/self-approval/)).not.toBeInTheDocument();
+    expect(approve()).not.toHaveAttribute("aria-describedby");
   });
 });

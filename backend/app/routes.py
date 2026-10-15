@@ -47,6 +47,7 @@ from .pipeline import (
     interpret_intake,
     publish_approved,
     recorded_pii_hits,
+    self_approval,
     submit_request,
     withdraw_request,
 )
@@ -633,6 +634,9 @@ def get_request(request_id: int, storage: Storage = Depends(acting_storage)) -> 
     # The fields each reason answers for, beside the reasons themselves.
     request["pii_hits"] = recorded_pii_hits(request, storage)
     request["pii_reasons"] = request.get("pii_reasons") or {}
+    # What approving now would record, from the same function the decision uses, so
+    # the approver is told before deciding exactly what the audit entry will say.
+    request["would_be_self_approval"] = self_approval(request_id, storage)
     return request
 
 
