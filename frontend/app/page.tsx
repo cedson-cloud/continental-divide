@@ -74,7 +74,7 @@ const DECISIONS: { file: string; title: string; why: string }[] = [
     title: "Duplicate detection has three tiers",
     why:
       "The same name, the same name written differently, and a different name for the " +
-      "same behaviour: who catches each, and what each may ask of a person.",
+      "same behaviour. Who catches each, and what each may ask of a person.",
   },
   {
     file: "0008-snippets-are-deterministic-and-per-surface",
@@ -84,7 +84,7 @@ const DECISIONS: { file: string; title: string; why: string }[] = [
   {
     file: "0010-a-public-demo-gives-each-visitor-a-private-sandbox",
     title: "A public demo gives each visitor a private sandbox",
-    why: "Letting strangers draft with a paid model: a separate database for each visitor, and the limits that make it safe to host.",
+    why: "Strangers draft with a paid model, so each visitor gets a separate database, with limits that keep the demo safe to host.",
   },
 ];
 
