@@ -143,7 +143,7 @@ describe("DecisionCard gating", () => {
 
   it("sends the name, note and both acknowledgments with the decision", async () => {
     const onDecide = renderCard(GATED);
-    fireEvent.change(screen.getByRole("textbox", { name: "Your name" }), {
+    fireEvent.change(screen.getByRole("textbox", { name: "Your name (optional)" }), {
       target: { value: "Ana" },
     });
     fireEvent.change(screen.getByRole("textbox", { name: "Note (optional)" }), {

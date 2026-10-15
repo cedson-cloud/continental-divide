@@ -48,7 +48,7 @@ export function ScenarioCard({
             key={ex.key}
             example={ex}
             icon="play"
-            action="Skips the model and your review"
+            action="Skips the model, goes straight to the rules"
             busy={busy}
             onClick={() => onRun(ex)}
           />

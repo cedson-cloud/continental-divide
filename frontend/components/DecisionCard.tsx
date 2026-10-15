@@ -156,7 +156,7 @@ export function DecisionCard({
       )}
 
       <label className="field mt-16">
-        <span className="field-label">Your name</span>
+        <span className="field-label">Your name (optional)</span>
         <input
           type="text"
           value={approverName}

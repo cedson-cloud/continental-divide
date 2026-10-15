@@ -20,6 +20,13 @@ const PATHS = {
   play: <path d="M7 5l8 5-8 5z" />,
   chevron: <path d="M8 5.5l4.5 4.5L8 14.5" />,
   flag: <path d="M5.5 17V3.5M5.5 4h9l-2.2 3.5 2.2 3.5h-9" />,
+  help: (
+    <>
+      <circle cx="10" cy="10" r="7" />
+      <path d="M8 8.2a2.1 2.1 0 1 1 2.9 1.9c-.6.3-.9.7-.9 1.3v.4" />
+      <path d="M10 14.2v.01" />
+    </>
+  ),
 };
 
 export type IconName = keyof typeof PATHS;

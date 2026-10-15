@@ -19,17 +19,26 @@ function currentLinks(): string[] {
 
 describe("AppNav", () => {
   it.each([
+    ["/guide", "How to use this"],
     ["/", "New request"],
     ["/request/new", "New request"],
     ["/queue", "Queue"],
     ["/requests/15", "Queue"],
-    ["/catalog", "Catalog"],
+    ["/catalog", "Tracking plan"],
     ["/admin", "Governance"],
     ["/admin/setup", "Governance"],
   ])("marks only the right link as current on %s", (path, label) => {
     pathname.current = path;
     render(<AppNav />);
     expect(currentLinks()).toEqual([label]);
+  });
+
+  it("lists the guide first, where a newcomer looks", () => {
+    pathname.current = "/";
+    render(<AppNav />);
+    const links = screen.getByRole("navigation", { name: "Main" }).querySelectorAll("a");
+    expect(links[0]).toHaveTextContent("How to use this");
+    expect(links[0]).toHaveAttribute("href", "/guide");
   });
 
   it("opens the menu from the button and closes it when a link is chosen", () => {
@@ -47,7 +56,7 @@ describe("AppNav", () => {
 
     // jsdom cannot follow links; cancel the navigation and keep the click handler.
     document.addEventListener("click", (e) => e.preventDefault(), { once: true });
-    fireEvent.click(screen.getByRole("link", { name: "Catalog" }));
+    fireEvent.click(screen.getByRole("link", { name: "Tracking plan" }));
     expect(button).toHaveAttribute("aria-expanded", "false");
     expect(nav).not.toHaveClass("open");
   });

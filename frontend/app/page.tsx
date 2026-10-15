@@ -19,6 +19,12 @@ import {
   withdrawRequest,
 } from "@/lib/api";
 import { NaturalLanguageExample, fillFromExample } from "@/lib/examples";
+import {
+  SIDE_HINT,
+  SIDE_OPTIONS,
+  missingFieldsSentence,
+  missingIntakeFields,
+} from "@/lib/intake";
 import { ruleInSentence } from "@/lib/format";
 import { ProposedDefinition } from "@/components/AuditTimeline";
 import { AgentReview } from "@/components/AgentReview";
@@ -83,6 +89,17 @@ export default function IntakePage() {
     if (error) errorRef.current?.focus();
   }, [error]);
 
+  const missing = missingFieldsSentence(
+    missingIntakeFields({
+      submitterName,
+      submitterTeam,
+      text,
+      businessValue,
+      urgent,
+      urgencyReason,
+    }),
+  );
+
   function toggleDestination(d: string) {
     setDestinations((prev) =>
       prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d],
@@ -133,7 +150,8 @@ export default function IntakePage() {
       </p>
 
       <div className="msg msg-info" style={{ marginBottom: 16 }}>
-        New to this? <Link href="/request/new">Use the guided request →</Link>
+        New to this? Read <Link href="/guide">how to use this</Link>, or{" "}
+        <Link href="/request/new">use the guided request →</Link>
       </div>
 
       <ScenarioCard
@@ -154,7 +172,7 @@ export default function IntakePage() {
         <div className="panel-title">Describe the event</div>
         <div className="fields">
           <label className="field">
-            <span className="field-label">Submitted By *</span>
+            <span className="field-label">Your name *</span>
             <input
               type="text"
               placeholder="Your name"
@@ -177,21 +195,19 @@ export default function IntakePage() {
               <option value="Engineering">Engineering</option>
             </select>
           </label>
-          <div className="field">
-            <span className="field-label">Call type</span>
-            <span style={{ fontSize: 14, padding: "6px 0" }}>track</span>
-          </div>
           <label className="field">
-            <span className="field-label">Server Side or Client Side *</span>
+            <span className="field-label">Where does it happen? *</span>
             <select
               value={side}
               onChange={(e) => setSide(e.target.value)}
               disabled={submitting}
               required
             >
-              <option value="Client">Client</option>
-              <option value="Server">Server</option>
-              <option value="Unsure">I&apos;m not sure</option>
+              {SIDE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
             </select>
           </label>
           <label className="field">
@@ -223,12 +239,11 @@ export default function IntakePage() {
           </label>
         </div>
         <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>
-          Browser = the user&apos;s device. Server = your backend. Not sure is fine —
-          the approver decides.
+          {SIDE_HINT}
         </p>
 
         <label className="field mt-12">
-          <span className="field-label">What to track</span>
+          <span className="field-label">What to track *</span>
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
@@ -280,7 +295,7 @@ export default function IntakePage() {
               />
             </label>
             <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>
-              Pick from the catalog, or type a name it doesn&apos;t have yet.
+              Pick from the tracking plan, or type a name it doesn&apos;t have yet.
             </p>
           </div>
         )}
@@ -308,6 +323,7 @@ export default function IntakePage() {
         <div className="row mt-12">
           <button
             className="btn btn-primary"
+            aria-describedby={missing && !submitting ? "draft-missing" : undefined}
             onClick={() =>
               run(() =>
                 submitIntake(text, {
@@ -328,17 +344,15 @@ export default function IntakePage() {
                 }),
               )
             }
-            disabled={
-              submitting ||
-              text.trim().length === 0 ||
-              businessValue.trim().length === 0 ||
-              submitterName.trim().length === 0 ||
-              submitterTeam === "" ||
-              (urgent && urgencyReason.trim().length === 0)
-            }
+            disabled={submitting || missing !== null}
           >
             {submitting ? "Drafting…" : "Draft my request"}
           </button>
+          {missing && !submitting && (
+            <span id="draft-missing" className="missing-fields">
+              {missing}
+            </span>
+          )}
         </div>
 
         {error && (
@@ -501,10 +515,11 @@ function Outcome({ detail }: { detail: RequestDetail }) {
       <div className="panel">
         <div className="panel-title">Request submitted</div>
         <p style={{ marginTop: 0 }}>
-          Request #{detail.id} is now in the approval queue.
+          Request #{detail.id} is now in the approval queue. In a real team someone
+          else decides. Here, you do: open the queue and decide it as the approver.
         </p>
         <div className="row">
-          <Link href="/queue">View the queue →</Link>
+          <Link href="/queue">Open the queue →</Link>
           <Link href={`/requests/${detail.id}`}>View request #{detail.id} →</Link>
         </div>
       </div>

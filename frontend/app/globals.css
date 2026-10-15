@@ -427,6 +427,28 @@ select {
   color: var(--muted);
   background: var(--neutral-bg);
 }
+.msg-done {
+  color: var(--published-fg);
+  background: var(--published-bg);
+  border-color: var(--published-line);
+}
+.msg-done a {
+  color: inherit;
+}
+/* A link inside a sentence needs more than its colour to stand out from the words
+   around it (WCAG 1.4.1). */
+.msg a,
+.catalog-guide-link a,
+.guide-section a {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Why a button is disabled, said beside it. */
+.missing-fields {
+  font-size: 13px;
+  color: var(--muted);
+}
 
 .muted {
   color: var(--muted);
@@ -719,45 +741,10 @@ table.prop-table {
   }
 }
 
-.catalog-intro {
-  margin: -12px 0 20px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--panel);
-}
-.catalog-intro summary {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 18px;
-  font-size: 14.5px;
-  font-weight: 600;
-  color: var(--accent);
-  cursor: pointer;
-  list-style: none;
-  border-radius: var(--radius);
-}
-.catalog-intro summary::-webkit-details-marker {
-  display: none;
-}
-.catalog-intro summary:hover {
-  background: var(--accent-faint);
-}
-.catalog-intro[open] > summary > svg {
-  transform: rotate(90deg);
-}
-.catalog-intro-body {
-  padding: 0 18px 4px 42px;
-  max-width: 68ch;
+.catalog-guide-link {
+  margin: -16px 0 24px;
   font-size: 14px;
-  line-height: 1.55;
-}
-.catalog-intro-body p {
-  margin: 0 0 12px;
-}
-.catalog-intro-body .mono {
-  font-size: 13px;
-  white-space: nowrap;
+  color: var(--muted);
 }
 
 /* Catalog. One row per event: the toggle stretches over the row's head, and the
@@ -2141,5 +2128,135 @@ ul.checks,
   .timeline-head {
     flex-direction: column;
     gap: 0;
+  }
+}
+
+/* The guide. Its one visual idea is the path: the steps hang on a line like the
+   request progress bar turned on its side, each dot numbered because order matters. */
+.guide-section + .guide-section {
+  margin-top: 18px;
+}
+.guide-prose {
+  max-width: 64ch;
+  font-size: 14.5px;
+  line-height: 1.6;
+}
+.guide-prose p {
+  margin: 0 0 12px;
+}
+.guide-prose p:last-child {
+  margin-bottom: 0;
+}
+.guide-prose .mono {
+  font-size: 13.5px;
+  white-space: nowrap;
+}
+
+.guide-steps {
+  list-style: none;
+  counter-reset: guide-step;
+  margin: 0;
+  padding: 0;
+}
+.guide-step {
+  counter-increment: guide-step;
+  position: relative;
+  padding: 0 0 22px 46px;
+  max-width: 68ch;
+}
+.guide-step:last-child {
+  padding-bottom: 0;
+}
+.guide-step::before {
+  content: counter(guide-step);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 13.5px;
+  font-weight: 650;
+  color: #fff;
+  background: var(--accent);
+}
+.guide-step::after {
+  content: "";
+  position: absolute;
+  left: 13px;
+  top: 32px;
+  bottom: 4px;
+  width: 2px;
+  background: var(--accent-soft);
+}
+.guide-step:last-child::after {
+  display: none;
+}
+.guide-step-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  min-height: 28px;
+}
+.guide-step-title {
+  font-size: 15.5px;
+  font-weight: 650;
+  margin: 3px 0 0;
+}
+.guide-step-role {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--accent);
+}
+.guide-step-body {
+  margin: 4px 0 0;
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.guide-runs,
+.guide-words {
+  margin: 0;
+  display: grid;
+  gap: 14px;
+}
+.guide-run,
+.guide-word {
+  display: grid;
+  grid-template-columns: minmax(150px, 13rem) 1fr;
+  gap: 4px 20px;
+  max-width: 78ch;
+}
+.guide-run dt,
+.guide-word dt {
+  font-weight: 600;
+  font-size: 14.5px;
+}
+.guide-run dd,
+.guide-word dd {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+.guide-facts {
+  margin: 0;
+  padding-left: 20px;
+  max-width: 70ch;
+  font-size: 14.5px;
+  line-height: 1.55;
+}
+.guide-facts li + li {
+  margin-top: 8px;
+}
+
+@media (max-width: 640px) {
+  .guide-run,
+  .guide-word {
+    grid-template-columns: 1fr;
   }
 }
