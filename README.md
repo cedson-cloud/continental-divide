@@ -4,62 +4,214 @@ Continental Divide turns "I need to know something about our users" (asked in pl
 English by anyone in a business) into a spec-compliant, human-approved, documented
 tracked event.
 
-Every company I've worked with has the same failure: the tracking plan and production
-drift apart, and the plan becomes a lie. This is a clean, open implementation of the pattern
-I kept rebuilding. Continental Divide takes a plain-language request for a new tracking event,
-turns it into a typed and validated definition, routes it for approval, and on approval
-publishes the documentation, opens a ticket, and adds the event to a data dictionary
-anyone in the business can read. Every step is recorded.
+**Try it at <https://continental-divide.vercel.app>.** There's no sign-up. Each visitor
+gets a private sandbox that holds five requests and is deleted after seven days without
+use. Nothing is sent to Jira, Confluence or Notion. You play both the requester and the
+approver, so every approval is recorded as a self-approval.
 
-The shape is simple: define once what a correct event looks like, let a model do the
-drafting, and keep every decision with deterministic rules and a human. The model is fast
-and useful and occasionally wrong, so it is never the thing that decides.
+![The landing page: tracking requests in plain English, decided by rules and a person, with a ridge a request crosses from Ask and Draft, over Check and Approve, down to Publish.](docs/images/ui-landing.png)
 
-The name is the idea. A continental divide is the line that decides which way the water
-flows. This tool is the line a tracking request has to cross, and it decides what gets through.
+I spent about a decade scoping and building tracking plans by hand, as a CSM at Segment,
+managing the CDP at GoodRx, and again for a client this year. In each of those jobs the
+tracking plan and production drifted apart until the plan stopped being true. Review was
+one bottleneck. Teaching people what a good event looks like, and holding them to it, was
+another. Continental Divide is a clean, open implementation of the pattern I kept
+rebuilding.
 
-![The model drafts an event definition; deterministic rules and a human decide whether it crosses the divide. Every step is written to an append-only audit log.](docs/images/model-drafts-rules-decide.svg)
+A model drafts the event definition from a plain-language request. Deterministic rules
+check its name, flag personal data and look for duplicates in the tracking plan. A person
+approves it, and the approved event joins the tracking plan with Segment code for
+engineers. Every step lands in an audit log that can't be edited. The model is fast and
+useful and occasionally wrong, so it never decides.
+
+A continental divide is the line that decides which way water flows. This tool is the line
+a tracking request has to cross.
 
 ## How it works
 
-1. **Intake:** someone describes the event they want to track, in plain language.
-2. **Draft and validate:** a model turns that into a structured event definition. It
-   conforms to the schema or fails loudly, with the reasons shown. The model only drafts:
-   deterministic rules then check naming, flag PII, and catch duplicates against the
-   tracking plan, and the model cannot talk its way past them.
-3. **Confirm:** the requester sees what was drafted and what the tool found before anyone
-   else does. If it looks like something that already exists, they can take the existing
-   event instead, pass the question to the approver, or say in writing why it won't work
-   for them. Every property flagged as personal data needs a written reason. Nothing
-   enters the approval queue until they say so.
-4. **Approve:** the request routes to a human, who must acknowledge any duplicate or PII
-   flag by name before approving.
-5. **Publish:** on approval, the tool publishes the event documentation and opens a
-   tracking ticket. Out of the box this uses a mock publisher, so the whole flow runs
-   with no external accounts.
-6. **Browse:** every approved event lands in a data dictionary at `/catalog`: what is
-   tracked, what each event means, and which properties it carries. This is the artifact
-   the rest of the business needs, and it is a page rather than a spreadsheet nobody
-   maintains.
+1. **Ask.** Someone describes the event they want in plain language, with a note on why
+   it matters, on a single-screen form or a guided five-step request for people who have
+   never written an event before.
+2. **Draft.** A model turns the request into a structured definition: a name, a category,
+   a description and typed properties. It conforms to the schema or fails loudly with the
+   reasons shown, and the request is kept at the status "Couldn't draft".
+3. **Check.** Deterministic rules check the name against the naming convention, flag
+   properties that look like personal data, and look for the same event in the tracking
+   plan, whether written the same way or differently. A second model call reads the draft
+   against the tracking plan and can point out an event that means the same thing under
+   another name. That review is advisory and can never reject a request.
+4. **Confirm.** The requester sees the draft and the findings before anyone else does. If
+   it looks like an event that already exists, they can take the existing event, pass the
+   question to the approver, or explain in writing why it won't work for them. Each
+   property flagged as personal data needs a written reason. Nothing enters the approval
+   queue until they submit.
+5. **Approve.** An approver acknowledges each personal-data and duplicate flag by name
+   before approving.
+6. **Publish.** The event joins the tracking plan, where anyone can read what it means and
+   which properties it carries. The tracking plan also lists the events Segment's
+   libraries send on their own, with their properties, and the fields sent with every
+   event, each with a link to Segment's docs and the date it was checked. Engineers get its Segment code for where it fires: the
+   browser (Analytics.js), the server (Node), or both when the requester wasn't sure. The
+   code comes from a fixed template checked against Segment's docs, and no model writes
+   it. A mock publisher shows the Confluence page and Jira ticket a connected setup would
+   create.
 
-![The intake form: anyone in the business describes the event they want in plain language, with the business-value field required before it can be drafted.](docs/images/ui-intake.png)
+![The model drafts an event definition; deterministic rules and a human decide whether it crosses the divide. Every step is written to an append-only audit log.](docs/images/model-drafts-rules-decide.svg)
 
-![A guided five-step wizard for requesters who don't know what an event is, offered as an alternative to the free-text form.](docs/images/ui-guided-request.png)
+### What it looks like
 
-A timestamped, append-only audit log records every step: what was requested, what the
-model proposed, which rules passed or failed, and who decided.
+These screenshots come from the demo's own pages running on fixture data. The rule checks,
+duplicate findings, code and audit entries are the real engine's output. The drafted
+definitions and the review's findings were written by hand to stand in for the model,
+which is why the audit log names its model "stand-in".
+
+A draft the review thinks already exists. The requester can take Order Completed, ask the
+approver, or say why it won't work for them.
+
+![A draft of Payment Finished. Every rule check passes, the duplicate review finds a high-confidence match with Order Completed, and the requester's card offers three choices: use Order Completed instead, ask the approver, or explain why it won't work.](docs/images/ui-duplicate-draft.png)
+
+A request waiting on the approver, held until they acknowledge the personal-data flag and
+the requester's reason for it.
+
+![Newsletter Subscribed at pending approval. The personal-data check flags the email property, and the approver's card asks them to acknowledge it, showing the requester's reason, before Approve & publish unlocks.](docs/images/ui-approval-pii.png)
+
+A published request, with the Segment code engineers need to send it.
+
+![Cart Cleared, published. Below its definition, a For engineers card shows the Analytics.js call with each property as a typed placeholder, and the date the call shape was checked against Segment's docs.](docs/images/ui-for-engineers.png)
+
+The tracking plan, showing where each event came from.
+
+![The tracking plan filtered to events from requests: Cart Cleared, marked From request #1, with its three properties.](docs/images/ui-tracking-plan.png)
+
+## Try the scenarios
+
+The request form has a "Try a scenario" card. Each of its four scenarios shows a different
+part of the contract. The first two go through the model. The last two skip it, so the
+rules fire the same way every time. New to tracking plans? The demo's
+[guide](https://continental-divide.vercel.app/guide) explains what one is and walks a
+request through each step.
+
+- **A clean request:** "track when a shopper empties their entire cart". The model drafts
+  `Cart Cleared`, every rule passes, and approving it adds it to the tracking plan with its
+  code.
+- **Personal data:** "track when someone subscribes to our newsletter and capture their
+  email address". The model drafts the `email` property as asked, and the personal-data
+  rule flags it. The requester can't submit without writing why the request needs the
+  address, and the approver can't approve without acknowledging that reason on the record.
+  Nothing rejects it, and the requester and the approver both put their names on the
+  exception.
+- **A badly named event:** a ready-made `add_to_cart` definition. The naming rule rejects
+  it for not being Object Action in Title Case. When the fix is only case or separators,
+  as with `cart_cleared`, the engine offers a compliant name it has checked against its own
+  rule, and one click resubmits under that name with the requester's consent recorded.
+  `add_to_cart` needs its words reordered, so the engine offers no name. A requester who
+  thinks the rule is wrong for them can say so on the record, which files a dispute and
+  changes nothing.
+- **An event that already exists:** a ready-made `Order Completed` definition, which the
+  tracking plan already has. It's flagged as an exact duplicate and goes to the queue,
+  where the approver has to acknowledge it.
+
+![add_to_cart, rejected. The event name check fails because the name contains underscores; the other checks pass or were not reached, and a "This rule looks wrong for us" link files a dispute.](docs/images/ui-naming-rejected.png)
+
+## Three kinds of duplicate
+
+Duplicate detection reports three kinds of finding, and each one is a different kind of
+claim.
+
+| Kind | What it is | Who decides |
+| --- | --- | --- |
+| **Exact** | The name is already in the plan, character for character | Fact. The approver acknowledges it. |
+| **Near** | The same name written differently: case, separators, or a plural, with the same action verb | Deterministic judgment. The requester answers first. |
+| **Semantic** | A model's argument that two differently-named events mean the same thing | Inference. High-confidence findings ask the requester; the rest are shown and cost nobody an action. |
+
+None of the three can reject a request, and nothing reaches published until someone has
+acknowledged what fired. The checks compare against the sample plan and the events the
+analytics SDK sends on its own, such as Page Viewed and Application Opened, so a request
+for an event Segment already sends is caught as a duplicate.
+[`docs/adr/0001`](docs/adr/0001-three-tiers-of-duplicate-detection.md) records where the
+seam sits and why, including a similarity threshold that was measured, produced two false
+positives against Segment's own curated spec, and was dropped.
+
+## Governance lives in a file
+
+The rules come from a versioned YAML profile in [`governance/`](governance/): the naming
+convention, the personal-data blocklist, the categories, and the allowed destinations. At
+intake the profile is fixed and the model has no say in it. A team that disagrees with a
+rule changes the profile in the setup wizard and commits the file, so the repo's history
+is the profile's history.
+[ADR 0006](docs/adr/0006-governance-profiles-are-versioned-and-edited-in-the-app.md)
+decides the next step for a hosted instance with accounts: an admin saves numbered
+versions in the app, each save goes into the audit log, and every request records the
+version that judged it. That is not built yet. That change happens on its own screen and at its own time, apart from any request
+it would let through.
+
+The same rules can audit a whole tracking plan from the command line. From `backend/`,
+`python -m app.vet <plan.json>` checks every event and property name, flags personal
+data, and lists names within the plan that repeat or look alike. It reads only the file it is
+given and writes nothing.
+
+## How this was built
+
+Claude Code wrote the code under my direction. My part was the product, data and design
+calls, the rules the agent works under, and review of every change. The specification
+is in the repo:
+
+- [`CLAUDE.md`](CLAUDE.md): the standing instructions the agent works under. Architecture
+  rules that need my sign-off to change, a frozen backward-compatibility test it may not
+  edit, and the constraint that `rules.py` may never contain a model call.
+- [`CONTEXT.md`](CONTEXT.md): the glossary. What each term means and which synonyms to
+  avoid, so the code, the docs and the UI use the same word for the same thing.
+- [`docs/adr/`](docs/adr/): why each decision was made and what it ruled out.
+- [`TASKS.md`](TASKS.md): what's done, what's next, and what was deliberately cut.
+
+An agent will agree with whoever is driving it. Most of what's written down exists to stop
+that, with rules the model cannot reach, a test it cannot edit, and decisions recorded with
+the evidence behind them, so a later session can't quietly reverse one.
+
+Open any request in the demo and read its audit log. It reconstructs what happened and
+why, in order, and no row in it can be edited or deleted.
+
+![The audit log for a published request: the request, the model's draft, each rule result, the duplicate review, routing, submission, the approver's decision marked as a self-approval, and publication with the mock Confluence page and Jira ticket.](docs/images/ui-audit-trail.png)
 
 ## Stack
 
-- Backend: Python + FastAPI, Pydantic v2 for typed, validated outputs
-- Frontend: Next.js + React (TypeScript)
-- Drafting: Anthropic API, server-side only
+- Backend: Python and FastAPI, with Pydantic v2 for typed, validated outputs
+- Frontend: Next.js and React, in TypeScript
+- Drafting: the Anthropic API, server-side only
 - Storage: SQLite for the audit log and request history, behind a storage interface
-- Publishing: pluggable, and it runs **on approval**. A mock publisher ships by default,
-  with a documented stub for a real Atlassian (Confluence and Jira) adapter
-- Notion: a separate one-way push of a *pending* request to an approval board, **on
-  submission** rather than on approval. It is not a publish target and Notion is not the
-  system of record: the board is a place approvers already look
+- Publishing: pluggable, and it runs on approval. A mock publisher ships by default, with
+  a documented stub for a real Atlassian (Confluence and Jira) adapter
+- Notion: a separate one-way push of a pending request to an approval board, on
+  submission. It is not a publish target and Notion is not the system of record. The
+  board is a place approvers already look. It is off in the public demo
+- Hosting for the public demo: the frontend on Vercel, the backend on Render with a
+  persistent disk
+
+## The public demo
+
+The public demo runs the same code as a local install, with demo mode on.
+[ADR 0010](docs/adr/0010-a-public-demo-gives-each-visitor-a-private-sandbox.md) records the
+design and [`docs/deploy.md`](docs/deploy.md) the setup. Strangers can draft with a paid
+model, so these controls are in place:
+
+- Each visitor gets their own SQLite file, picked by a signed cookie. Two sandboxes never
+  see each other's requests or audit entries.
+- Five requests per sandbox, counted where the request is stored, so no route can skip
+  the count.
+- A daily dollar budget for model calls, metered from token usage. Once it's spent,
+  drafting stops and the two scenarios that skip the model keep working.
+- Hourly limits on new sandboxes, per address and in total, a rate limit on every route a
+  sandbox uses, and a size cap on every request body.
+- Apart from a health check, the backend answers only requests that arrive through the
+  Vercel site, which adds a shared secret and the visitor's address.
+- No Notion push, and the publisher is the mock.
+
+Two limits remain. There are no accounts. Every visitor is an anonymous, unverified actor,
+so the audit log records what happened but not who did it. An idle sandbox is
+deleted when a new visitor arrives after its seven days are up, so on a quiet stretch it
+can outlast them.
+
+<img src="docs/images/ui-landing-phone.png" width="300" alt="The landing page on a phone: the byline, the headline, Try it and How to use this buttons, the sandbox terms, and the ridge with its five steps.">
 
 ## Running it locally
 
@@ -67,15 +219,15 @@ model proposed, which rules passed or failed, and who decided.
 
 - Python: 3.9 works, 3.11+ recommended.
 - Node.js LTS.
-- An Anthropic API key (see Real-key setup below). The app runs without one, but the
-  intake step needs it.
+- An Anthropic API key (see Real-key setup below). The app runs without one, but drafting
+  needs it.
 
 ### Start it
 
 Two terminals: the backend on port 8000, the frontend on port 3000.
 
 ```bash
-# Terminal 1 — backend
+# Terminal 1: backend
 cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
@@ -84,21 +236,24 @@ uvicorn app.main:app --reload    # http://localhost:8000
 ```
 
 ```bash
-# Terminal 2 — frontend
+# Terminal 2: frontend
 cd frontend
 npm install
 cp .env.local.example .env.local
 npm run dev                      # http://localhost:3000
 ```
 
-Then open **http://localhost:3000**. Use `localhost`, not `127.0.0.1`. The backend
-pins CORS to `http://localhost:3000`, so loading the UI from `127.0.0.1:3000` makes the
+Then open **http://localhost:3000**. Use `localhost`, not `127.0.0.1`. The backend pins
+CORS to `http://localhost:3000`, so loading the UI from `127.0.0.1:3000` makes the
 browser's API calls fail.
+
+Locally the app runs in local mode, with one database, and every audit entry records the
+address in `LOCAL_IDENTITY_EMAIL`. Every setting, with its default, is in
+[`.env.example`](.env.example).
 
 ### Real-key setup
 
-The intake step calls the Anthropic API server-side to draft a definition from the
-plain-language request.
+Drafting calls the Anthropic API server-side.
 
 1. Get a key from the Anthropic Console (https://console.anthropic.com).
 2. Put it in `backend/.env` as `ANTHROPIC_API_KEY=sk-ant-...`.
@@ -106,153 +261,47 @@ plain-language request.
 
 The key is read server-side only and never reaches the browser or any API response.
 Without a key, `POST /requests` returns a 502 with a "could not draft a definition"
-message and records a `model_error` step in the audit log: the request is still
-persisted, at the status "Couldn't draft" (`draft_failed`), and the rest of the app
-(queue, detail, approve/reject, the raw-definition demo path below) still runs.
-
-## Demo walkthrough
-
-Four paths, each proving a different part of the contract. The first two go through the
-model; the last two use a small demo affordance on the intake page ("load a raw
-definition, skips the model step") so the rule cases fire deterministically without
-depending on what the model writes.
-
-- **Natural language, clean:** "track when a shopper empties their entire cart". The
-  model drafts `Cart Cleared`, every rule passes, it routes to approval; approve it and
-  it publishes a mock Confluence doc and Jira ticket. The happy path, end to end.
-- **Natural language, PII:** "track when someone subscribes to our newsletter and
-  capture their email address". The model faithfully proposes an `email` property, and the
-  PII rule flags it. It is *not* auto-rejected. The requester cannot submit it without
-  writing why the request needs the email address, and the approver cannot approve it
-  without acknowledging that reason on the record. The point: the model drafts what was
-  asked for, the rules govern, and two people put their names on the exception.
-- **Raw naming violation:** a pre-built `add_to_cart` definition. The naming rule
-  rejects it for not being Object Action, Title Case. A well-behaved model won't author a
-  malformed name from plain English, so this path skips the model to exercise the rule.
-  The rejection is not the end of it: the engine offers a compliant name it has checked
-  against its own rule, one click resubmits under that name, and the requester's consent
-  is recorded in the audit log. A requester who thinks the rule itself is wrong can say
-  so on the record instead, which files a dispute rather than amending anything.
-- **Raw duplicate:** a pre-built `Order Completed` definition, which already exists in
-  the tracking plan. It's flagged as a duplicate and routed to a human rather than
-  auto-rejected.
-
-![A clean request at pending approval: all six rule checks pass, two low-confidence advisory findings are shown without gating anything.](docs/images/ui-clean-approval.png)
-
-![A request held at approval with an unacknowledged PII finding. The approver cannot approve until they acknowledge the email property on the record.](docs/images/ui-approval-pii.png)
-
-![An exact duplicate flagged against the tracking plan and routed to a human rather than auto-rejected.](docs/images/ui-duplicate.png)
-
-### Three kinds of duplicate
-
-Duplicate detection is the part worth reading the code for, because the three kinds are
-not the same kind of claim and the tool refuses to pretend they are.
-
-| Kind | What it is | Who decides |
-| --- | --- | --- |
-| **Exact** | The name is already in the plan, character for character | Fact. The approver acknowledges it. |
-| **Near** | The same name written differently: case, separators, or a plural, with the same action verb | Deterministic judgment. The requester answers first. |
-| **Semantic** | A model's argument that two differently-named events mean the same thing | Inference. High-confidence findings ask the requester; the rest are shown and cost nobody an action. |
-
-None of the three can reject a request. The engine states facts, the model makes arguments
-a human can disagree with, and nothing reaches published without someone acknowledging
-what fired. [`docs/adr/0001`](docs/adr/0001-three-tiers-of-duplicate-detection.md) records
-why the seam sits there, including a similarity threshold that got measured, produced two
-false positives against Segment's own curated spec, and was thrown out.
-
-### Governance is a file, not a setting
-
-The rules come from a versioned YAML profile in [`governance/`](governance/): naming
-convention, PII blocklist, categories, allowed destinations. At intake that profile is
-law and the model has no vote. A team that disagrees amends the profile in the setup
-wizard, commits the file, and `git log` is the history: never the same screen, or the
-same moment, as the request it would have let through.
-
-![The active governance profile: naming convention, PII blocklist, categories, and allowed destinations, read from a versioned YAML file.](docs/images/ui-governance.png)
-
-## How this was built
-
-I directed this build with Claude Code. I read code and make the product and data calls; I
-don't write the Python by hand. That makes the specification the real work, and it is all
-in the repo:
-
-- [`CLAUDE.md`](CLAUDE.md): the standing instructions the agent works under. Architecture
-  rules that require my sign-off to change, a frozen backward-compatibility test it may not
-  edit, and the constraint that `rules.py` may never contain a model call.
-- [`CONTEXT.md`](CONTEXT.md): the glossary. What each term means and which synonyms to
-  avoid, so the code, the docs, and the UI say the same word for the same thing.
-- [`docs/adr/`](docs/adr/): why each decision was made and what it ruled out.
-- [`TASKS.md`](TASKS.md): what's done, what's next, and what was deliberately cut.
-
-The interesting constraint is that an agent will happily agree with whoever is driving it. Most of what's
-written down exists to stop that: rules the model cannot reach, a test it cannot edit, and
-decisions recorded with the evidence that produced them, so a later session cannot quietly
-reverse one.
-
-Open any request's detail page and read the audit timeline. That timeline is the point of
-the tool: it reconstructs exactly what happened and why, in order, and the audit rows
-cannot be edited or deleted.
-
-![The audit timeline for a single request: intake, model draft, each rule result, routing, the approver's decision and PII acknowledgment, and publication with the mock Confluence and Jira artifacts.](docs/images/ui-audit-timeline.png)
-
-## Deploy notes
-
-Not deployed yet: these are notes for later, not a deployment guide.
-
-The shape is two services plus a database: the FastAPI backend, the Next.js frontend, and
-a datastore for the audit log and request history.
-
-- **SQLite is local-only.** The default storage writes to a single SQLite file. Any host
-  with an ephemeral filesystem (most container platforms) won't persist the audit log
-  across restarts, which defeats the point of the tool. A real deploy needs a durable
-  database: implement a Postgres backend behind the existing `Storage` interface (the app
-  talks to that interface, not to SQLite directly) and point the backend at it.
-- **The intake endpoint is a cost and abuse surface.** `POST /requests` calls a paid API
-  on every request. Its built-in rate limit and intake-length cap are a floor, not a
-  public-facing control, and they cover that route only, not every reachable endpoint
-  (see the known limits below). Before exposing it, add authentication and a usage cap.
-- **Environment variables.** Backend: `ANTHROPIC_API_KEY` (required for intake),
-  `ANTHROPIC_MODEL`, `DATABASE_PATH`, `MAX_INTAKE_CHARS`, `RATE_LIMIT_MAX`,
-  `RATE_LIMIT_WINDOW_SECONDS`, `GENERAL_RATE_LIMIT_MAX`, `GENERAL_RATE_LIMIT_WINDOW_SECONDS`,
-  and (for the approval-board push) `NOTION_TOKEN` and `NOTION_APPROVAL_DB_ID`. Frontend: `NEXT_PUBLIC_API_BASE` (the backend's URL).
+message and records a `model_error` step in the audit log. The request is still stored,
+at the status "Couldn't draft" (`draft_failed`), and the rest of the app (queue, detail,
+approve and reject, the scenarios that skip the model) still runs.
 
 ## Status
 
-The full flow works end to end: plain-language intake, model drafting, deterministic
-rules, requester confirmation, human approval with PII and duplicate acknowledgment, mock
-publishing, the `/catalog` data dictionary, and a one-way push of pending requests to a
-Notion approval board, all recorded in the append-only audit log. A pytest suite covers
-the rules, the pipeline, the HTTP flow, and the Notion mapping, alongside a deterministic
-eval tier whose fixtures pin engine decisions one claim at a time; CI runs all of it plus
-a frontend type-check, test suite, and build on every push. Not deployed anywhere yet;
-see the deploy notes above.
-
-![The /catalog data dictionary: every approved event, what it means, and the properties it carries.](docs/images/ui-catalog.png)
+The full flow works end to end, locally and in the public demo. A pytest suite covers the
+rules, the pipeline, the HTTP routes, the sandboxes and spend controls, the snippets and
+the Notion mapping, alongside a deterministic eval tier whose fixtures pin engine
+decisions one claim at a time. A Vitest suite covers the frontend. CI runs both, plus a
+type-check and a production build, on every push.
 
 **The bundled sample plan.** `backend/app/sample_tracking_plan.json` holds 28 events whose
 names and descriptions are reproduced verbatim from Segment's public Ecommerce V2 spec
 (<https://segment.com/docs/connections/spec/ecommerce/v2/>), used here as reference
 material and credited to Segment.
 
-**Known limits, stated rather than discovered.** Duplicate detection compares against the
-bundled sample plan only: it does not yet see events this tool has published, or requests
-sitting in its own queue, so it cannot catch a duplicate of something it approved last
-week. That boundary and its consequences are written up in
-[`docs/adr/0002`](docs/adr/0002-the-duplicate-corpus-is-the-bundled-plan.md); closing it is
-the next substantial piece of work. Separately, nothing yet tests that the model respects
-the line between what it should report and what the engine already caught. The
-deterministic eval tier covers the engine, but that check needs a live eval tier, which
-does not exist yet. `POST /requests/raw`, the demo path that skips the model, has neither
-the rate limit nor the size cap that `POST /requests` enforces, so the floor described in
-the deploy notes covers the model-backed route only. `backend/run_examples.py` is
-destructive by design: it calls `reset_storage()`, which deletes the SQLite file and
-recreates the tables, so running it wipes the local request history and the audit log
-along with it. And the PII rule matches tokens, so it only catches the names
-it knows: `Product Shared` and `Cart Shared` in the bundled plan carry a `recipient`
-property, which in practice holds an email address or a phone number and passes the check
-clean. That is faithful to Segment's spec rather than a transcription error, which is the
-point: a blocklist governs the words on the list, and a plan copied from a good public
-spec can still hand you an unflagged identifier.
+**Known limits.**
+
+- Duplicates are checked against the sample plan and the SDK's own events only. Events
+  approved here appear in the tracking plan but aren't yet part of what the check compares
+  against, so the tool could approve a duplicate of something it approved last week.
+  [`docs/adr/0005`](docs/adr/0005-the-duplicate-corpus-grows-with-approved-events.md)
+  decides how that changes. It lands after the live eval tier, because it changes the
+  review's prompt.
+- Nothing yet tests that the model reports only what the engine can't see and leaves
+  alone what it already caught. That needs a live eval tier, which doesn't
+  exist yet.
+- Publishing is a mock. It shows the Confluence page and Jira ticket a connected setup
+  would create, and the Atlassian adapter is a documented stub.
+- Code for engineers covers Segment's Analytics.js and Node libraries. Python, raw HTTP
+  and the other platforms come later.
+- The personal-data rule matches tokens, so it only catches the names it knows. `Product
+  Shared` and `Cart Shared` in the sample plan carry a `recipient` property, which in
+  practice holds an email address or a phone number and passes the check clean. That is
+  faithful to Segment's spec, so a plan copied from it carries the same unflagged
+  identifier.
+- `backend/run_examples.py` calls `reset_storage()`, which deletes the local SQLite file
+  and recreates the tables, so running it wipes the local request history and the audit
+  log.
+- There are no accounts, locally or in the demo. See the public demo's limits above.
 
 ## Clean room
 
@@ -263,4 +312,4 @@ Secrets live in environment variables only and are never committed.
 
 ---
 
-Built by Calvin Edson. A Bristlecone Echo asset: roots before branches.
+A portfolio project by Calvin Edson.
