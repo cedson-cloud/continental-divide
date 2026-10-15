@@ -117,7 +117,7 @@ In build order, which is also the cut order. Items from the parked phase below t
 1. D7 PR 4, intake and the "Try a scenario" card. Merged as #25.
 2. D5 PR 4: enforce the proxy secret, set the client-IP header in the middleware, re-run the forge check, turn the echo route off. Then the Anthropic key and the $2 daily budget go on Render. Merged as #26, followed by the SDK pin (#27) and the hardening from the first live run (#28).
 3. The "Couldn't draft" status: a request whose drafting fails ends at `draft_failed`, not rejected, because only the engine rejects (CONTEXT.md). Merged as #29.
-4. D7 PRs 5–7. PR 5: the queue, including the table overflow on a phone, with D2's pre-Approve self-approval notice. PR 5b: the guided request's design note (see D7). Then PR 6, catalog, and PR 7, Governance/admin.
+4. D7 PRs 5–7. PR 5: the queue, including the table overflow on a phone, with D2's pre-Approve self-approval notice, merged as #30. PR 5b: the guided request's design note (see D7), done. Then PR 6, catalog, and PR 7, Governance/admin.
 5. D6, with D4's 7-day sandbox notice.
 6. D10, then the post. The walkthrough video can follow it.
 
@@ -134,7 +134,7 @@ D8 and D9 move to after launch, so the CSV promised above arrives after the post
 **Worth a click**
 
 - [ ] **D6. Landing page.** What it is in one screen, the 60-second story, a "Try it" button, and links to the repo and the ADRs.
-- [ ] **D7. Visual pass** across the app shell and the request, queue, detail, catalog and Governance screens, in seven PRs. Done: PR 1 tokens, type, contrast and focus; PR 2 app shell; PR 3 detail page with the progress bar; PR 4 intake with the "Try a scenario" card (#25); PR 5 queue: requests waiting on a decision first, a card per request on a phone, and an empty state that points to a new request. Not done: PR 5b guided request, PR 6 catalog, PR 7 Governance/admin. Design note from the first live run, for PR 5b: in the guided request, step 3 ignores the kind of data picked in step 1: it keeps the generic cart examples and suggests or fills nothing. Each kind should shape step 3's examples, ideally with a one-click example. And the guided request, which the form offers to people new to this, has no scenarios: the "Try a scenario" card is only on the single-screen form.
+- [ ] **D7. Visual pass** across the app shell and the request, queue, detail, catalog and Governance screens, in seven PRs. Done: PR 1 tokens, type, contrast and focus; PR 2 app shell; PR 3 detail page with the progress bar; PR 4 intake with the "Try a scenario" card (#25); PR 5 queue: requests waiting on a decision first, a card per request on a phone, and an empty state that points to a new request (#30); PR 5b guided request, from the design note of the first live run: step 3 offers one-click examples for the kind picked in step 1, with placeholders to match (`examplesForKind`, `KIND_PLACEHOLDERS` in `lib/examples.ts`, `components/wizard/StepExamples.tsx`). The form's two fill-in scenarios are the "Something a user did" examples, Money adds a subscription and a refund the sample plan already tracks, and "I'm not sure" offers every new-event example. The two scenarios that skip the model stay on the single-screen form, and step 1 links to them. Not done: PR 6 catalog, PR 7 Governance/admin.
 - [ ] **D10. README, screenshots and walkthrough** pointing at the live link: the Credibility items under v1, plus item 20's public claim.
 
 **After launch**
