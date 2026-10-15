@@ -60,7 +60,7 @@ def test_composes_both_sources_and_counts_add_up(client, storage):
     assert counts["from_sample_plan"] == 28
     assert counts["new_events_from_requests"] == 2
     # The active profile names Segment, whose system events join the dictionary.
-    assert counts["system_events"] == 8
+    assert counts["system_events"] == 10
     assert counts["total"] == (
         counts["from_sample_plan"]
         + counts["system_events"]
@@ -239,12 +239,12 @@ def test_counts_across_every_branch(client, storage):
 
     counts = client.get("/catalog").json()["counts"]
     assert counts == {
-        "total": 28 + 8 + 2 + 1,
+        "total": 28 + 10 + 2 + 1,
         "from_sample_plan": 28,
         "new_events_from_requests": 2,
         "property_additions_merged": 2,
         "unresolved_targets": 1,
-        "system_events": 8,
+        "system_events": 10,
     }
 
 

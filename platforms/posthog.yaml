@@ -1,15 +1,447 @@
-# PostHog: the events its SDKs send on their own (ADR 0009).
-# A tracking plan shows each under its plan_name; in PostHog, an action with that name on
-# the sent event shows it the same way (actions rename an event and apply retroactively).
-version: 1
+# PostHog: what its SDKs send on their own (ADR 0009, 0011).
+# A tracking plan shows each system event under its plan_name; in PostHog, an action with
+# that name on the sent event shows it the same way (actions rename an event and apply
+# retroactively). Every claim was checked on the date below; evidence sdk_code means it
+# was read in PostHog's SDK code on GitHub (main branch), which can be ahead of a
+# release. PostHog's docs publish no default-property table for the mobile SDKs, so every
+# mobile field below comes from code.
+version: 2
 name: posthog
-checked: "2026-10-07"
+checked: "2026-10-15"
 docs:
   - https://posthog.com/docs/data/events
   - https://posthog.com/docs/data/actions
+  - https://posthog.com/docs/data/utm-segmentation
   - https://posthog.com/docs/product-analytics/autocapture
+  - https://posthog.com/docs/libraries/js/config
+  - https://posthog.com/docs/libraries/android
   - https://posthog.com/docs/libraries/react-native
+  - https://posthog.com/docs/libraries/flutter
   - https://posthog.com/docs/error-tracking/capture
+
+libraries:
+  - id: posthog-js
+    name: posthog-js (web)
+    surface: browser
+  - id: posthog-ios
+    name: iOS
+    surface: mobile
+  - id: posthog-android
+    name: Android
+    surface: mobile
+  - id: posthog-react-native
+    name: React Native
+    surface: mobile
+  - id: posthog-flutter
+    name: Flutter
+    surface: mobile
+    note: Its common fields aren't listed yet.
+  - id: posthog-node
+    name: Node.js
+    surface: server
+    note: PostHog's other server SDKs aren't listed yet.
+
+common_fields:
+  # Page, from the browser.
+  - path: $current_url
+    plain_name: Page URL
+    group: Page
+    type: string
+    libraries: [posthog-js]
+    note: Personal campaign parameters are masked when mask_personal_data_properties is on.
+    sources: &js_defaults
+      - https://posthog.com/docs/data/events
+      - https://posthog.com/docs/product-analytics/autocapture
+  - path: $host
+    plain_name: Host
+    group: Page
+    type: string
+    libraries: [posthog-js]
+    sources: *js_defaults
+  - path: $pathname
+    plain_name: Page path
+    group: Page
+    type: string
+    libraries: [posthog-js]
+    sources: *js_defaults
+  - path: $referrer
+    plain_name: Referrer
+    group: Page
+    type: string
+    libraries: [posthog-js]
+    note: $direct when there is none.
+    sources:
+      - https://posthog.com/docs/data/events
+      - https://posthog.com/docs/data/utm-segmentation
+  - path: $referring_domain
+    plain_name: Referring domain
+    group: Page
+    type: string
+    libraries: [posthog-js]
+    note: $direct when there is none.
+    sources: *js_defaults
+  - path: $pageview_id
+    plain_name: Page view ID
+    group: Page
+    type: string
+    libraries: [posthog-js]
+    evidence: sdk_code
+    sources: [https://github.com/PostHog/posthog-js/blob/main/packages/browser/src/page-view.ts]
+  - path: $search_engine
+    plain_name: Search engine
+    group: Page
+    type: string
+    libraries: [posthog-js]
+    note: When the referrer is Google, Bing, Yahoo or DuckDuckGo.
+    sources: *js_defaults
+
+  # Campaign: the landing URL's UTM parameters and ad click IDs.
+  - path: utm_source
+    plain_name: Campaign source (utm_source)
+    group: Campaign
+    type: string
+    libraries: [posthog-js]
+    evidence: disputed
+    note: &utm_key_dispute PostHog's UTM page and posthog-js code write this key with no $ prefix; its default-properties tables write it with one.
+    sources: &utm_sources
+      - https://posthog.com/docs/data/utm-segmentation
+      - https://posthog.com/docs/data/events
+      - https://github.com/PostHog/posthog-js/blob/main/packages/browser-common/src/utils/event-utils.ts
+  - path: utm_medium
+    plain_name: Campaign medium (utm_medium)
+    group: Campaign
+    type: string
+    libraries: [posthog-js]
+    evidence: disputed
+    note: *utm_key_dispute
+    sources: *utm_sources
+  - path: utm_campaign
+    plain_name: Campaign name (utm_campaign)
+    group: Campaign
+    type: string
+    libraries: [posthog-js]
+    evidence: disputed
+    note: *utm_key_dispute
+    sources: *utm_sources
+  - path: utm_term
+    plain_name: Campaign term (utm_term)
+    group: Campaign
+    type: string
+    libraries: [posthog-js]
+    evidence: disputed
+    note: *utm_key_dispute
+    sources: *utm_sources
+  - path: utm_content
+    plain_name: Campaign content (utm_content)
+    group: Campaign
+    type: string
+    libraries: [posthog-js]
+    evidence: disputed
+    note: *utm_key_dispute
+    sources: *utm_sources
+  - {path: gclid, plain_name: "Ad click ID: gclid", group: Ad click IDs, type: string, libraries: [posthog-js], evidence: disputed, note: *utm_key_dispute, sources: *utm_sources}
+  - {path: gad_source, plain_name: "Ad click ID: gad_source", group: Ad click IDs, type: string, libraries: [posthog-js], evidence: disputed, note: *utm_key_dispute, sources: *utm_sources}
+  - {path: gclsrc, plain_name: "Ad click ID: gclsrc", group: Ad click IDs, type: string, libraries: [posthog-js], evidence: disputed, note: *utm_key_dispute, sources: *utm_sources}
+  - {path: dclid, plain_name: "Ad click ID: dclid", group: Ad click IDs, type: string, libraries: [posthog-js], evidence: disputed, note: *utm_key_dispute, sources: *utm_sources}
+  - {path: wbraid, plain_name: "Ad click ID: wbraid", group: Ad click IDs, type: string, libraries: [posthog-js], evidence: disputed, note: *utm_key_dispute, sources: *utm_sources}
+  - {path: gbraid, plain_name: "Ad click ID: gbraid", group: Ad click IDs, type: string, libraries: [posthog-js], evidence: disputed, note: *utm_key_dispute, sources: *utm_sources}
+  - {path: fbclid, plain_name: "Ad click ID: fbclid", group: Ad click IDs, type: string, libraries: [posthog-js], evidence: disputed, note: *utm_key_dispute, sources: *utm_sources}
+  - {path: msclkid, plain_name: "Ad click ID: msclkid", group: Ad click IDs, type: string, libraries: [posthog-js], evidence: disputed, note: *utm_key_dispute, sources: *utm_sources}
+  - {path: twclid, plain_name: "Ad click ID: twclid", group: Ad click IDs, type: string, libraries: [posthog-js], evidence: disputed, note: *utm_key_dispute, sources: *utm_sources}
+  - path: li_fat_id
+    plain_name: "Ad click ID: li_fat_id"
+    group: Ad click IDs
+    type: string
+    libraries: [posthog-js]
+    evidence: disputed
+    note: PostHog's events page writes $li_fat_id and its autocapture page $la_fat_id; posthog-js code writes li_fat_id, with no $ prefix.
+    sources:
+      - https://posthog.com/docs/data/events
+      - https://posthog.com/docs/product-analytics/autocapture
+      - https://github.com/PostHog/posthog-js/blob/main/packages/browser-common/src/utils/event-utils.ts
+  - {path: mc_cid, plain_name: "Ad click ID: mc_cid", group: Ad click IDs, type: string, libraries: [posthog-js], evidence: disputed, note: *utm_key_dispute, sources: *utm_sources}
+  - {path: igshid, plain_name: "Ad click ID: igshid", group: Ad click IDs, type: string, libraries: [posthog-js], evidence: disputed, note: *utm_key_dispute, sources: *utm_sources}
+  - {path: ttclid, plain_name: "Ad click ID: ttclid", group: Ad click IDs, type: string, libraries: [posthog-js], evidence: disputed, note: *utm_key_dispute, sources: *utm_sources}
+
+  # Browser and device.
+  - path: $browser
+    plain_name: Browser
+    group: Device
+    type: string
+    libraries: [posthog-js]
+    sources: *js_defaults
+  - path: $browser_version
+    plain_name: Browser version
+    group: Device
+    type: number
+    libraries: [posthog-js]
+    sources: *js_defaults
+  - path: $os
+    plain_name: OS (web)
+    group: OS
+    type: string
+    libraries: [posthog-js]
+    sources: *js_defaults
+  - path: $os_name
+    plain_name: OS name (mobile)
+    group: OS
+    libraries: [posthog-ios, posthog-android, posthog-react-native]
+    evidence: sdk_code
+    sources: &mobile_context
+      - https://github.com/PostHog/posthog-ios/blob/main/PostHog/PostHogContext.swift
+      - https://github.com/PostHog/posthog-android/blob/main/posthog-android/src/main/java/com/posthog/android/internal/PostHogAndroidContext.kt
+      - https://github.com/PostHog/posthog-js/blob/main/packages/react-native/src/native-deps.tsx
+  - path: $os_version
+    plain_name: OS version
+    group: OS
+    type: string
+    libraries: [posthog-js, posthog-ios, posthog-android, posthog-react-native]
+    evidence: sdk_code
+    sources: &web_and_mobile
+      - https://posthog.com/docs/data/events
+      - https://github.com/PostHog/posthog-ios/blob/main/PostHog/PostHogContext.swift
+      - https://github.com/PostHog/posthog-android/blob/main/posthog-android/src/main/java/com/posthog/android/internal/PostHogAndroidContext.kt
+      - https://github.com/PostHog/posthog-js/blob/main/packages/react-native/src/native-deps.tsx
+  - path: $device_type
+    plain_name: Device type
+    group: Device
+    type: string
+    libraries: [posthog-js, posthog-ios, posthog-android, posthog-react-native]
+    note: On the web, Desktop, Mobile or Tablet.
+    evidence: sdk_code
+    sources: *web_and_mobile
+  - path: $device
+    plain_name: Device
+    group: Device
+    libraries: [posthog-js]
+    evidence: sdk_code
+    sources: &js_event_utils [https://github.com/PostHog/posthog-js/blob/main/packages/browser-common/src/utils/event-utils.ts]
+  - path: $device_manufacturer
+    plain_name: Device manufacturer
+    group: Device
+    libraries: [posthog-ios, posthog-android, posthog-react-native]
+    evidence: sdk_code
+    sources: *mobile_context
+  - path: $device_model
+    plain_name: Device model
+    group: Device
+    libraries: [posthog-ios, posthog-android]
+    evidence: sdk_code
+    sources: *mobile_context
+  - path: $device_name
+    plain_name: Device name
+    group: Device
+    libraries: [posthog-ios, posthog-android, posthog-react-native]
+    evidence: sdk_code
+    sources: *mobile_context
+  - path: $is_emulator
+    plain_name: Running on an emulator
+    group: Device
+    libraries: [posthog-ios, posthog-android, posthog-react-native]
+    evidence: sdk_code
+    sources: *mobile_context
+  - path: $raw_user_agent
+    plain_name: User agent
+    group: Device
+    type: string
+    libraries: [posthog-js, posthog-android]
+    note: Cut at 1,000 characters on the web.
+    evidence: sdk_code
+    sources:
+      - https://github.com/PostHog/posthog-js/blob/main/packages/browser-common/src/utils/event-utils.ts
+      - https://github.com/PostHog/posthog-android/blob/main/posthog-android/src/main/java/com/posthog/android/internal/PostHogAndroidContext.kt
+  - path: $user_agent
+    plain_name: User agent (Android)
+    group: Device
+    libraries: [posthog-android]
+    evidence: sdk_code
+    sources: *mobile_context
+
+  # Screen.
+  - path: $screen_width
+    plain_name: Screen width
+    group: Screen
+    type: number
+    libraries: [posthog-js, posthog-ios, posthog-android, posthog-react-native]
+    evidence: sdk_code
+    sources: *web_and_mobile
+  - path: $screen_height
+    plain_name: Screen height
+    group: Screen
+    type: number
+    libraries: [posthog-js, posthog-ios, posthog-android, posthog-react-native]
+    evidence: sdk_code
+    sources: *web_and_mobile
+  - path: $screen_density
+    plain_name: Screen density
+    group: Screen
+    libraries: [posthog-android]
+    evidence: sdk_code
+    sources: *mobile_context
+  - path: $viewport_width
+    plain_name: Viewport width
+    group: Screen
+    type: number
+    libraries: [posthog-js]
+    sources: *js_defaults
+  - path: $viewport_height
+    plain_name: Viewport height
+    group: Screen
+    type: number
+    libraries: [posthog-js]
+    sources: *js_defaults
+
+  # App, from the mobile SDKs.
+  - path: $app_name
+    plain_name: App name
+    group: App
+    libraries: [posthog-ios, posthog-android, posthog-react-native]
+    evidence: sdk_code
+    sources: *mobile_context
+  - path: $app_version
+    plain_name: App version
+    group: App
+    libraries: [posthog-ios, posthog-android, posthog-react-native]
+    evidence: sdk_code
+    sources: *mobile_context
+  - path: $app_build
+    plain_name: App build
+    group: App
+    libraries: [posthog-ios, posthog-android, posthog-react-native]
+    evidence: sdk_code
+    sources: *mobile_context
+  - path: $app_namespace
+    plain_name: App namespace
+    group: App
+    libraries: [posthog-ios, posthog-android, posthog-react-native]
+    evidence: sdk_code
+    sources: *mobile_context
+
+  # Network, from the mobile SDKs.
+  - path: $network_wifi
+    plain_name: On Wi-Fi
+    group: Network
+    libraries: [posthog-ios]
+    evidence: sdk_code
+    sources: *mobile_context
+  - path: $network_cellular
+    plain_name: On cellular
+    group: Network
+    libraries: [posthog-ios]
+    evidence: sdk_code
+    sources: *mobile_context
+  - path: $network_carrier
+    plain_name: Mobile carrier
+    group: Network
+    libraries: [posthog-android]
+    evidence: sdk_code
+    sources: *mobile_context
+
+  # Library, session and feature flags.
+  - path: $lib
+    plain_name: Library name
+    group: Library
+    type: string
+    libraries: [posthog-js, posthog-ios, posthog-android, posthog-react-native, posthog-node]
+    note: web for posthog-js.
+    evidence: sdk_code
+    sources: &lib_sources
+      - https://posthog.com/docs/data/events
+      - https://github.com/PostHog/posthog-ios/blob/main/PostHog/PostHogContext.swift
+      - https://github.com/PostHog/posthog-android/blob/main/posthog-android/src/main/java/com/posthog/android/internal/PostHogAndroidContext.kt
+      - https://github.com/PostHog/posthog-js/blob/main/packages/core/src/posthog-core-stateless.ts
+  - path: $lib_version
+    plain_name: Library version
+    group: Library
+    type: string
+    libraries: [posthog-js, posthog-ios, posthog-android, posthog-react-native, posthog-node]
+    evidence: sdk_code
+    sources: *lib_sources
+  - path: $session_id
+    plain_name: Session ID
+    group: Session
+    type: string
+    libraries: [posthog-js, posthog-ios, posthog-android, posthog-react-native]
+    evidence: sdk_code
+    sources:
+      - https://github.com/PostHog/posthog-js/blob/main/packages/browser/src/posthog-core.ts
+      - https://github.com/PostHog/posthog-js/blob/main/packages/core/src/posthog-core.ts
+      - https://github.com/PostHog/posthog-ios/blob/main/PostHog/PostHogContext.swift
+      - https://github.com/PostHog/posthog-android/blob/main/posthog-android/src/main/java/com/posthog/android/internal/PostHogAndroidContext.kt
+  - path: $window_id
+    plain_name: Window ID
+    group: Session
+    type: string
+    libraries: [posthog-js]
+    evidence: sdk_code
+    sources: [https://github.com/PostHog/posthog-js/blob/main/packages/browser/src/posthog-core.ts]
+  - path: $active_feature_flags
+    plain_name: Active feature flags
+    group: Feature flags
+    type: array
+    libraries: [posthog-js, posthog-ios, posthog-android, posthog-react-native]
+    note: Each active flag also gets its own $feature/<flag-key> property.
+    evidence: sdk_code
+    sources:
+      - https://posthog.com/docs/data/events
+      - https://github.com/PostHog/posthog-js/blob/main/packages/core/src/posthog-core.ts
+
+  # Locale, time and address.
+  - path: $timestamp
+    plain_name: Timestamp
+    group: Locale and time
+    type: datetime
+    libraries: [posthog-js]
+    sources: *js_defaults
+  - path: $timezone
+    plain_name: Time zone
+    group: Locale and time
+    type: string
+    libraries: [posthog-js, posthog-ios, posthog-android, posthog-react-native]
+    evidence: sdk_code
+    sources:
+      - https://github.com/PostHog/posthog-js/blob/main/packages/browser-common/src/utils/event-utils.ts
+      - https://github.com/PostHog/posthog-ios/blob/main/PostHog/PostHogContext.swift
+      - https://github.com/PostHog/posthog-android/blob/main/posthog-android/src/main/java/com/posthog/android/internal/PostHogAndroidContext.kt
+      - https://github.com/PostHog/posthog-js/blob/main/packages/react-native/src/native-deps.tsx
+  - path: $timezone_offset
+    plain_name: Time zone offset
+    group: Locale and time
+    type: number
+    libraries: [posthog-js]
+    evidence: sdk_code
+    sources: *js_event_utils
+  - path: $browser_language
+    plain_name: Browser language
+    group: Locale and time
+    type: string
+    libraries: [posthog-js]
+    evidence: sdk_code
+    sources: *js_event_utils
+  - path: $locale
+    plain_name: Locale
+    group: Locale and time
+    libraries: [posthog-ios, posthog-android, posthog-react-native]
+    evidence: sdk_code
+    sources: *mobile_context
+  - path: $ip
+    plain_name: IP address
+    group: Location
+    type: string
+    libraries: [posthog-js]
+    note: Set by PostHog when the event arrives.
+    sources: *js_defaults
+
+not_listed_yet:
+  - GeoIP properties, which PostHog adds when the event arrives if GeoIP is on.
+  - The $session_entry_ properties, which repeat a session's first page, referrer and campaign.
+  - Android's network properties other than $network_carrier.
+  - "Click IDs that posthog-js code reads but the docs don't list: rdt_cid, epik, qclid, sccid, oppref, bfcid, irclid and _kx."
+  - $browser_language_prefix, and autocapture's $event_type.
+  - "iOS's build flags: $is_testflight, $is_sideloaded, $is_ios_running_on_mac and $is_mac_catalyst_app."
+  - Properties sent only in some cases, such as $webview_app, $duration and $groups.
+  - "Fields PostHog uses internally for ingestion and debugging: $insert_id, $time, $plugins_succeeded, $plugins_failed, $plugins_deferred, $sdk_debug_ properties, token, $config_defaults, $is_identified and $process_person_profile."
+  - Survey events, and the iOS early-access events $feature_view and $feature_interaction.
 
 system_events:
   - plan_name: Page Viewed
@@ -17,67 +449,258 @@ system_events:
     records: a page load or client-side navigation in the browser
     sent_by: posthog-js, unless capture_pageview is false
     equivalents: [Page Loaded, Page Visited]
+    default_on: {posthog-js: true}
+    properties:
+      - {name: title, evidence: sdk_code, note: The page title. No $ prefix.}
+      - {name: $prev_pageview_id, evidence: sdk_code}
+      - {name: $prev_pageview_pathname, evidence: sdk_code}
+      - {name: $prev_pageview_duration, evidence: sdk_code}
+      - {name: $prev_pageview_last_scroll, evidence: sdk_code}
+      - {name: $prev_pageview_last_scroll_percentage, evidence: sdk_code}
+      - {name: $prev_pageview_max_scroll, evidence: sdk_code}
+      - {name: $prev_pageview_max_scroll_percentage, evidence: sdk_code}
+      - {name: $prev_pageview_last_content, evidence: sdk_code}
+      - {name: $prev_pageview_last_content_percentage, evidence: sdk_code}
+      - {name: $prev_pageview_max_content, evidence: sdk_code}
+      - {name: $prev_pageview_max_content_percentage, evidence: sdk_code}
+    note: The $prev_pageview_ properties describe the page viewed before this one.
+    sources:
+      - https://posthog.com/docs/libraries/js/config
+      - https://github.com/PostHog/posthog-js/blob/main/packages/browser/src/page-view.ts
 
   - plan_name: Page Left
     sent_as: $pageleave
     records: a person leaving a page
     sent_by: posthog-js, unless capture_pageleave is false
     equivalents: [Page Exited, Page Closed]
+    properties:
+      - {name: $prev_pageview_id, evidence: sdk_code}
+      - {name: $prev_pageview_pathname, evidence: sdk_code}
+      - {name: $prev_pageview_duration, evidence: sdk_code}
+      - {name: $prev_pageview_last_scroll, evidence: sdk_code}
+      - {name: $prev_pageview_last_scroll_percentage, evidence: sdk_code}
+      - {name: $prev_pageview_max_scroll, evidence: sdk_code}
+      - {name: $prev_pageview_max_scroll_percentage, evidence: sdk_code}
+      - {name: $prev_pageview_last_content, evidence: sdk_code}
+      - {name: $prev_pageview_last_content_percentage, evidence: sdk_code}
+      - {name: $prev_pageview_max_content, evidence: sdk_code}
+      - {name: $prev_pageview_max_content_percentage, evidence: sdk_code}
+    note: capture_pageleave defaults to if_capture_pageview, so it is on whenever page views are captured. The $prev_pageview_ properties describe the page being left. PostHog's web analytics uses it for bounce rate.
+    sources:
+      - https://posthog.com/docs/libraries/js/config
+      - https://github.com/PostHog/posthog-js/blob/main/packages/browser/src/page-view.ts
 
   - plan_name: Screen Viewed
     sent_as: $screen
     records: a screen view in a mobile app
     sent_by: PostHog's mobile SDKs on navigation where supported, or posthog.screen()
     equivalents: [Screen Loaded]
+    default_on: {posthog-ios: true, posthog-android: true, posthog-react-native: true}
+    properties:
+      - {name: $screen_name}
+    evidence: sdk_code
+    note: Android captures each Activity that comes to the foreground. React Native captures screens through PostHogProvider with React Navigation v6 or earlier, or react-native-navigation, unless captureScreens is false.
+    sources:
+      - https://posthog.com/docs/libraries/android
+      - https://posthog.com/docs/libraries/react-native
+      - https://github.com/PostHog/posthog-ios/blob/main/PostHog/PostHogConfig.swift
 
   - plan_name: Application Installed
     sent_as: Application Installed
     records: the app being installed
     sent_by: PostHog's mobile SDKs, when app lifecycle events are captured
     equivalents: [App Installed]
+    default_on: &lifecycle_defaults
+      posthog-ios: true
+      posthog-android: true
+      posthog-react-native: true
+      posthog-flutter: true
+    properties:
+      - {name: version, evidence: sdk_code, note: iOS and Android.}
+      - {name: build, evidence: sdk_code, note: iOS and Android.}
+      - {name: $react_native_version, evidence: sdk_code, note: "React Native, which puts version and build in the $app_ fields instead."}
+    evidence: sdk_code
+    note: On by default in React Native since 4.39.0 and in Flutter since 5.23.0. iOS also sends properties describing its build toolchain, which aren't listed yet.
+    sources: &lifecycle_sources
+      - https://posthog.com/docs/libraries/android
+      - https://posthog.com/docs/libraries/react-native
+      - https://posthog.com/docs/libraries/flutter
+      - https://github.com/PostHog/posthog-ios/blob/main/PostHog/PostHogConfig.swift
 
   - plan_name: Application Opened
     sent_as: Application Opened
-    records: the app being opened from a closed state
+    records: the app being opened from a closed state or, on iOS, Android and Flutter, coming back to the foreground
     sent_by: PostHog's mobile SDKs, when app lifecycle events are captured
     equivalents: [App Opened, App Launched, Application Launched]
+    default_on: *lifecycle_defaults
+    properties:
+      - {name: from_background, type: boolean, evidence: sdk_code, note: iOS and Android.}
+      - {name: version, evidence: sdk_code, note: "iOS and Android, on a fresh launch only."}
+      - {name: build, evidence: sdk_code, note: "iOS and Android, on a fresh launch only."}
+      - {name: url, evidence: sdk_code, note: "React Native: the link the app was opened with."}
+    evidence: sdk_code
+    sources: *lifecycle_sources
 
   - plan_name: Application Updated
     sent_as: Application Updated
     records: the app being updated
     sent_by: PostHog's mobile SDKs, when app lifecycle events are captured
     equivalents: [App Updated]
+    default_on: *lifecycle_defaults
+    properties:
+      - {name: previous_version, evidence: sdk_code}
+      - {name: previous_build, evidence: sdk_code}
+      - {name: version, evidence: sdk_code, note: iOS and Android.}
+      - {name: build, evidence: sdk_code, note: iOS and Android.}
+    evidence: sdk_code
+    sources: *lifecycle_sources
 
   - plan_name: Application Backgrounded
     sent_as: Application Backgrounded
     records: the app being sent to the background
     sent_by: PostHog's mobile SDKs, when app lifecycle events are captured
     equivalents: [App Backgrounded]
+    default_on: *lifecycle_defaults
+    properties: []
+    evidence: sdk_code
+    sources: *lifecycle_sources
 
   - plan_name: Application Foregrounded
     sent_as: Application Became Active
     records: the app coming to the foreground
-    sent_by: PostHog's mobile SDKs, when app lifecycle events are captured
+    sent_by: PostHog's React Native SDK, when app lifecycle events are captured
     equivalents: [App Foregrounded]
+    default_on: {posthog-react-native: true}
+    properties: []
+    note: "On iOS, Android and Flutter, coming back to the foreground sends Application Opened with from_background: true instead."
+    sources:
+      - https://posthog.com/docs/libraries/react-native
+      - https://posthog.com/docs/libraries/android
+      - https://posthog.com/docs/libraries/flutter
+      - https://posthog.com/docs/product-analytics/autocapture
+
+  - plan_name: Deep Link Opened
+    sent_as: Deep Link Opened
+    records: the app being opened from a link
+    sent_by: PostHog's Android SDK, and on iOS a SwiftUI helper
+    default_on: {posthog-android: true}
+    properties:
+      - {name: url, evidence: sdk_code}
+      - {name: $referrer, evidence: sdk_code}
+      - {name: $referring_domain, evidence: sdk_code}
+    evidence: sdk_code
+    note: Each of the link's query parameters is sent as a property too. PostHog's React Native docs say it no longer sends this event.
+    sources:
+      - https://posthog.com/docs/libraries/android
+      - https://posthog.com/docs/libraries/react-native
+      - https://github.com/PostHog/posthog-android/blob/main/posthog-android/src/main/java/com/posthog/android/PostHogAndroidConfig.kt
+      - https://github.com/PostHog/posthog-ios
+
+  - plan_name: Push Notification Tapped
+    sent_as: $push_notification_opened
+    records: a person opening a push notification
+    sent_by: PostHog's iOS and Android SDKs
+    equivalents: [Push Notification Opened]
+    default_on: {posthog-ios: true, posthog-android: true}
+    properties:
+      - {name: $notification_title, evidence: sdk_code}
+      - {name: $notification_subtitle, evidence: sdk_code}
+      - {name: $notification_body, evidence: sdk_code}
+      - {name: $notification_action, evidence: sdk_code}
+    evidence: sdk_code
+    note: On iOS it needs the app's notification delegate set up.
+    sources:
+      - https://github.com/PostHog/posthog-ios/blob/main/PostHog/PostHogConfig.swift
+      - https://github.com/PostHog/posthog-android/blob/main/posthog-android/src/main/java/com/posthog/android/PostHogAndroidConfig.kt
 
   - plan_name: Rage Clicked
     sent_as: $rageclick
     records: repeated clicks in one place in quick succession
+    sent_by: posthog-js, and PostHog's iOS SDK
+    default_on: {posthog-js: true}
+    properties:
+      - {name: $touch_x, evidence: sdk_code, note: iOS.}
+      - {name: $touch_y, evidence: sdk_code, note: iOS.}
+      - {name: $screen_name, evidence: sdk_code, note: iOS.}
+    evidence: sdk_code
+    note: On the web it carries autocapture's element properties. PostHog's docs say Android does not support interaction autocapture; its current code has an opt-in setting for rage clicks.
+    sources:
+      - https://posthog.com/docs/libraries/js/config
+      - https://posthog.com/docs/product-analytics/autocapture
+      - https://github.com/PostHog/posthog-ios
+
+  - plan_name: Dead Clicked
+    sent_as: $dead_click
+    records: a click that nothing on the page responded to
     sent_by: posthog-js
+    evidence: disputed
+    note: posthog-js's config reference says capture_dead_clicks is on by default; PostHog's autocapture page says to turn it on. Its $dead_click_ properties, the $dead_swipe variant, and Android's opt-in setting in current code aren't listed yet.
+    sources:
+      - https://posthog.com/docs/libraries/js/config
+      - https://posthog.com/docs/product-analytics/autocapture
+
+  - plan_name: Text Copied
+    sent_as: $copy_autocapture
+    records: a person copying text on the page
+    sent_by: posthog-js, when capture_copied_text is on
+    default_on: {posthog-js: false}
+    properties:
+      - {name: $selected_content, evidence: sdk_code}
+      - {name: $copy_type, evidence: sdk_code}
+      - {name: $clipboard_text_length, evidence: sdk_code}
+    sources:
+      - https://posthog.com/docs/libraries/js/config
+      - https://posthog.com/docs/product-analytics/autocapture
+      - https://github.com/PostHog/posthog-js
+
+  - plan_name: Web Vitals Captured
+    sent_as: $web_vitals
+    records: the page's web vitals performance measurements
+    sent_by: posthog-js, when web vitals are captured
+    note: Whether it is on follows the project's settings unless capture_performance is set.
+    sources: [https://posthog.com/docs/libraries/js/config]
 
   - plan_name: Exception Captured
     sent_as: $exception
     records: an exception the app threw
     sent_by: PostHog's SDKs, when exception autocapture is on
+    properties:
+      - {name: $exception_list, evidence: sdk_code}
+      - {name: $exception_types, evidence: sdk_code}
+      - {name: $exception_values, evidence: sdk_code}
+      - {name: $exception_steps, evidence: sdk_code}
+      - {name: $debug_images, evidence: sdk_code, note: iOS.}
+    note: In posthog-js, capture_exceptions follows the project's settings unless set.
+    sources:
+      - https://posthog.com/docs/error-tracking/capture
+      - https://posthog.com/docs/libraries/js/config
+      - https://github.com/PostHog/posthog-js/blob/main/packages/browser/src/posthog-exceptions.ts
 
   - plan_name: Feature Flag Called
     sent_as: $feature_flag_called
     records: a feature flag being evaluated for a person
     sent_by: PostHog's SDKs
+    default_on: {posthog-ios: true}
+    properties:
+      - {name: $feature_flag, evidence: sdk_code}
+      - {name: $feature_flag_response, evidence: sdk_code}
+    evidence: sdk_code
+    note: iOS also sends the flag's ID, version, reason and request details.
+    sources:
+      - https://posthog.com/docs/data/events
+      - https://github.com/PostHog/posthog-ios/blob/main/PostHog/PostHogSDK.swift
 
   - sent_as: $autocapture
     records: clicks, form submissions and other element interactions
     sent_by: posthog-js, when autocapture is on
+    default_on: {posthog-js: true, posthog-ios: false, posthog-react-native: false}
+    evidence: disputed
+    note: PostHog's docs say Android does not support interaction autocapture; its current code has an opt-in setting for it.
+    sources:
+      - https://posthog.com/docs/product-analytics/autocapture
+      - https://posthog.com/docs/libraries/android
+      - https://github.com/PostHog/posthog-ios/blob/main/PostHog/PostHogConfig.swift
+      - https://github.com/PostHog/posthog-android/blob/main/posthog-android/src/main/java/com/posthog/android/PostHogAndroidConfig.kt
 
   - sent_as: $identify
     records: the identify call, which the plan models as an identify call
@@ -90,3 +713,15 @@ system_events:
   - sent_as: $groupidentify
     records: the group call, which the plan models as a group call
     sent_by: PostHog's SDKs
+
+  - sent_as: $set
+    records: an update to a person's properties
+    sent_by: posthog-js, from setPersonProperties
+    evidence: sdk_code
+    sources: [https://github.com/PostHog/posthog-js]
+
+  - sent_as: $opt_in
+    records: a person opting in to capture
+    sent_by: posthog-js, from opt_in_capturing
+    evidence: sdk_code
+    sources: [https://github.com/PostHog/posthog-js]

@@ -1,14 +1,333 @@
-# Segment: the events and calls its libraries send on their own (ADR 0009).
-# A tracking plan shows each under its plan_name. Page and screen views arrive as page
-# and screen calls, not as named track events.
-version: 1
+# Segment: what its libraries send on their own (ADR 0009, 0011).
+# A tracking plan shows each system event under its plan_name. Page and screen views
+# arrive as page and screen calls, not as named track events. Every claim was checked on
+# the date below; evidence sdk_code means it was read in Segment's SDK code on GitHub
+# (main branch), which can be ahead of a release.
+version: 2
 name: segment
-checked: "2026-10-07"
+checked: "2026-10-15"
 docs:
+  - https://www.twilio.com/docs/segment/connections/spec/common
   - https://www.twilio.com/docs/segment/connections/spec/page
   - https://www.twilio.com/docs/segment/connections/spec/screen
   - https://www.twilio.com/docs/segment/connections/spec/mobile
   - https://www.twilio.com/docs/segment/connections/spec/ab-testing
+  - https://www.twilio.com/docs/segment/connections/sources/catalog/libraries/website/javascript
+  - https://www.twilio.com/docs/segment/connections/sources/catalog/libraries/mobile/apple
+  - https://www.twilio.com/docs/segment/connections/sources/catalog/libraries/mobile/kotlin-android
+  - https://www.twilio.com/docs/segment/connections/sources/catalog/libraries/mobile/react-native
+
+libraries:
+  - id: analytics.js
+    name: Analytics.js
+    surface: browser
+  - id: analytics-swift
+    name: Swift (iOS and macOS)
+    surface: mobile
+  - id: analytics-kotlin
+    name: Kotlin (Android)
+    surface: mobile
+  - id: analytics-react-native
+    name: React Native
+    surface: mobile
+    note: Segment's docs name only its device.id and instanceId among the context fields; the rest aren't listed yet.
+  - id: server
+    name: Server libraries
+    surface: server
+    note: Segment's docs say libraries other than analytics.js and the mobile ones collect only context.library.
+
+common_fields:
+  # Top-level fields on every message.
+  - path: anonymousId
+    plain_name: Anonymous ID
+    group: Message
+    type: string
+    libraries: [analytics.js, analytics-swift, analytics-kotlin, analytics-react-native]
+    note: Set automatically by the client libraries. A server call must send userId or anonymousId itself.
+    sources: [https://www.twilio.com/docs/segment/connections/spec/common]
+  - path: messageId
+    plain_name: Message ID
+    group: Message
+    type: string
+    libraries: [analytics.js, analytics-swift, analytics-kotlin, analytics-react-native, server]
+    note: Unique to each message.
+    sources: [https://www.twilio.com/docs/segment/connections/spec/common]
+  - path: sentAt
+    plain_name: Sent at
+    group: Message
+    type: date
+    libraries: [analytics.js, analytics-swift, analytics-kotlin, analytics-react-native, server]
+    note: Set by the library when it sends the message.
+    sources: [https://www.twilio.com/docs/segment/connections/spec/common]
+  - path: receivedAt
+    plain_name: Received at
+    group: Message
+    type: date
+    libraries: [analytics.js, analytics-swift, analytics-kotlin, analytics-react-native, server]
+    note: Set by Segment's servers when the message arrives.
+    sources: [https://www.twilio.com/docs/segment/connections/spec/common]
+  - path: timestamp
+    plain_name: Timestamp
+    group: Message
+    type: date
+    libraries: [analytics.js, analytics-swift, analytics-kotlin, analytics-react-native, server]
+    note: Worked out by Segment from the device's clock, corrected for clock skew, unless the caller sets it.
+    sources: [https://www.twilio.com/docs/segment/connections/spec/common]
+
+  # Page context, from the browser.
+  - path: context.page.path
+    plain_name: Page path
+    group: Page
+    type: string
+    libraries: [analytics.js]
+    sources: [https://www.twilio.com/docs/segment/connections/spec/common]
+  - path: context.page.referrer
+    plain_name: Page referrer
+    group: Page
+    type: string
+    libraries: [analytics.js]
+    sources: [https://www.twilio.com/docs/segment/connections/spec/common]
+  - path: context.page.search
+    plain_name: Page query string
+    group: Page
+    type: string
+    libraries: [analytics.js]
+    sources: [https://www.twilio.com/docs/segment/connections/spec/common]
+  - path: context.page.title
+    plain_name: Page title
+    group: Page
+    type: string
+    libraries: [analytics.js]
+    sources: [https://www.twilio.com/docs/segment/connections/spec/common]
+  - path: context.page.url
+    plain_name: Page URL
+    group: Page
+    type: string
+    libraries: [analytics.js]
+    sources: [https://www.twilio.com/docs/segment/connections/spec/common]
+
+  # Campaign context: the landing URL's UTM parameters.
+  - path: context.campaign.name
+    plain_name: Campaign name (utm_campaign)
+    group: Campaign
+    libraries: [analytics.js]
+    note: Only on events from a page load whose URL carried it; not kept for later pages.
+    sources:
+      - https://www.twilio.com/docs/segment/connections/spec/common
+      - https://www.twilio.com/docs/segment/connections/sources/catalog/libraries/website/javascript
+  - path: context.campaign.source
+    plain_name: Campaign source (utm_source)
+    group: Campaign
+    libraries: [analytics.js]
+    note: Only on events from a page load whose URL carried it; not kept for later pages.
+    sources:
+      - https://www.twilio.com/docs/segment/connections/spec/common
+      - https://www.twilio.com/docs/segment/connections/sources/catalog/libraries/website/javascript
+  - path: context.campaign.medium
+    plain_name: Campaign medium (utm_medium)
+    group: Campaign
+    libraries: [analytics.js]
+    note: Only on events from a page load whose URL carried it; not kept for later pages.
+    sources:
+      - https://www.twilio.com/docs/segment/connections/spec/common
+      - https://www.twilio.com/docs/segment/connections/sources/catalog/libraries/website/javascript
+  - path: context.campaign.term
+    plain_name: Campaign term (utm_term)
+    group: Campaign
+    libraries: [analytics.js]
+    note: Only on events from a page load whose URL carried it; not kept for later pages.
+    sources:
+      - https://www.twilio.com/docs/segment/connections/spec/common
+      - https://www.twilio.com/docs/segment/connections/sources/catalog/libraries/website/javascript
+  - path: context.campaign.content
+    plain_name: Campaign content (utm_content)
+    group: Campaign
+    libraries: [analytics.js]
+    note: Only on events from a page load whose URL carried it; not kept for later pages. Any other utm_ parameter lands in context.campaign too.
+    sources:
+      - https://www.twilio.com/docs/segment/connections/spec/common
+      - https://www.twilio.com/docs/segment/connections/sources/catalog/libraries/website/javascript
+
+  # App, device, OS, screen and network context, from the mobile libraries. Segment's
+  # own table covers its classic mobile libraries; the current Swift and Kotlin
+  # libraries were read in their code.
+  - path: context.app.name
+    plain_name: App name
+    group: App
+    libraries: [analytics-swift, analytics-kotlin]
+    evidence: sdk_code
+    sources: &mobile_context
+      - https://www.twilio.com/docs/segment/connections/spec/common
+      - https://github.com/segmentio/analytics-swift/blob/main/Sources/Segment/Plugins/Context.swift
+      - https://github.com/segmentio/analytics-kotlin/blob/main/android/src/main/java/com/segment/analytics/kotlin/android/plugins/AndroidContextPlugin.kt
+  - path: context.app.version
+    plain_name: App version
+    group: App
+    libraries: [analytics-swift, analytics-kotlin]
+    evidence: sdk_code
+    sources: *mobile_context
+  - path: context.app.build
+    plain_name: App build
+    group: App
+    libraries: [analytics-swift, analytics-kotlin]
+    evidence: sdk_code
+    sources: *mobile_context
+  - path: context.app.namespace
+    plain_name: App namespace
+    group: App
+    libraries: [analytics-swift, analytics-kotlin]
+    evidence: sdk_code
+    sources: *mobile_context
+  - path: context.device.id
+    plain_name: Device ID
+    group: Device
+    libraries: [analytics-swift, analytics-kotlin, analytics-react-native]
+    note: Swift sends the identifier for vendor. Kotlin sends it only when collectDeviceId is on, which is off by default. React Native on Android sends it when collectDeviceId is on.
+    evidence: sdk_code
+    sources:
+      - https://www.twilio.com/docs/segment/connections/spec/common
+      - https://www.twilio.com/docs/segment/connections/sources/catalog/libraries/mobile/react-native
+      - https://github.com/segmentio/analytics-swift/blob/main/Sources/Segment/Plugins/Context.swift
+      - https://github.com/segmentio/analytics-kotlin/blob/main/android/src/main/java/com/segment/analytics/kotlin/android/plugins/AndroidContextPlugin.kt
+  - path: context.device.manufacturer
+    plain_name: Device manufacturer
+    group: Device
+    libraries: [analytics-swift, analytics-kotlin]
+    evidence: sdk_code
+    sources: *mobile_context
+  - path: context.device.model
+    plain_name: Device model
+    group: Device
+    libraries: [analytics-swift, analytics-kotlin]
+    evidence: sdk_code
+    sources: *mobile_context
+  - path: context.device.name
+    plain_name: Device name
+    group: Device
+    libraries: [analytics-swift, analytics-kotlin]
+    evidence: sdk_code
+    sources: *mobile_context
+  - path: context.device.type
+    plain_name: Device type
+    group: Device
+    libraries: [analytics-swift, analytics-kotlin]
+    evidence: sdk_code
+    sources: *mobile_context
+  - path: context.userAgent
+    plain_name: User agent
+    group: Device
+    type: string
+    libraries: [analytics.js, analytics-swift, analytics-kotlin]
+    evidence: sdk_code
+    sources: *mobile_context
+  - path: context.userAgentData
+    plain_name: User agent client hints
+    group: Device
+    type: object
+    libraries: [analytics.js]
+    note: Only in browsers that support the Client Hints API.
+    sources: [https://www.twilio.com/docs/segment/connections/spec/common]
+  - path: context.os.name
+    plain_name: OS name
+    group: OS
+    libraries: [analytics-swift, analytics-kotlin]
+    evidence: sdk_code
+    sources: *mobile_context
+  - path: context.os.version
+    plain_name: OS version
+    group: OS
+    libraries: [analytics-swift, analytics-kotlin]
+    evidence: sdk_code
+    sources: *mobile_context
+  - path: context.screen.width
+    plain_name: Screen width
+    group: Screen
+    libraries: [analytics-swift, analytics-kotlin]
+    evidence: sdk_code
+    sources: *mobile_context
+  - path: context.screen.height
+    plain_name: Screen height
+    group: Screen
+    libraries: [analytics-swift, analytics-kotlin]
+    evidence: sdk_code
+    sources: *mobile_context
+  - path: context.screen.density
+    plain_name: Screen density
+    group: Screen
+    libraries: [analytics-kotlin]
+    evidence: sdk_code
+    sources: *mobile_context
+  - path: context.network.wifi
+    plain_name: On Wi-Fi
+    group: Network
+    libraries: [analytics-swift, analytics-kotlin]
+    evidence: sdk_code
+    sources: *mobile_context
+  - path: context.network.cellular
+    plain_name: On cellular
+    group: Network
+    libraries: [analytics-swift, analytics-kotlin]
+    note: Wi-Fi and cellular both empty means the device was offline.
+    evidence: sdk_code
+    sources: *mobile_context
+  - path: context.network.bluetooth
+    plain_name: Bluetooth on
+    group: Network
+    libraries: [analytics-swift, analytics-kotlin]
+    evidence: sdk_code
+    sources: *mobile_context
+
+  # Library, locale, time and address.
+  - path: context.library.name
+    plain_name: Library name
+    group: Library
+    libraries: [analytics.js, analytics-swift, analytics-kotlin, analytics-react-native, server]
+    sources: [https://www.twilio.com/docs/segment/connections/spec/common]
+  - path: context.library.version
+    plain_name: Library version
+    group: Library
+    libraries: [analytics.js, analytics-swift, analytics-kotlin, analytics-react-native, server]
+    sources: [https://www.twilio.com/docs/segment/connections/spec/common]
+  - path: context.instanceId
+    plain_name: Library instance ID
+    group: Library
+    type: string
+    libraries: [analytics-swift, analytics-kotlin, analytics-react-native]
+    note: React Native from version 2.10.1.
+    evidence: sdk_code
+    sources:
+      - https://www.twilio.com/docs/segment/connections/sources/catalog/libraries/mobile/react-native
+      - https://github.com/segmentio/analytics-swift/blob/main/Sources/Segment/Plugins/Context.swift
+      - https://github.com/segmentio/analytics-kotlin/blob/main/android/src/main/java/com/segment/analytics/kotlin/android/plugins/AndroidContextPlugin.kt
+  - path: context.locale
+    plain_name: Locale
+    group: Locale and time
+    type: string
+    libraries: [analytics.js, analytics-swift, analytics-kotlin]
+    evidence: sdk_code
+    sources: *mobile_context
+  - path: context.timezone
+    plain_name: Time zone
+    group: Locale and time
+    type: string
+    libraries: [analytics.js, analytics-swift, analytics-kotlin]
+    note: Some browsers don't provide it.
+    evidence: sdk_code
+    sources: *mobile_context
+  - path: context.ip
+    plain_name: IP address
+    group: Location
+    type: string
+    libraries: [analytics.js, analytics-swift, analytics-kotlin, analytics-react-native]
+    note: Filled in by Segment's servers for events from client libraries, not by the library.
+    sources: [https://www.twilio.com/docs/segment/connections/spec/common]
+
+not_listed_yet:
+  - "context.channel: Segment's common fields page puts it under context, while its Page and Screen examples show it at the top level."
+  - "context.device.advertisingId and adTrackingEnabled on the current mobile libraries. Swift and React Native send advertisingId only through a separate plugin."
+  - "originalTimestamp, type, version and integrations, and userId, which the caller sets. Segment's pages disagree on version's type: a number on the common fields page, a string in the Page and Screen examples."
+  - context.network.carrier, context.referrer and context.traits on the current mobile libraries.
+  - React Native's context fields beyond device.id and instanceId.
 
 system_events:
   - plan_name: Page Viewed
@@ -16,45 +335,243 @@ system_events:
     records: a person seeing a page of the website
     sent_by: analytics.js, by default
     equivalents: [Page Loaded, Page Visited]
+    default_on: {analytics.js: true}
+    properties:
+      - name: path
+        type: string
+        note: The page's canonical path if it sets one, otherwise location.pathname.
+      - name: referrer
+        type: string
+      - name: search
+        type: string
+        evidence: disputed
+        note: Segment's Page spec says analytics.js sends it; its analytics.js page leaves it out of the list it collects automatically.
+      - name: title
+        type: string
+      - name: url
+        type: string
+        note: The page's canonical URL if it sets one, otherwise location.href.
+      - name: keywords
+        type: array
+        note: Not collected automatically; sent only when the site passes it.
+      - name: category
+        type: string
+        note: Copied from the page call's category, when the site passes one.
+      - name: name
+        type: string
+        note: Reserved for future use.
+    sources:
+      - https://www.twilio.com/docs/segment/connections/spec/page
+      - https://www.twilio.com/docs/segment/connections/sources/catalog/libraries/website/javascript
 
   - plan_name: Screen Viewed
     sent_as: a screen call
     records: a person seeing a screen of a mobile app
-    sent_by: the app
+    sent_by: the app, or Kotlin's automatic screen tracking when recordScreenViews is on
     equivalents: [Screen Loaded]
+    default_on: {analytics-kotlin: false}
+    note: Its properties are whatever the app sends. Segment reserves only name, for future use.
+    sources:
+      - https://www.twilio.com/docs/segment/connections/spec/screen
+      - https://www.twilio.com/docs/segment/connections/sources/catalog/libraries/mobile/kotlin-android
 
   - plan_name: Application Installed
     sent_as: Application Installed
     records: the app being installed
     sent_by: Segment's mobile libraries, when lifecycle events are enabled
     equivalents: [App Installed]
+    default_on: &lifecycle_defaults
+      analytics-swift: true
+      analytics-kotlin: false
+      analytics-react-native: false
+    properties:
+      - {name: version, type: string}
+      - {name: build, type: string}
+    sources: &lifecycle_docs
+      - https://www.twilio.com/docs/segment/connections/spec/mobile
+      - https://www.twilio.com/docs/segment/connections/sources/catalog/libraries/mobile/apple
+      - https://www.twilio.com/docs/segment/connections/sources/catalog/libraries/mobile/kotlin-android
+      - https://www.twilio.com/docs/segment/connections/sources/catalog/libraries/mobile/react-native
 
   - plan_name: Application Opened
     sent_as: Application Opened
     records: the app being opened
     sent_by: Segment's mobile libraries, when lifecycle events are enabled
     equivalents: [App Opened, App Launched, Application Launched]
+    default_on: *lifecycle_defaults
+    properties:
+      - {name: from_background, type: boolean}
+      - name: version
+        type: string
+        evidence: sdk_code
+        note: Kotlin sends it on first launch only, per its code.
+      - name: build
+        type: string
+        evidence: sdk_code
+        note: Kotlin sends it on first launch only, per its code.
+      - {name: referring_application, type: string, note: iOS only.}
+      - {name: url, type: string, note: iOS only.}
+    sources: *lifecycle_docs
 
   - plan_name: Application Updated
     sent_as: Application Updated
     records: the app being updated
     sent_by: Segment's mobile libraries, when lifecycle events are enabled
     equivalents: [App Updated]
+    default_on: *lifecycle_defaults
+    properties:
+      - {name: previous_version, type: string}
+      - {name: previous_build, type: string}
+      - {name: version, type: string}
+      - {name: build, type: string}
+    evidence: disputed
+    note: Segment's Mobile spec says it is sent instead of Application Opened on the first open after an update. The Swift library's code sends both, Updated and then Opened.
+    sources:
+      - https://www.twilio.com/docs/segment/connections/spec/mobile
+      - https://github.com/segmentio/analytics-swift/blob/main/Sources/Segment/Plugins/Platforms/iOS/iOSLifecycleEvents.swift
 
   - plan_name: Application Backgrounded
     sent_as: Application Backgrounded
     records: the app being sent to the background
     sent_by: Segment's Kotlin, Swift and React Native libraries, when lifecycle events are enabled
     equivalents: [App Backgrounded]
+    default_on: *lifecycle_defaults
+    properties: []
+    sources: *lifecycle_docs
 
   - plan_name: Application Foregrounded
     sent_as: Application Foregrounded
     records: the app coming to the foreground
     sent_by: Segment's Swift library, when lifecycle events are enabled
     equivalents: [App Foregrounded]
+    default_on: {analytics-swift: true}
+    properties: []
+    sources:
+      - https://www.twilio.com/docs/segment/connections/spec/mobile
+      - https://www.twilio.com/docs/segment/connections/sources/catalog/libraries/mobile/apple
+
+  - plan_name: Application Terminated
+    sent_as: Application Terminated
+    records: the macOS app quitting
+    sent_by: Segment's Swift library on macOS
+    equivalents: [App Terminated]
+    evidence: sdk_code
+    sources: &macos_lifecycle
+      - https://github.com/segmentio/analytics-swift/blob/main/Sources/Segment/Plugins/Platforms/Mac/macOSLifecycleEvents.swift
+
+  # No plan name: "Hidden" and "Unhidden" fail the naming rule's past-tense check, so a
+  # request under either name is rejected before the duplicate check runs.
+  - sent_as: Application Hidden
+    records: the macOS app being hidden
+    sent_by: Segment's Swift library on macOS
+    evidence: sdk_code
+    sources: *macos_lifecycle
+
+  - sent_as: Application Unhidden
+    records: the macOS app being shown again after being hidden
+    sent_by: Segment's Swift library on macOS
+    evidence: sdk_code
+    sources: *macos_lifecycle
+
+  - plan_name: Deep Link Opened
+    sent_as: Deep Link Opened
+    records: the app being opened from a link
+    sent_by: Segment's Kotlin and React Native libraries when trackDeepLinks is on, or a deep-link partner
+    default_on: {analytics-kotlin: false, analytics-react-native: false}
+    properties:
+      - {name: url, type: string}
+      - name: provider
+        type: string
+        note: When a deep-link partner sends it.
+      - name: referrer
+        evidence: sdk_code
+        note: Kotlin.
+    note: Sent in addition to Application Opened. Kotlin also sends each of the link's query parameters as a property.
+    sources:
+      - https://www.twilio.com/docs/segment/connections/spec/mobile
+      - https://github.com/segmentio/analytics-kotlin/blob/main/android/src/main/java/com/segment/analytics/kotlin/android/utilities/DeepLinkUtils.kt
 
   - plan_name: Experiment Viewed
     sent_as: Experiment Viewed
     records: a person seeing a variation of an active A/B test
     sent_by: A/B testing tools connected to Segment
-    equivalents: [Variation Viewed]
+    properties:
+      - {name: experiment_id, type: string}
+      - {name: experiment_name, type: string}
+      - {name: variation_id, type: string}
+      - {name: variation_name, type: string}
+    sources: [https://www.twilio.com/docs/segment/connections/spec/ab-testing]
+
+reserved_names:
+  - name: Application Uninstalled
+    records: the app being uninstalled
+    sent_by: some destinations, which detect it with a silent push; not Segment
+    properties: []
+    sources: [https://www.twilio.com/docs/segment/connections/spec/mobile]
+
+  - name: Application Crashed
+    records: the app crashing
+    sent_by: a crash-reporting tool routed into Segment, not Segment itself
+    properties: []
+    sources: [https://www.twilio.com/docs/segment/connections/spec/mobile]
+
+  - name: Install Attributed
+    records: an install being attributed to a campaign
+    sent_by: an attribution provider
+    properties:
+      - {name: provider, type: string}
+      - {name: campaign.source, type: string}
+      - {name: campaign.name, type: string}
+      - {name: campaign.medium, type: string}
+      - {name: campaign.content, type: string}
+      - {name: campaign.ad_creative, type: string}
+      - {name: campaign.ad_group, type: string}
+    sources: [https://www.twilio.com/docs/segment/connections/spec/mobile]
+
+  - name: Push Notification Received
+    records: a push notification arriving on the device
+    sent_by: not stated in Segment's Mobile spec
+    properties:
+      - {name: campaign.name}
+      - {name: campaign.medium}
+      - {name: campaign.content}
+      - {name: campaign.source}
+    evidence: disputed
+    note: Segment's Mobile spec says it "can be automatically enabled on iOS"; no such setting appears on the current Swift library's docs page.
+    sources:
+      - https://www.twilio.com/docs/segment/connections/spec/mobile
+      - https://www.twilio.com/docs/segment/connections/sources/catalog/libraries/mobile/apple
+
+  - name: Push Notification Tapped
+    records: a person tapping a push notification
+    sent_by: not stated in Segment's Mobile spec
+    properties:
+      - {name: action, type: string, note: Defaults to "Open".}
+      - {name: campaign.name}
+      - {name: campaign.medium}
+      - {name: campaign.content}
+      - {name: campaign.source}
+    evidence: disputed
+    note: Segment's Mobile spec says it "can be automatically enabled on iOS"; no such setting appears on the current Swift library's docs page.
+    sources:
+      - https://www.twilio.com/docs/segment/connections/spec/mobile
+      - https://www.twilio.com/docs/segment/connections/sources/catalog/libraries/mobile/apple
+
+  - name: Push Notification Bounced
+    records: a push notification bouncing
+    sent_by: a push provider
+    properties:
+      - {name: action}
+      - {name: campaign.name}
+      - {name: campaign.medium}
+      - {name: campaign.content}
+      - {name: campaign.source}
+    sources: [https://www.twilio.com/docs/segment/connections/spec/mobile]
+
+  - name: Deep Link Clicked
+    records: a person clicking a deep link
+    sent_by: a deep-link provider
+    properties:
+      - {name: provider}
+      - {name: url}
+    sources: [https://www.twilio.com/docs/segment/connections/spec/mobile]
