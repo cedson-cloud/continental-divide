@@ -10,7 +10,8 @@ and a publisher writes it out — with every step on an append-only audit log.
 
 **Reject**:
 To end a request because a rule it cannot satisfy failed. Only the deterministic engine
-may reject. No duplicate check of any kind rejects.
+may reject. No duplicate check of any kind rejects, and neither does a failed drafting
+(see **Couldn't draft**).
 _Avoid_: Deny, fail, block
 
 **Flag**:
@@ -73,6 +74,12 @@ _Avoid_: Schema, spec, taxonomy
 A request that passed the rules but has not yet been confirmed by its requester, so it is
 in nobody's queue.
 _Avoid_: Pending, unsubmitted
+
+**Couldn't draft**:
+A request that never got a draft: the model service failed, its answer held no readable
+definition, or our own code failed while drafting. The engine never saw a definition, so
+it is not a reject, and it is in nobody's queue.
+_Avoid_: Rejected, failed request, errored
 
 **Governance profile**:
 The conventions, categories, and PII blocklist a request is evaluated under.

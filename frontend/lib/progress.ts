@@ -1,8 +1,8 @@
 import type { AuditEntry } from "./api";
 
-// The request's place on the happy path, derived from its status. Rejected, withdrawn
-// and superseded requests leave the path, so their last step names where they stopped
-// instead of offering steps they will never reach.
+// The request's place on the happy path, derived from its status. Rejected, withdrawn,
+// superseded and couldn't-draft requests leave the path, so their last step names where
+// they stopped instead of offering steps they will never reach.
 export type ProgressStep = {
   label: string;
   done: boolean;
@@ -24,6 +24,7 @@ const OFF_PATH: Record<string, { label: string; tone: "stop" | "end" }> = {
   rejected: { label: "Rejected", tone: "stop" },
   withdrawn: { label: "Withdrawn", tone: "end" },
   superseded: { label: "Superseded", tone: "end" },
+  draft_failed: { label: "Couldn't draft", tone: "end" },
 };
 
 export function requestProgress(status: string, auditLog: AuditEntry[]): ProgressStep[] {
@@ -45,7 +46,9 @@ export function requestProgress(status: string, auditLog: AuditEntry[]): Progres
     auditLog.some(
       (e) => e.step === "decision_received" && e.detail?.decision === "reject",
     );
-  const before = reachedApproval ? PATH.slice(0, 2) : PATH.slice(0, 1);
+  // A failed drafting never produced a draft, so not even the first step is done.
+  const before =
+    status === "draft_failed" ? [] : reachedApproval ? PATH.slice(0, 2) : PATH.slice(0, 1);
   return [
     ...before.map((label) => ({
       label,

@@ -6,6 +6,9 @@ writing one audit entry per state transition as it goes:
     intake_received -> model_interpreted -> schema_parsed | schema_rejected
                     -> rules_evaluated -> routed
 
+A drafting that fails writes ``model_error -> routed`` instead and ends at
+``draft_failed``.
+
 The model only drafts (see ``interpreter.py``); the schema, the rules, and the human
 approver govern. The structured ``ingest`` path is kept for offline use where the
 definition is supplied directly rather than drafted by the model.
@@ -343,18 +346,16 @@ def _push_if_pending(request_id: int, storage: Storage) -> None:
         storage.add_audit_entry(request_id, "notion_pushed", {"url": url})
 
 
-def _reject_failed_drafting(
+def _close_failed_drafting(
     request_id: int, storage: Storage, model: str, reason: str
 ) -> None:
-    """Record why drafting failed and close the request as rejected, the status a
-    model-service failure has always had, so it is never left waiting on an approver."""
+    """Record why drafting failed and end the request at ``draft_failed`` ("Couldn't
+    draft"), so it is never left waiting on an approver. It is a status, never a
+    ``Decision``: only the engine rejects, and a failed drafting is not its verdict, so
+    the ``routed`` entry carries no decision."""
     storage.add_audit_entry(request_id, "model_error", {"model": model, "reason": reason})
-    storage.update_request_status(request_id, Decision.rejected.value)
-    storage.add_audit_entry(
-        request_id,
-        "routed",
-        {"decision": Decision.rejected.value, "routed_to_approval": False},
-    )
+    storage.update_request_status(request_id, "draft_failed")
+    storage.add_audit_entry(request_id, "routed", {"routed_to_approval": False})
 
 
 def interpret_intake(
@@ -381,8 +382,9 @@ def interpret_intake(
     model failure still leaves an auditable record. A request the rules did not reject
     lands at ``draft`` for the requester to confirm via :func:`submit_request` before
     it enters the approval queue. Returns the request id; raises
-    :class:`IntakeModelError` if the model service is unreachable. Any other failure
-    after the request is stored closes it as rejected and is re-raised unchanged.
+    :class:`IntakeModelError` if the model service is unreachable or answers with
+    nothing that reads as a definition. Any other failure after the request is stored
+    ends it at ``draft_failed`` too and is re-raised unchanged.
     """
     request_id = storage.create_request(
         raw_intake_text=raw_intake_text,
@@ -432,7 +434,7 @@ def interpret_intake(
                 existing_event=existing_event,
             )
         except InterpreterError as exc:
-            _reject_failed_drafting(request_id, storage, exc.model, str(exc))
+            _close_failed_drafting(request_id, storage, exc.model, str(exc))
             raise IntakeModelError(request_id, str(exc)) from exc
 
         storage.add_audit_entry(
@@ -448,16 +450,8 @@ def interpret_intake(
         )
 
         if result.proposed_definition is None:
-            _route(
-                request_id,
-                None,
-                [{"source": "model_output", "msg": result.parse_error}],
-                storage,
-                profile,
-                duplicate_fn,
-                requires_confirmation=True,
-            )
-            return request_id
+            _close_failed_drafting(request_id, storage, result.model, result.parse_error)
+            raise IntakeModelError(request_id, result.parse_error)
 
         parsed, parse_errors = _parse(result.proposed_definition)
         if parsed is not None:
@@ -477,7 +471,7 @@ def interpret_intake(
     except Exception as exc:
         # Not the model service's failure but ours, such as an SDK that no longer takes
         # an argument we pass. Re-raised unchanged so the server log keeps the traceback.
-        _reject_failed_drafting(
+        _close_failed_drafting(
             request_id,
             storage,
             get_settings().anthropic_model,

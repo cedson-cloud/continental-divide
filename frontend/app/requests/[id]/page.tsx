@@ -211,6 +211,7 @@ export default function RequestDetailPage({
     (e) => e.step === "renamed_and_resubmitted",
   );
   const isWithdrawn = detail.status === "withdrawn";
+  const isDraftFailed = detail.status === "draft_failed";
   const withdrawnEntry = detail.audit_log.find((e) => e.step === "withdrawn");
   const requesterUnsure =
     detail.audit_log.find((e) => e.step === "submitted")?.detail
@@ -293,6 +294,14 @@ export default function RequestDetailPage({
             ? withdrawnEntry.detail.existing_event
             : "an existing event"}{" "}
           already covers it.
+        </div>
+      )}
+
+      {isDraftFailed && (
+        <div className="msg msg-info detail-note">
+          This request couldn&apos;t be drafted: the model didn&apos;t return a usable
+          definition, or something failed on our side. It never reached the approval queue,
+          and it is not a rejection. To try again, make a new request.
         </div>
       )}
 
