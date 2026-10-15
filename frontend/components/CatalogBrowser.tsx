@@ -1,8 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { CatalogView, CatalogViewEvent, SharedShape } from "@/lib/api";
+import {
+  SOURCE_FILTERS,
+  SourceFilter,
+  catalogSummary,
+  matchesSearch,
+  matchesSource,
+  plural,
+  propertyCount,
+} from "@/lib/catalog";
+import { Icon } from "./icons";
 
 // Persistent and honest: the review's view of the catalog is narrower than this
 // page, and papering over that would misrepresent what the tool checks.
@@ -17,20 +27,24 @@ function eventKey(event: CatalogViewEvent): string {
   return `${event.source}:${event.request_id ?? ""}:${event.category}:${event.name}`;
 }
 
-function matches(event: CatalogViewEvent, needle: string): boolean {
-  const q = needle.trim().toLowerCase();
-  if (!q) return true;
-  return (
-    event.name.toLowerCase().includes(q) ||
-    event.description.toLowerCase().includes(q) ||
-    event.properties.some((p) => p.name.toLowerCase().includes(q))
-  );
+function SourceTag({ event }: { event: CatalogViewEvent }) {
+  if (event.source === "approved_request") {
+    return (
+      <Link className="catalog-source-tag catalog-source-tag-request" href={`/requests/${event.request_id}`}>
+        From request #{event.request_id}
+      </Link>
+    );
+  }
+  if (event.source === "system_event") {
+    return <span className="catalog-source-tag catalog-source-tag-system">System event</span>;
+  }
+  return <span className="catalog-source-tag">Sample plan</span>;
 }
 
 function ShapeRows({ name, shape }: { name: string; shape: SharedShape }) {
   return (
-    <div className="mt-12">
-      <p className="muted" style={{ fontSize: 12.5, margin: "0 0 4px" }}>
+    <div className="catalog-shape">
+      <p className="catalog-shape-lede">
         Each item in this array is a <span className="mono">{name}</span>
         {shape.description ? ` — ${shape.description}` : ""}
       </p>
@@ -44,7 +58,7 @@ function ShapeRows({ name, shape }: { name: string; shape: SharedShape }) {
         <tbody>
           {shape.properties.map((p) => (
             <tr key={p.name}>
-              <td className="mono">{p.name}</td>
+              <td>{p.name}</td>
               <td>{p.type}</td>
             </tr>
           ))}
@@ -65,116 +79,108 @@ function EventRow({
 }) {
   const [expanded, setExpanded] = useState(false);
   const [openShape, setOpenShape] = useState<string | null>(null);
+  const bodyId = useId();
 
   // A property that arrived after the entry itself: approved on a different
   // request than the one (if any) that created the event.
   const mergedCount = event.properties.filter(
     (p) => p.source === "approved_request" && p.request_id !== event.request_id,
   ).length;
-  const baseCount = event.properties.length - mergedCount;
+
+  const shapeProp = openShape
+    ? event.properties.find((p) => p.name === openShape)
+    : undefined;
+  const openShapeDef = shapeProp?.shape ? shapes[shapeProp.shape] : undefined;
 
   return (
-    <div style={{ borderTop: "1px solid var(--border, #e3e3e3)", padding: "8px 0" }}>
-      <div className="row spread" style={{ alignItems: "baseline" }}>
+    <div className="catalog-event">
+      <div className="catalog-event-head">
         <button
-          className="link-button"
+          type="button"
+          className="catalog-event-toggle"
+          aria-expanded={expanded}
+          aria-controls={expanded ? bodyId : undefined}
           onClick={() => setExpanded((v) => !v)}
-          style={{ fontSize: 15 }}
         >
-          {expanded ? "▾" : "▸"} {event.name}
+          <Icon name="chevron" size={16} />
+          <span className="catalog-event-name">{event.name}</span>
         </button>
-        {event.source === "approved_request" ? (
-          <Link className="badge approved" href={`/requests/${event.request_id}`}>
-            Requested
-          </Link>
-        ) : event.source === "system_event" ? (
-          <span className="badge pending">System event</span>
-        ) : (
-          <span className="badge neutral">Sample plan</span>
+        <SourceTag event={event} />
+        <p className="catalog-event-meta">{event.description}</p>
+        <span className="catalog-event-count">
+          {propertyCount(event.properties.length, mergedCount)}
+        </span>
+        {event.source === "system_event" && (
+          <p className="catalog-event-meta">
+            Sent automatically as {event.sent_as} by {event.sent_by}.
+          </p>
         )}
       </div>
-      {collision && <div className="msg msg-error mt-12">{COLLISION_WARNING}</div>}
+      {collision && <div className="msg msg-error catalog-warning">{COLLISION_WARNING}</div>}
       {event.unresolved_target && (
-        <div className="msg msg-error mt-12">
+        <div className="msg msg-error catalog-warning">
           Property request whose target event was not found in the catalog. The
           properties below have nowhere to attach.
         </div>
       )}
-      <p className="muted" style={{ fontSize: 13, margin: "2px 0 0" }}>
-        {event.description}
-        {mergedCount > 0 && event.source === "system_event" && (
-          <>
-            {" — "}
-            {mergedCount} added by request
-          </>
-        )}
-        {mergedCount > 0 && event.source !== "system_event" && (
-          <>
-            {" — "}
-            {baseCount} from the{" "}
-            {event.source === "sample_plan" ? "plan" : "original request"},{" "}
-            {mergedCount} added by request
-          </>
-        )}
-      </p>
-      {event.source === "system_event" && (
-        <p className="muted" style={{ fontSize: 13, margin: "2px 0 0" }}>
-          Sent automatically as {event.sent_as} by {event.sent_by}.
-        </p>
-      )}
       {expanded && (
-        <div className="mt-12">
+        <div id={bodyId} className="catalog-event-body">
           {event.properties.length === 0 ? (
-            <p className="muted" style={{ fontSize: 13, margin: 0 }}>
-              No properties.
+            <p className="catalog-event-meta">
+              This event carries no properties: its name says everything it records.
             </p>
           ) : (
-            <table className="prop-table">
-              <thead>
-                <tr>
-                  <th>Property</th>
-                  <th>Type</th>
-                  <th>Source</th>
+            <table
+              className="prop-table catalog-props"
+              role="table"
+              aria-label={`${event.name} properties`}
+            >
+              <thead role="rowgroup">
+                <tr role="row">
+                  <th role="columnheader" scope="col">
+                    Property
+                  </th>
+                  <th role="columnheader" scope="col">
+                    Type
+                  </th>
+                  <th role="columnheader" scope="col">
+                    Source
+                  </th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody role="rowgroup">
                 {event.properties.map((p) => (
-                  <tr key={p.name}>
-                    <td className="mono">{p.name}</td>
-                    <td>
+                  <tr key={p.name} role="row">
+                    <td role="cell">{p.name}</td>
+                    <td role="cell" className="catalog-prop-type">
                       {p.type}
                       {p.shape && shapes[p.shape] && (
-                        <>
-                          {" "}
-                          <button
-                            className="link-button"
-                            onClick={() =>
-                              setOpenShape((v) => (v === p.name ? null : p.name))
-                            }
-                          >
-                            {openShape === p.name ? "▾" : "▸"} {p.shape}
-                          </button>
-                        </>
+                        <button
+                          type="button"
+                          className="catalog-shape-toggle"
+                          aria-expanded={openShape === p.name}
+                          onClick={() =>
+                            setOpenShape((v) => (v === p.name ? null : p.name))
+                          }
+                        >
+                          <Icon name="chevron" size={14} />
+                          {p.shape}
+                        </button>
                       )}
                     </td>
-                    <td>
+                    <td role="cell" className="catalog-prop-source">
                       {p.source === "approved_request" && p.request_id != null ? (
                         <Link
-                          className="badge approved"
+                          className="catalog-request-link"
                           href={`/requests/${p.request_id}`}
                         >
                           #{p.request_id}
                         </Link>
                       ) : (
-                        <span className="muted" style={{ fontSize: 12 }}>
-                          plan
-                        </span>
+                        <span className="muted">plan</span>
                       )}
                       {p.also_requested_by.length > 0 && (
-                        <span
-                          className="muted"
-                          style={{ fontSize: 12, marginLeft: 6 }}
-                        >
+                        <span className="muted catalog-also">
                           also requested by{" "}
                           {p.also_requested_by.map((id) => `#${id}`).join(", ")}
                         </span>
@@ -185,45 +191,125 @@ function EventRow({
               </tbody>
             </table>
           )}
-          {openShape &&
-            (() => {
-              const prop = event.properties.find((p) => p.name === openShape);
-              const shape = prop?.shape ? shapes[prop.shape] : undefined;
-              return prop?.shape && shape ? (
-                <ShapeRows name={prop.shape} shape={shape} />
-              ) : null;
-            })()}
+          {shapeProp?.shape && openShapeDef && (
+            <ShapeRows name={shapeProp.shape} shape={openShapeDef} />
+          )}
         </div>
       )}
     </div>
   );
 }
 
+function CategoryGroup({
+  category,
+  events,
+  shapes,
+  collidingNames,
+  open,
+  onToggle,
+}: {
+  category: string;
+  events: CatalogViewEvent[];
+  shapes: Record<string, SharedShape>;
+  collidingNames: Set<string>;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const listId = useId();
+  return (
+    <section className="panel catalog-group">
+      <h2 className="catalog-group-title">
+        <button
+          type="button"
+          className="catalog-group-toggle"
+          aria-expanded={open}
+          aria-controls={open ? listId : undefined}
+          onClick={onToggle}
+        >
+          <Icon name="chevron" size={16} />
+          {category}
+          <span className="catalog-group-count">
+            {plural(events.length, "event", "events")}
+          </span>
+        </button>
+      </h2>
+      {open && (
+        <div id={listId}>
+          {events.map((event) => (
+            <EventRow
+              key={eventKey(event)}
+              event={event}
+              shapes={shapes}
+              collision={collidingNames.has(event.name)}
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function NewRequestLink({ className }: { className: string }) {
+  return (
+    <Link href="/" className={className}>
+      <Icon name="plus" size={16} />
+      New request
+    </Link>
+  );
+}
+
 export function CatalogBrowser({ catalog }: { catalog: CatalogView }) {
-  const [filter, setFilter] = useState("");
+  const [search, setSearch] = useState("");
+  const [source, setSource] = useState<SourceFilter>("all");
+  // Held here rather than in each group, so a category a search hides comes back
+  // the way it was left.
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const { counts } = catalog;
 
   // Names carried by two or more real definitions. Unresolved property requests
   // are excluded: they are orphans, not rival definitions.
   const collidingNames = useMemo(() => {
-    const counts = new Map<string, number>();
+    const seen = new Map<string, number>();
     for (const event of catalog.events) {
       if (event.unresolved_target) continue;
-      counts.set(event.name, (counts.get(event.name) ?? 0) + 1);
+      seen.set(event.name, (seen.get(event.name) ?? 0) + 1);
     }
-    return new Set([...counts].filter(([, n]) => n > 1).map(([name]) => name));
+    return new Set([...seen].filter(([, n]) => n > 1).map(([name]) => name));
+  }, [catalog.events]);
+
+  const sourceCounts = useMemo(() => {
+    const result = {} as Record<SourceFilter, number>;
+    for (const { value } of SOURCE_FILTERS) {
+      result[value] = catalog.events.filter((e) => matchesSource(e, value)).length;
+    }
+    return result;
   }, [catalog.events]);
 
   const byCategory = useMemo(() => {
     const groups = new Map<string, CatalogViewEvent[]>();
     for (const event of catalog.events) {
-      if (!matches(event, filter)) continue;
+      if (!matchesSource(event, source) || !matchesSearch(event, search)) continue;
       const list = groups.get(event.category) ?? [];
       list.push(event);
       groups.set(event.category, list);
     }
     return groups;
-  }, [catalog.events, filter]);
+  }, [catalog.events, source, search]);
+
+  // System events come from the platform the governance profile names; with no
+  // platform there are none, and a filter that can only ever be empty is noise.
+  const filters = SOURCE_FILTERS.filter(
+    (f) => f.value !== "system_event" || counts.system_events > 0,
+  );
+
+  const requested = sourceCounts.requests > 0;
+  let shown = 0;
+  for (const events of byCategory.values()) shown += events.length;
+
+  function showAll() {
+    setSearch("");
+    setSource("all");
+  }
 
   function toggleCategory(category: string) {
     setCollapsed((prev) => {
@@ -234,59 +320,87 @@ export function CatalogBrowser({ catalog }: { catalog: CatalogView }) {
     });
   }
 
-  const { counts } = catalog;
   return (
     <>
-      <div className="msg msg-info">{REVIEW_GAP_NOTICE}</div>
-
-      <div className="panel">
+      <div className="panel catalog-tools">
         <label className="field">
-          <span className="field-label">Filter</span>
+          <span className="field-label">Search events</span>
           <input
             type="text"
-            placeholder="Event name, description, or property name — e.g. coupon_id"
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
+            placeholder="Event or property name, e.g. coupon_id"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
           />
         </label>
-        <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>
-          {counts.total} events — {counts.from_sample_plan} from the sample plan,{" "}
-          {counts.system_events} system event{counts.system_events === 1 ? "" : "s"},{" "}
-          {counts.new_events_from_requests} approved as new events,{" "}
-          {counts.property_additions_merged} property additions merged in
-          {counts.unresolved_targets > 0 &&
-            `, ${counts.unresolved_targets} with no target event`}
-          .
+        <div className="catalog-filters" role="group" aria-label="Show events from">
+          {filters.map((f) => (
+            <button
+              key={f.value}
+              type="button"
+              className="catalog-filter"
+              aria-pressed={source === f.value}
+              onClick={() => setSource(f.value)}
+            >
+              {f.label}
+              <span className="catalog-filter-count">{sourceCounts[f.value]}</span>
+            </button>
+          ))}
+        </div>
+        <p className="catalog-summary">{catalogSummary(counts)}</p>
+        {!requested && source !== "requests" && (
+          <p className="catalog-summary">
+            Events you request join this plan once they&apos;re approved.{" "}
+            <Link href="/">Make a request</Link>
+          </p>
+        )}
+        <p className="catalog-note">{REVIEW_GAP_NOTICE}</p>
+        <p className="visually-hidden" aria-live="polite">
+          {shown === counts.total ? "" : `${shown} of ${counts.total} events shown`}
         </p>
       </div>
 
-      {byCategory.size === 0 && (
-        <div className="panel">
-          <p className="muted" style={{ margin: 0 }}>
-            No events match &ldquo;{filter}&rdquo;.
-          </p>
-        </div>
-      )}
+      {byCategory.size === 0 &&
+        (source === "requests" && !requested && !search.trim() ? (
+          <section className="panel catalog-empty" aria-labelledby="catalog-empty-title">
+            <h2 id="catalog-empty-title" className="panel-title">
+              Nothing from requests yet
+            </h2>
+            <p className="panel-sub">
+              Describe an event in a sentence, submit the draft, then approve it from the
+              queue. It lands here, marked with the request it came from.
+            </p>
+            <NewRequestLink className="btn btn-primary catalog-empty-action" />
+          </section>
+        ) : (
+          <section className="panel catalog-empty" aria-labelledby="catalog-empty-title">
+            <h2 id="catalog-empty-title" className="panel-title">
+              No events match
+            </h2>
+            <p className="panel-sub">
+              {search.trim()
+                ? `Nothing here matches “${search.trim()}”.`
+                : "Nothing here comes from that source."}{" "}
+              An event that isn&apos;t in the plan yet can be requested.
+            </p>
+            <div className="row">
+              <button type="button" className="btn btn-primary" onClick={showAll}>
+                Show all events
+              </button>
+              <NewRequestLink className="btn catalog-empty-action" />
+            </div>
+          </section>
+        ))}
 
       {[...byCategory.entries()].map(([category, events]) => (
-        <div className="panel" key={category}>
-          <button
-            className="link-button"
-            onClick={() => toggleCategory(category)}
-            style={{ fontSize: 16, fontWeight: 600 }}
-          >
-            {collapsed.has(category) ? "▸" : "▾"} {category} ({events.length})
-          </button>
-          {!collapsed.has(category) &&
-            events.map((event) => (
-              <EventRow
-                key={eventKey(event)}
-                event={event}
-                shapes={catalog.shapes}
-                collision={collidingNames.has(event.name)}
-              />
-            ))}
-        </div>
+        <CategoryGroup
+          key={category}
+          category={category}
+          events={events}
+          shapes={catalog.shapes}
+          collidingNames={collidingNames}
+          open={!collapsed.has(category)}
+          onToggle={() => toggleCategory(category)}
+        />
       ))}
     </>
   );
