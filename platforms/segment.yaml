@@ -16,6 +16,7 @@ docs:
   - https://www.twilio.com/docs/segment/connections/sources/catalog/libraries/mobile/apple
   - https://www.twilio.com/docs/segment/connections/sources/catalog/libraries/mobile/kotlin-android
   - https://www.twilio.com/docs/segment/connections/sources/catalog/libraries/mobile/react-native
+  - https://www.twilio.com/docs/segment/connections/sources/catalog/libraries/server/node
 
 libraries:
   - id: analytics.js
@@ -575,3 +576,40 @@ reserved_names:
       - {name: provider}
       - {name: url}
     sources: [https://www.twilio.com/docs/segment/connections/spec/mobile]
+
+# How each library is called, for the "For engineers" snippets on an approved request
+# (ADR 0008). Each snippet's surface is its library's. The first source is the docs page
+# the call shape was checked against; the Node shape was also read in the SDK's own
+# types, which require a userId or an anonymousId on every call. Each version is the
+# package's latest on npm on the date checked.
+snippets:
+  - label: In the browser
+    name: Analytics.js
+    library: analytics.js
+    package: "@segment/analytics-next"
+    version: "1.84.3"
+    style: positional
+    notes:
+      - Your page loads Analytics.js with your write key.
+      - Analytics.js adds the fields it sends with every call, so only the definition's own fields are here.
+    checked: "2026-10-15"
+    sources:
+      - https://www.twilio.com/docs/segment/connections/sources/catalog/libraries/website/javascript
+      - https://www.npmjs.com/package/@segment/analytics-next
+  - label: On your server
+    name: Node
+    library: server
+    package: "@segment/analytics-node"
+    version: "3.1.0"
+    style: params
+    setup:
+      - 'import { Analytics } from "@segment/analytics-node";'
+      - 'const analytics = new Analytics({ writeKey: "YOUR_WRITE_KEY" });'
+    notes:
+      - Every server call needs a userId or an anonymousId.
+      - Server libraries add only context.library on their own.
+    checked: "2026-10-15"
+    sources:
+      - https://www.twilio.com/docs/segment/connections/sources/catalog/libraries/server/node
+      - https://github.com/segmentio/analytics-next/blob/master/packages/node/src/app/types/params.ts
+      - https://www.npmjs.com/package/@segment/analytics-node
