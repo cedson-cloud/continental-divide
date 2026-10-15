@@ -137,7 +137,7 @@ The one stable identifier a plan uses for a person. Never an email address.
 _Avoid_: User ID (ambiguous across tools), distinct ID, primary key
 
 **Surface**:
-Where a call is made from — a browser, a server, or another platform.
+Where a call is made from — a browser, a mobile app, a server, or another platform.
 _Avoid_: Platform (a surface's code comes from a platform), channel, source
 
 **Trigger**:
@@ -151,3 +151,16 @@ convention (`Page Viewed`), not the name the SDK sends (`$pageview` in PostHog, 
 call in Segment). A platform file lists them, and they are always in the corpus of a
 profile that names that platform.
 _Avoid_: Auto event, built-in event
+
+**Common field**:
+A field every event from a platform's library carries without anyone asking for it: the
+page URL, the campaign's UTM source, the app version. A platform file lists each one with
+the libraries that send it. A requested property that is already a common field is a
+request for something the plan already has.
+_Avoid_: Default property, context property, auto property
+
+**Reserved name**:
+An event name a platform's spec defines for something its own libraries do not send:
+`Push Notification Received`, `Install Attributed`. A partner or the team sends it. It is
+the name to use when tracking that thing, so it is never a duplicate of an existing event.
+_Avoid_: Spec event, semantic event

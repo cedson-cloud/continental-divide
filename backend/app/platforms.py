@@ -1,25 +1,73 @@
-"""Platform files: what an analytics platform's SDKs send on their own (ADR 0009).
+"""Platform files: what an analytics platform's SDKs send on their own (ADR 0009, 0011).
 
-A platform is a YAML file under ``platforms/``, not code (ADR 0008). For now it lists
-the platform's system events: each under the plan name a tracking plan shows it by, the
-name or call the SDK actually sends, and any equivalent names that differ in words
-rather than spelling. Loading fails loudly on a missing file, malformed YAML, or an
-invalid schema, the same as governance profiles.
+A platform is a YAML file under ``platforms/``, not code (ADR 0008). It lists the
+platform's libraries; the common fields their events carry; its system events, each
+under the plan name a tracking plan shows it by, with the name or call the SDK actually
+sends, its properties and any equivalent names; and its reserved names, which the
+platform's spec defines but its libraries do not send. Every common field, named system
+event and reserved name records its sources, and every claim records whether it rests on the docs, on SDK code, or on sources that disagree. Loading
+fails loudly on a missing file, malformed YAML, or an invalid schema, the same as
+governance profiles.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 import yaml
-from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 _PLATFORMS_DIR = Path(__file__).resolve().parents[2] / "platforms"
+
+# docs: the vendor's docs say so. sdk_code: read in the vendor's SDK code on GitHub,
+# which can be ahead of a release. disputed: the sources disagree; the note says how.
+Evidence = Literal["docs", "sdk_code", "disputed"]
 
 
 class PlatformError(Exception):
     """A platform file could not be loaded or is invalid."""
+
+
+class Library(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    name: str
+    surface: Literal["browser", "mobile", "server"]
+    note: Optional[str] = None
+
+
+class EventProperty(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    # None when the sources checked do not give a type.
+    type: Optional[str] = None
+    note: Optional[str] = None
+    evidence: Evidence = "docs"
+
+
+def _unique_property_names(properties: Optional[list[EventProperty]], owner: str) -> None:
+    names = [p.name for p in properties or []]
+    if len(names) != len(set(names)):
+        raise ValueError(f"'{owner}' lists a property twice")
+
+
+class CommonField(BaseModel):
+    """A field every event from the listed libraries carries without being asked."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Where it lands, in the platform's own terms: context.page.url, $current_url.
+    path: str
+    plain_name: str
+    group: str
+    type: Optional[str] = None
+    libraries: list[str] = Field(min_length=1)
+    note: Optional[str] = None
+    evidence: Evidence = "docs"
+    sources: list[str] = Field(min_length=1)
 
 
 class SystemEvent(BaseModel):
@@ -27,11 +75,47 @@ class SystemEvent(BaseModel):
 
     # None when the event is not one plan event: $autocapture is a stream the plan's
     # actions are built on, and the identity events are calls the plan models already.
+    # Also None when the name the plan would use fails the plan's own naming rule.
     plan_name: Optional[str] = None
     sent_as: str
     records: str
     sent_by: str
     equivalents: list[str] = []
+    # Library id to whether the library sends it without being configured to.
+    default_on: dict[str, bool] = {}
+    # None: not listed yet. An empty list: the sources say it carries none of its own.
+    properties: Optional[list[EventProperty]] = None
+    note: Optional[str] = None
+    evidence: Evidence = "docs"
+    sources: list[str] = []
+
+    @model_validator(mode="after")
+    def _properties_once(self) -> "SystemEvent":
+        _unique_property_names(self.properties, self.plan_name or self.sent_as)
+        if self.plan_name is not None and not self.sources:
+            raise ValueError(f"'{self.plan_name}' cites no source")
+        return self
+
+
+class ReservedName(BaseModel):
+    """A name the platform's spec defines for an event its libraries do not send.
+    Someone else sends it, a partner or the team itself, so it is never a duplicate
+    of an existing event (ADR 0011): it is the name to use."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    records: str
+    sent_by: str
+    properties: Optional[list[EventProperty]] = None
+    note: Optional[str] = None
+    evidence: Evidence = "docs"
+    sources: list[str] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _properties_once(self) -> "ReservedName":
+        _unique_property_names(self.properties, self.name)
+        return self
 
 
 class Platform(BaseModel):
@@ -39,10 +123,16 @@ class Platform(BaseModel):
 
     version: int
     name: str
-    # The docs the system events were checked against, and when.
+    # The docs the file was checked against, and when.
     docs: list[str]
     checked: str
+    libraries: list[Library] = []
+    common_fields: list[CommonField] = []
+    # Things the sources mention that this file does not list yet, so a reader never
+    # takes a missing field for one the platform does not send.
+    not_listed_yet: list[str] = []
     system_events: list[SystemEvent]
+    reserved_names: list[ReservedName] = []
 
     @model_validator(mode="after")
     def _names_are_unambiguous(self) -> "Platform":
@@ -57,6 +147,27 @@ class Platform(BaseModel):
         sent = [e.sent_as for e in self.system_events]
         if len(sent) != len(set(sent)):
             raise ValueError("two system events share a sent_as")
+        for reserved in self.reserved_names:
+            if reserved.name in seen or reserved.name in sent:
+                raise ValueError(f"'{reserved.name}' is both reserved and a system event")
+            seen.add(reserved.name)
+        return self
+
+    @model_validator(mode="after")
+    def _libraries_are_known(self) -> "Platform":
+        ids = [lib.id for lib in self.libraries]
+        if len(ids) != len(set(ids)):
+            raise ValueError("two libraries share an id")
+        named = [
+            *(lib for f in self.common_fields for lib in f.libraries),
+            *(lib for e in self.system_events for lib in e.default_on),
+        ]
+        unknown = sorted(set(named) - set(ids))
+        if unknown:
+            raise ValueError(f"unknown library: {', '.join(unknown)}")
+        paths = [f.path for f in self.common_fields]
+        if len(paths) != len(set(paths)):
+            raise ValueError("two common fields share a path")
         return self
 
 

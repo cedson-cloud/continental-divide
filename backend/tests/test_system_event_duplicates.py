@@ -154,7 +154,7 @@ def test_the_data_dictionary_lists_system_events_and_merges_properties_into_them
     assert page_viewed["sent_as"] == "a page call"
     assert [p["name"] for p in page_viewed["properties"]] == ["page_section"]
     assert events["Experiment Viewed"]["source"] == "system_event"
-    assert catalog["counts"]["system_events"] == 8
+    assert catalog["counts"]["system_events"] == 10
     assert catalog["counts"]["property_additions_merged"] == 1
     assert catalog["counts"]["unresolved_targets"] == 0
 
@@ -218,3 +218,28 @@ def test_the_vetter_reports_a_system_event_listed_under_two_names():
         {"system_event": "page_viewed", "names": ["$pageview", "page_viewed"]}
     ]
     assert result["plan_checks"]["near_duplicates"] == []
+
+
+@pytest.mark.parametrize(
+    "name, profile", [("Deep Link Opened", SEGMENT), ("deep_link_opened", POSTHOG)]
+)
+def test_deep_link_opened_is_a_system_event_on_both_platforms(name, profile):
+    checks = _checks(name, profile)
+    assert not checks["duplicate"].passed
+    assert "Deep Link Opened" in checks["duplicate"].detail
+
+
+@pytest.mark.parametrize(
+    "name", ["Push Notification Received", "Install Attributed", "Application Crashed"]
+)
+def test_a_reserved_name_is_the_name_to_use_not_a_duplicate(name):
+    """Nothing sends a reserved name on its own, so a request for it follows the spec
+    rather than duplicating an existing event (ADR 0011)."""
+    checks = _checks(name, SEGMENT)
+    assert checks["duplicate"].passed
+    assert checks["near_duplicate"].passed
+
+
+def test_variation_viewed_is_no_longer_an_equivalent_of_experiment_viewed():
+    checks = _checks("Variation Viewed", SEGMENT)
+    assert checks["near_duplicate"].passed
