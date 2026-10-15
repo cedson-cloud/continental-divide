@@ -127,7 +127,9 @@ function EventRow({
         <div id={bodyId} className="catalog-event-body">
           {event.properties.length === 0 ? (
             <p className="catalog-event-meta">
-              This event carries no properties: its name says everything it records.
+              {event.source === "system_event"
+                ? "The properties the SDK sends with this event aren't listed here yet."
+                : "No properties are listed for this event."}
             </p>
           ) : (
             <table

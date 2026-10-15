@@ -21,7 +21,9 @@ from pydantic import BaseModel, ConfigDict, Field
 from .governance import DEFAULT_PROFILE, GovernanceError, profile_from_dict
 
 BusinessType = Literal["ecommerce", "saas", "marketplace", "media", "fintech"]
-CurrentPlatform = Literal["segment", "posthog", "amplitude", "mixpanel", "none"]
+CurrentPlatform = Literal[
+    "segment", "posthog", "amplitude", "mixpanel", "hightouch", "none"
+]
 CallSide = Literal["client", "server", "both"]
 NamingConvention = Literal["title_case_object_action", "snake_case_object_action"]
 Destination = Literal[

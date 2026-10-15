@@ -319,7 +319,9 @@ export default function GuidedRequestPage() {
               {KIND_CARDS.map((card) => (
                 <button
                   key={card.kind}
+                  type="button"
                   className={`kind-card ${state.kind === card.kind ? "selected" : ""}`}
+                  aria-pressed={state.kind === card.kind}
                   onClick={() => selectKind(card.kind)}
                 >
                   <span className="kind-card-title">{card.title}</span>

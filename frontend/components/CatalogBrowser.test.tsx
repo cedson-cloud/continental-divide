@@ -207,6 +207,12 @@ describe("CatalogBrowser", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText("Sample plan", { selector: ".catalog-source-tag" })).toBeNull();
     expect(screen.getByRole("button", { name: "System events 1" })).toBeInTheDocument();
+
+    // Never claim a system event carries nothing: the SDK sends properties we don't
+    // list yet.
+    fireEvent.click(screen.getByRole("button", { name: "Page Viewed" }));
+    expect(screen.getByText(/aren't listed here yet/)).toBeInTheDocument();
+    expect(screen.queryByText(/carries no properties/)).toBeNull();
     expect(screen.getByText(/1 system event/)).toBeInTheDocument();
   });
 
