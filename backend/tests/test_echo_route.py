@@ -17,6 +17,7 @@ from app.routes import (
     CLIENT_IP_HEADER,
     ECHO_COOKIE,
     IP_HEADER_CANDIDATES,
+    PROXY_SENT_NO_ADDRESS,
     PROXY_SECRET_HEADER,
 )
 
@@ -93,7 +94,9 @@ def test_the_limiter_keys_on_the_proxys_header_and_no_other(echo_on):
     body = demo_client(**forged, **{CLIENT_IP_HEADER: "203.0.113.9"}).get("/demo/echo").json()
     assert body["limiter_address"] == "203.0.113.9"
     body = demo_client(**forged).get("/demo/echo").json()
-    assert body["limiter_address"] == "testclient", "no proxy header falls back to the socket"
+    assert body["limiter_address"] == PROXY_SENT_NO_ADDRESS, (
+        "without the proxy's header, a proxied request shares one key, never the socket's"
+    )
 
 
 def test_without_the_proxy_secret_the_address_header_is_ignored(echo_on_locally):

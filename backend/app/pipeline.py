@@ -18,6 +18,7 @@ from typing import Callable, Optional, Tuple
 from pydantic import ValidationError
 
 from .catalog import DuplicateReview, review_against_catalog
+from .config import get_settings
 from .governance import GovernanceProfile, load_active_profile
 from .interpreter import Interpretation, InterpreterError, interpret
 from .models import Decision, EventDefinition
@@ -342,6 +343,20 @@ def _push_if_pending(request_id: int, storage: Storage) -> None:
         storage.add_audit_entry(request_id, "notion_pushed", {"url": url})
 
 
+def _reject_failed_drafting(
+    request_id: int, storage: Storage, model: str, reason: str
+) -> None:
+    """Record why drafting failed and close the request as rejected, the status a
+    model-service failure has always had, so it is never left waiting on an approver."""
+    storage.add_audit_entry(request_id, "model_error", {"model": model, "reason": reason})
+    storage.update_request_status(request_id, Decision.rejected.value)
+    storage.add_audit_entry(
+        request_id,
+        "routed",
+        {"decision": Decision.rejected.value, "routed_to_approval": False},
+    )
+
+
 def interpret_intake(
     raw_intake_text: str,
     storage: Storage,
@@ -366,7 +381,8 @@ def interpret_intake(
     model failure still leaves an auditable record. A request the rules did not reject
     lands at ``draft`` for the requester to confirm via :func:`submit_request` before
     it enters the approval queue. Returns the request id; raises
-    :class:`IntakeModelError` if the model service is unreachable.
+    :class:`IntakeModelError` if the model service is unreachable. Any other failure
+    after the request is stored closes it as rejected and is re-raised unchanged.
     """
     request_id = storage.create_request(
         raw_intake_text=raw_intake_text,
@@ -382,87 +398,92 @@ def interpret_intake(
         existing_event=existing_event,
         destinations=destinations,
     )
-    storage.add_audit_entry(
-        request_id,
-        "intake_received",
-        {
-            "raw_intake_text": raw_intake_text,
-            "submitter_name": submitter_name,
-            "submitter_team": submitter_team,
-            "call_type": call_type,
-            "side": side,
-            "business_value": business_value,
-            "urgent": urgent,
-            "urgency_reason": urgency_reason,
-            "needed_by": needed_by,
-            "request_kind": request_kind,
-            "existing_event": existing_event,
-            "destinations": destinations,
-        },
-    )
-
-    # Resolve once so the profile that drafts and the profile that evaluates are
-    # the same object, not two independent reads of a file that can change.
-    if profile is None:
-        profile = load_active_profile()
-
     try:
-        result = interpret_fn(
-            raw_intake_text,
-            profile=profile,
-            business_value=business_value,
-            request_kind=request_kind,
-            existing_event=existing_event,
-        )
-    except InterpreterError as exc:
-        storage.add_audit_entry(
-            request_id, "model_error", {"model": exc.model, "reason": str(exc)}
-        )
-        storage.update_request_status(request_id, Decision.rejected.value)
         storage.add_audit_entry(
             request_id,
-            "routed",
-            {"decision": Decision.rejected.value, "routed_to_approval": False},
+            "intake_received",
+            {
+                "raw_intake_text": raw_intake_text,
+                "submitter_name": submitter_name,
+                "submitter_team": submitter_team,
+                "call_type": call_type,
+                "side": side,
+                "business_value": business_value,
+                "urgent": urgent,
+                "urgency_reason": urgency_reason,
+                "needed_by": needed_by,
+                "request_kind": request_kind,
+                "existing_event": existing_event,
+                "destinations": destinations,
+            },
         )
-        raise IntakeModelError(request_id, str(exc)) from exc
 
-    storage.add_audit_entry(
-        request_id,
-        "model_interpreted",
-        {
-            "model": result.model,
-            "profile": profile.name,
-            "proposed_definition": result.proposed_definition,
-            **({} if result.proposed_definition is not None
-               else {"raw_response": result.raw_response, "parse_error": result.parse_error}),
-        },
-    )
+        # Resolve once so the profile that drafts and the profile that evaluates are
+        # the same object, not two independent reads of a file that can change.
+        if profile is None:
+            profile = load_active_profile()
 
-    if result.proposed_definition is None:
+        try:
+            result = interpret_fn(
+                raw_intake_text,
+                profile=profile,
+                business_value=business_value,
+                request_kind=request_kind,
+                existing_event=existing_event,
+            )
+        except InterpreterError as exc:
+            _reject_failed_drafting(request_id, storage, exc.model, str(exc))
+            raise IntakeModelError(request_id, str(exc)) from exc
+
+        storage.add_audit_entry(
+            request_id,
+            "model_interpreted",
+            {
+                "model": result.model,
+                "profile": profile.name,
+                "proposed_definition": result.proposed_definition,
+                **({} if result.proposed_definition is not None
+                   else {"raw_response": result.raw_response, "parse_error": result.parse_error}),
+            },
+        )
+
+        if result.proposed_definition is None:
+            _route(
+                request_id,
+                None,
+                [{"source": "model_output", "msg": result.parse_error}],
+                storage,
+                profile,
+                duplicate_fn,
+                requires_confirmation=True,
+            )
+            return request_id
+
+        parsed, parse_errors = _parse(result.proposed_definition)
+        if parsed is not None:
+            storage.set_parsed_definition(request_id, parsed.model_dump(), parsed.category)
         _route(
             request_id,
-            None,
-            [{"source": "model_output", "msg": result.parse_error}],
+            parsed,
+            parse_errors,
             storage,
             profile,
             duplicate_fn,
             requires_confirmation=True,
         )
         return request_id
-
-    parsed, parse_errors = _parse(result.proposed_definition)
-    if parsed is not None:
-        storage.set_parsed_definition(request_id, parsed.model_dump(), parsed.category)
-    _route(
-        request_id,
-        parsed,
-        parse_errors,
-        storage,
-        profile,
-        duplicate_fn,
-        requires_confirmation=True,
-    )
-    return request_id
+    except IntakeModelError:
+        raise
+    except Exception as exc:
+        # Not the model service's failure but ours, such as an SDK that no longer takes
+        # an argument we pass. Re-raised unchanged so the server log keeps the traceback.
+        _reject_failed_drafting(
+            request_id,
+            storage,
+            get_settings().anthropic_model,
+            f"drafting failed unexpectedly ({type(exc).__name__})",
+        )
+        raise
 
 
 def ingest_raw_definition(
@@ -696,10 +717,10 @@ def convert_to_property_request(
     its own catalog review, and lands at ``draft`` for its own confirmation. Only
     then is the original marked ``superseded``, with audit entries linking the two
     in both directions. A model failure while drafting leaves the original at
-    ``draft`` so conversion can be retried. Returns the new request id; raises
-    :class:`RequestNotFound`, :class:`InvalidTransition`,
-    :class:`NoMatchingFinding`, or :class:`IntakeModelError` for the caller to map
-    to HTTP.
+    ``draft`` so conversion can be retried, and so does any other failure while the new
+    request is drafted. Returns the new request id; raises :class:`RequestNotFound`,
+    :class:`InvalidTransition`, :class:`NoMatchingFinding`, or
+    :class:`IntakeModelError` for the caller to map to HTTP.
     """
     request = storage.get_request(request_id)
     if request is None:

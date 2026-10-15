@@ -106,11 +106,11 @@ def acting_storage(
 
 def _client_key(request: Request) -> str:
     """The client's address for rate limiting: CLIENT_IP_HEADER when the request carries
-    the proxy secret, since only the proxy can have written it, else the socket address."""
+    the proxy secret, since only the proxy can have written it; one shared key when a
+    proxied request lacks it, never the socket address, which a client can write behind
+    Render (docs/adr/0010); the socket address only without the proxy secret."""
     if proxy_secret_matches(request):
-        address = request.headers.get(CLIENT_IP_HEADER, "").strip()
-        if address:
-            return address
+        return request.headers.get(CLIENT_IP_HEADER, "").strip() or PROXY_SENT_NO_ADDRESS
     return request.client.host if request.client else "unknown"
 
 
@@ -178,6 +178,8 @@ PROXY_SECRET_HEADER = "x-demo-proxy-secret"
 # The frontend host's middleware writes the visitor's address here, replacing any value
 # the client sent (frontend/middleware.ts).
 CLIENT_IP_HEADER = "x-demo-client-ip"
+# The one key every proxied request without CLIENT_IP_HEADER shares.
+PROXY_SENT_NO_ADDRESS = "proxy-sent-no-address"
 # Every header that might carry the client's address, so a forge check can see each one.
 IP_HEADER_CANDIDATES = (
     CLIENT_IP_HEADER,
