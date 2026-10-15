@@ -140,6 +140,7 @@ D8 and D9 move to after launch, so the CSV promised above arrives after the post
 
 - [ ] **D8. CSV export** of the workspace's plan. This is item 13, CSV first; XLSX and the "how this plan is wired" section follow.
 - [ ] **D9. Snippet generator** (item 12). Engineering's end of the loop.
+- [ ] **Anthropic SDK 1.x.** `requirements.txt` holds `anthropic` below 1.0: Render installed 1.x, which no longer accepts the `temperature` argument both model calls pass, and the first live draft crashed on it. Upgrading means removing `temperature=0` from `interpreter.py` and `catalog.py` (or moving it to `extra_body` if the pinned model still honours it) and the rest of the 1.x changes, `httpx2` among them. `backend/tests/test_sdk_call_signatures.py` fails as soon as a call passes an argument the installed SDK does not accept.
 
 Then items 5c, 5d, and 6–11, 14 below, in their existing order.
 
