@@ -1,0 +1,127 @@
+<!doctype html>
+<!--
+  Source for frontend/app/opengraph-image.png, the 1200x630 picture a link preview shows.
+  The ridge is the landing page's (RIDGE_POINTS in frontend/app/page.tsx), drawn 1.2x.
+  To re-render, from the repo root:
+  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless --disable-gpu --hide-scrollbars --window-size=1200,630 --virtual-time-budget=5000 --screenshot=frontend/app/opengraph-image.png docs/images/link-preview.html
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Continental Divide link preview</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;600;700&display=block">
+<style>
+  :root {
+    --bg: #f3f5f2;
+    --panel: #ffffff;
+    --text: #16211b;
+    --muted: #55625b;
+    --faint: #646f68;
+    --accent: #1e5b43;
+    --accent-soft: #e4eee8;
+  }
+  html, body {
+    margin: 0;
+    width: 1200px;
+    height: 630px;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Instrument Sans", system-ui, sans-serif;
+  }
+  .card {
+    position: relative;
+    width: 1200px;
+    height: 630px;
+  }
+  .card::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 65px;
+    background: var(--accent-soft);
+  }
+  .words {
+    position: absolute;
+    left: 80px;
+    top: 52px;
+    width: 900px;
+  }
+  .byline {
+    font-size: 26px;
+    font-weight: 600;
+    color: var(--accent);
+  }
+  h1 {
+    margin: 14px 0 0;
+    font-size: 84px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.02em;
+  }
+  p {
+    margin: 26px 0 0;
+    font-size: 36px;
+    font-weight: 400;
+    line-height: 1.25;
+    color: var(--muted);
+  }
+  svg {
+    position: absolute;
+    left: 0;
+    bottom: 64px;
+    width: 1200px;
+    height: 264px;
+  }
+  .ground { fill: var(--accent-soft); }
+  .line { fill: none; stroke: var(--faint); stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; }
+  .crest { fill: none; stroke: var(--accent); stroke-width: 8; stroke-linejoin: round; stroke-linecap: round; }
+  .dot { fill: var(--panel); stroke: var(--faint); stroke-width: 3; }
+  .dot.on { fill: var(--accent); stroke: var(--accent); }
+  ol {
+    position: absolute;
+    left: 0;
+    bottom: 22px;
+    width: 1200px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    text-align: center;
+    font-size: 28px;
+    font-weight: 600;
+    z-index: 1;
+  }
+  ol .on { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="words">
+    <div class="byline">A portfolio project by Calvin Edson</div>
+    <h1>Continental Divide</h1>
+    <p>Ask for an analytics event in a sentence. Fixed rules and a person decide what gets through.</p>
+  </div>
+  <svg viewBox="0 0 1000 220" aria-hidden="true">
+    <path class="ground" d="M0 200 L60 188 L100 178 L150 170 L200 150 L250 140 L300 124 L350 112 L390 84 L430 70 L470 50 L500 38 L540 30 L580 40 L620 28 L660 36 L700 40 L740 72 L780 96 L820 120 L860 146 L900 166 L950 180 L1000 192 L1000 220 L0 220 Z"/>
+    <path class="line" d="M0 200 L60 188 L100 178 L150 170 L200 150 L250 140 L300 124 L350 112 L390 84 L430 70 L470 50 L500 38 L540 30 L580 40 L620 28 L660 36 L700 40 L740 72 L780 96 L820 120 L860 146 L900 166 L950 180 L1000 192"/>
+    <path class="crest" d="M500 38 L540 30 L580 40 L620 28 L660 36 L700 40"/>
+    <circle class="dot" cx="100" cy="178" r="8"/>
+    <circle class="dot" cx="300" cy="124" r="8"/>
+    <circle class="dot on" cx="500" cy="38" r="8"/>
+    <circle class="dot on" cx="700" cy="40" r="8"/>
+    <circle class="dot" cx="900" cy="166" r="8"/>
+  </svg>
+  <ol>
+    <li>Ask</li>
+    <li>Draft</li>
+    <li class="on">Check</li>
+    <li class="on">Approve</li>
+    <li>Publish</li>
+  </ol>
+</div>
+</body>
+</html>

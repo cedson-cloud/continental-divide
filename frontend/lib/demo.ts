@@ -7,6 +7,7 @@ export const SANDBOX_IDLE_DAYS = 7;
 export const SANDBOX_DELETED = `A sandbox unused for ${SANDBOX_IDLE_DAYS} days is deleted, with its requests and audit trail.`;
 export const NOTHING_SENT = "Nothing is sent to Jira, Confluence or Notion.";
 
+export const SITE_URL = "https://continental-divide.vercel.app";
 export const REPO_URL = "https://github.com/cedson-cloud/continental-divide";
 export const ADR_INDEX_URL = `${REPO_URL}/tree/main/docs/adr`;
 
