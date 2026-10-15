@@ -22,7 +22,7 @@ describe("RequestQueue", () => {
     render(<RequestQueue items={[]} />);
 
     expect(screen.getByRole("heading", { name: "No requests yet" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "New request" })).toHaveAttribute("href", "/");
+    expect(screen.getByRole("link", { name: "New request" })).toHaveAttribute("href", "/request");
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
   });
 

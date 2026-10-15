@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { NOTHING_SENT, SANDBOX_DELETED, SANDBOX_REQUESTS } from "@/lib/demo";
 
 // The newcomer's map of the app (TASKS D11). Every step links to the screen it
 // describes, and the demo's limits are stated here before a visitor runs into them.
@@ -8,7 +9,7 @@ const STEPS: { title: string; role?: string; body: React.ReactNode }[] = [
     role: "You're the requester",
     body: (
       <>
-        On <Link href="/">New request</Link>, describe in a sentence what someone did and
+        On <Link href="/request">New request</Link>, describe in a sentence what someone did and
         why it matters. Not sure what to write? <Link href="/request/new">The guided
         request</Link> asks one question at a time, and Try a scenario fills the form for
         you.
@@ -85,11 +86,11 @@ const RUNS: { name: string; what: string }[] = [
 
 const DEMO_FACTS = [
   "Your sandbox is private to this browser. There's no sign-in, and nobody else sees your requests.",
-  "A sandbox holds 5 requests, made either way: drafted by the model or from a scenario that skips it.",
+  `A sandbox holds ${SANDBOX_REQUESTS} requests, made either way: drafted by the model or from a scenario that skips it.`,
   "Drafting shares one daily model budget across every visitor. If it runs out, the scenarios that skip the model still work.",
-  "Nothing is sent to Jira, Confluence or Notion. A published request shows what a connected setup would write.",
+  `${NOTHING_SENT} A published request shows what a connected setup would write.`,
   "Every approval is recorded as a self-approval, because you made the request you're approving. In a real team, someone else approves.",
-  "A sandbox unused for 7 days is deleted, with its requests and audit trail.",
+  SANDBOX_DELETED,
 ];
 
 const WORDS: { term: string; meaning: string }[] = [
@@ -192,7 +193,7 @@ export default function GuidePage() {
           Three runs worth trying
         </h2>
         <p className="panel-sub">
-          Each is a tile under Try a scenario on <Link href="/">New request</Link>.
+          Each is a tile under Try a scenario on <Link href="/request">New request</Link>.
         </p>
         <dl className="guide-runs">
           {RUNS.map((run) => (

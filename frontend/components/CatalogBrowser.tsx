@@ -312,7 +312,7 @@ function CategoryGroup({
 
 function NewRequestLink({ className }: { className: string }) {
   return (
-    <Link href="/" className={className}>
+    <Link href="/request" className={className}>
       <Icon name="plus" size={16} />
       New request
     </Link>
@@ -441,7 +441,7 @@ export function CatalogBrowser({ catalog }: { catalog: CatalogView }) {
         {!requested && source !== "requests" && (
           <p className="catalog-summary">
             Events you request join this plan once they&apos;re approved.{" "}
-            <Link href="/">Make a request</Link>
+            <Link href="/request">Make a request</Link>
           </p>
         )}
         <p className="catalog-note">{REVIEW_GAP_NOTICE}</p>

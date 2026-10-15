@@ -8,7 +8,9 @@ const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono" });
 
 export const metadata: Metadata = {
   title: "Continental Divide",
-  description: "Event-tracking request intake, validation, approval, and publish.",
+  description:
+    "Ask for an analytics event in a sentence. A model drafts it, fixed rules check it, " +
+    "a person approves it, and it joins the tracking plan with code for engineers.",
 };
 
 export default function RootLayout({

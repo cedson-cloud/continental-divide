@@ -11,10 +11,10 @@ type NavItem = { href: string; label: string; icon: IconName; matches: (path: st
 const NAV_ITEMS: NavItem[] = [
   { href: "/guide", label: "How to use this", icon: "help", matches: (p) => p.startsWith("/guide") },
   {
-    href: "/",
+    href: "/request",
     label: "New request",
     icon: "plus",
-    matches: (p) => p === "/" || p.startsWith("/request/"),
+    matches: (p) => p === "/request" || p.startsWith("/request/"),
   },
   {
     href: "/queue",
