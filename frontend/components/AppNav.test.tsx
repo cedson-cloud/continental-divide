@@ -20,7 +20,7 @@ function currentLinks(): string[] {
 describe("AppNav", () => {
   it.each([
     ["/guide", "How to use this"],
-    ["/", "New request"],
+    ["/request", "New request"],
     ["/request/new", "New request"],
     ["/queue", "Queue"],
     ["/requests/15", "Queue"],
@@ -31,6 +31,13 @@ describe("AppNav", () => {
     pathname.current = path;
     render(<AppNav />);
     expect(currentLinks()).toEqual([label]);
+  });
+
+  it("marks no link as current on the landing page, which the brand links to", () => {
+    pathname.current = "/";
+    render(<AppNav />);
+    expect(currentLinks()).toEqual([]);
+    expect(screen.getByRole("link", { name: /Continental Divide/ })).toHaveAttribute("href", "/");
   });
 
   it("lists the guide first, where a newcomer looks", () => {

@@ -287,7 +287,7 @@ describe("CatalogBrowser", () => {
     ).toBeInTheDocument();
     // One way forward, not two: the hint line steps aside for the empty state.
     expect(screen.getAllByRole("link")).toHaveLength(1);
-    expect(screen.getByRole("link", { name: "New request" })).toHaveAttribute("href", "/");
+    expect(screen.getByRole("link", { name: "New request" })).toHaveAttribute("href", "/request");
   });
 
   it("counts a request for a property the event already had as from requests", () => {

@@ -79,7 +79,7 @@ export function RequestQueue({ items }: { items: QueueItem[] }) {
           Describe an event in a sentence and the model drafts it for review. Or try a
           scenario to see what the rules catch.
         </p>
-        <Link href="/" className="btn btn-primary queue-empty-action">
+        <Link href="/request" className="btn btn-primary queue-empty-action">
           <Icon name="plus" size={16} />
           New request
         </Link>

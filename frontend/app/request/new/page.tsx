@@ -337,7 +337,7 @@ export default function GuidedRequestPage() {
             <p className="muted mt-12" style={{ fontSize: 13, marginBottom: 0 }}>
               Step 3 has examples for the kind you pick. Two scenarios that skip the
               model and go straight to the rules are on the{" "}
-              <Link href="/">single-screen form</Link>.
+              <Link href="/request">single-screen form</Link>.
             </p>
             {state.kind === "user_trait" && (
               <div className="msg msg-info mt-16">
@@ -606,7 +606,7 @@ export default function GuidedRequestPage() {
 
       <p className="muted" style={{ fontSize: 13 }}>
         Know exactly what you need?{" "}
-        <Link href="/">Use the single-screen form →</Link>
+        <Link href="/request">Use the single-screen form →</Link>
       </p>
     </main>
   );

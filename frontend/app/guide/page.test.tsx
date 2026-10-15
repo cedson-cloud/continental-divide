@@ -20,7 +20,7 @@ describe("GuidePage", () => {
     render(<GuidePage />);
     const hrefs = (name: string) =>
       screen.getAllByRole("link", { name }).map((a) => a.getAttribute("href"));
-    expect(hrefs("New request")).toContain("/");
+    expect(hrefs("New request")).toContain("/request");
     expect(hrefs("The guided request")).toEqual(["/request/new"]);
     expect(hrefs("Queue")).toEqual(["/queue"]);
     expect(hrefs("tracking plan")).toEqual(["/catalog"]);
