@@ -141,9 +141,15 @@ export function isActionable(status: string): boolean {
   return status === "pending_approval" || status === "flagged_duplicate";
 }
 
-export function formatTimestamp(value: string): string {
+// SQLite writes "YYYY-MM-DD HH:MM:SS" in UTC with no zone marker.
+function parseTimestamp(value: string): Date | null {
   const parsed = new Date(value.includes("T") ? value : value.replace(" ", "T") + "Z");
-  if (Number.isNaN(parsed.getTime())) return value;
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+export function formatTimestamp(value: string): string {
+  const parsed = parseTimestamp(value);
+  if (!parsed) return value;
   return parsed.toLocaleString(undefined, {
     year: "numeric",
     month: "short",
@@ -152,4 +158,11 @@ export function formatTimestamp(value: string): string {
     minute: "2-digit",
     second: "2-digit",
   });
+}
+
+// To the minute, for lists where seconds are noise.
+export function formatShortTimestamp(value: string): string {
+  const parsed = parseTimestamp(value);
+  if (!parsed) return value;
+  return parsed.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
