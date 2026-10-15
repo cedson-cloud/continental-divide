@@ -75,7 +75,7 @@ export function catalogSummary(counts: CatalogCounts): string {
 }
 
 export function propertyCount(total: number, merged: number): string {
-  if (total === 0) return "No properties";
+  if (total === 0) return "No properties listed";
   const all = plural(total, "property", "properties");
   return merged > 0 ? `${all}, ${merged} added by request` : all;
 }

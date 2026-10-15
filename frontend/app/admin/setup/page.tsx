@@ -8,38 +8,27 @@ import {
   draftGovernanceProfile,
   friendlyError,
 } from "@/lib/api";
+import {
+  BUSINESS_TYPES,
+  Choice,
+  DESTINATIONS,
+  NAMING_CONVENTIONS,
+  PII_ADDITIONS,
+  PLATFORMS,
+  SIDES,
+} from "@/lib/governance";
 
-// Every control is a curated choice; the option values must match the Literal
-// sets in backend/app/governance_draft.py. No free text, no user regex.
-const BUSINESS_TYPES = ["ecommerce", "saas", "marketplace", "media", "fintech"];
-const PLATFORMS = ["segment", "posthog", "amplitude", "mixpanel", "none"];
-const SIDES = ["client", "server", "both"];
-const CONVENTIONS = [
-  {
-    value: "title_case_object_action",
-    label: "Title Case Object Action (Segment style) — “Cart Cleared”",
-  },
-  {
-    value: "snake_case_object_action",
-    label: "snake_case object_action (PostHog style) — “cart_cleared”",
-  },
-];
-const DESTINATIONS = [
-  "warehouse",
-  "product_analytics",
-  "crm",
-  "engagement",
-  "advertising",
-];
-const PII_ADDITIONS = [
-  "device_id",
-  "latitude",
-  "longitude",
-  "national_id",
-  "passport_number",
-  "drivers_license",
-  "bank_account",
-];
+function Options({ choices }: { choices: Choice[] }) {
+  return (
+    <>
+      {choices.map((c) => (
+        <option key={c.value} value={c.value}>
+          {c.label}
+        </option>
+      ))}
+    </>
+  );
+}
 
 const CONVENTION_SLUGS: Record<string, string> = {
   title_case_object_action: "title-case",
@@ -122,13 +111,13 @@ export default function GovernanceSetupPage() {
         only: nothing here writes to the repo or the server.
       </p>
 
-      <div className="msg msg-info" style={{ marginBottom: 16 }}>
+      <div className="msg msg-info gov-setup-note">
         This does not change what the app enforces. Commit the file to
         governance/templates/ and point active.yaml at it.
       </div>
 
       <div className="panel">
-        <div className="panel-title">Your organization</div>
+        <h2 className="panel-title">Your organization</h2>
         <div className="fields">
           <label className="field">
             <span className="field-label">Business type</span>
@@ -136,11 +125,7 @@ export default function GovernanceSetupPage() {
               value={answers.business_type}
               onChange={(e) => set("business_type", e.target.value)}
             >
-              {BUSINESS_TYPES.map((v) => (
-                <option key={v} value={v}>
-                  {v}
-                </option>
-              ))}
+              <Options choices={BUSINESS_TYPES} />
             </select>
           </label>
           <label className="field">
@@ -149,11 +134,7 @@ export default function GovernanceSetupPage() {
               value={answers.current_platform}
               onChange={(e) => set("current_platform", e.target.value)}
             >
-              {PLATFORMS.map((v) => (
-                <option key={v} value={v}>
-                  {v}
-                </option>
-              ))}
+              <Options choices={PLATFORMS} />
             </select>
           </label>
           <label className="field">
@@ -162,11 +143,7 @@ export default function GovernanceSetupPage() {
               value={answers.call_side}
               onChange={(e) => set("call_side", e.target.value)}
             >
-              {SIDES.map((v) => (
-                <option key={v} value={v}>
-                  {v}
-                </option>
-              ))}
+              <Options choices={SIDES} />
             </select>
           </label>
         </div>
@@ -177,58 +154,55 @@ export default function GovernanceSetupPage() {
             value={answers.naming_convention}
             onChange={(e) => set("naming_convention", e.target.value)}
           >
-            {CONVENTIONS.map((c) => (
-              <option key={c.value} value={c.value}>
-                {c.label}
-              </option>
-            ))}
+            <Options choices={NAMING_CONVENTIONS} />
           </select>
         </label>
 
-        <div className="mt-12">
-          <span className="field-label">Allowed destinations</span>
-          <div className="row" style={{ flexWrap: "wrap", gap: 12 }}>
+        <fieldset className="gov-fieldset">
+          <legend className="field-label">Allowed destinations</legend>
+          <div className="gov-options">
             {DESTINATIONS.map((d) => (
-              <label key={d} className="row" style={{ gap: 6, fontSize: 14 }}>
+              <label key={d.value} className="gov-option">
                 <input
                   type="checkbox"
-                  checked={answers.destinations.includes(d)}
-                  onChange={() => toggle("destinations", d)}
+                  checked={answers.destinations.includes(d.value)}
+                  onChange={() => toggle("destinations", d.value)}
                 />
-                <span>{d.replaceAll("_", " ")}</span>
+                <span>{d.label}</span>
               </label>
             ))}
           </div>
-          <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>
-            Leave all unchecked to allow any destination.
-          </p>
-        </div>
+          <p className="gov-hint">Leave all unchecked to allow any destination.</p>
+        </fieldset>
 
-        <div className="mt-12">
-          <span className="field-label">
-            Also flag these as PII (the standard blocklist is always included)
-          </span>
-          <div className="row" style={{ flexWrap: "wrap", gap: 12 }}>
+        <fieldset className="gov-fieldset">
+          <legend className="field-label">
+            Also flag these as personal data (the standard list is always included)
+          </legend>
+          <div className="gov-options">
             {PII_ADDITIONS.map((p) => (
-              <label key={p} className="row" style={{ gap: 6, fontSize: 14 }}>
+              <label key={p} className="gov-option">
                 <input
                   type="checkbox"
                   checked={answers.pii_additions.includes(p)}
                   onChange={() => toggle("pii_additions", p)}
                 />
-                <span>{p.replaceAll("_", " ")}</span>
+                <span className="mono">{p}</span>
               </label>
             ))}
           </div>
-        </div>
+        </fieldset>
       </div>
 
       <div className="panel">
         <div className="row spread">
-          <div className="panel-title" style={{ margin: 0 }}>
-            Profile preview — {fileName}
+          <div>
+            <h2 className="panel-title gov-preview-title">Profile preview</h2>
+            <p className="gov-id">
+              <span className="mono">{fileName}</span>
+            </p>
           </div>
-          <div className="row" style={{ gap: 8 }}>
+          <div className="row gov-preview-actions">
             <button className="btn" onClick={copy} disabled={!result}>
               {copied ? "Copied" : "Copy"}
             </button>
@@ -242,32 +216,20 @@ export default function GovernanceSetupPage() {
           </div>
         </div>
 
+        <p className="visually-hidden" aria-live="polite">
+          {copied ? "Profile copied to the clipboard" : ""}
+        </p>
         {error && <div className="msg msg-error mt-12">{error}</div>}
         {result && !result.valid && (
           <div className="msg msg-error mt-12">
             {result.errors.join("; ")}
           </div>
         )}
-        {result && (
-          <pre
-            className="mono"
-            style={{
-              fontSize: 12.5,
-              background: "var(--bg)",
-              border: "1px solid var(--border)",
-              borderRadius: "var(--radius)",
-              padding: 14,
-              overflowX: "auto",
-              marginBottom: 0,
-            }}
-          >
-            {result.yaml}
-          </pre>
-        )}
+        {result && <pre className="mono gov-yaml">{result.yaml}</pre>}
       </div>
 
-      <p className="muted" style={{ fontSize: 13 }}>
-        <Link href="/admin">← Back to the active profile</Link>
+      <p className="gov-footnote">
+        <Link href="/admin">Back to the active profile</Link>
       </p>
     </main>
   );

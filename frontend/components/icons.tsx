@@ -19,6 +19,7 @@ const PATHS = {
   pencil: <path d="M13 4.5l2.5 2.5L7.5 15H5v-2.5z" />,
   play: <path d="M7 5l8 5-8 5z" />,
   chevron: <path d="M8 5.5l4.5 4.5L8 14.5" />,
+  flag: <path d="M5.5 17V3.5M5.5 4h9l-2.2 3.5 2.2 3.5h-9" />,
 };
 
 export type IconName = keyof typeof PATHS;

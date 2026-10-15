@@ -1078,6 +1078,147 @@ table.prop-table {
   }
 }
 
+/* Governance */
+.gov-setup-link {
+  margin: -18px 0 24px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.gov-profile-name {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+.gov-rule {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.5;
+  max-width: 68ch;
+}
+.gov-id {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  color: var(--faint);
+  overflow-wrap: anywhere;
+}
+.gov-id .mono {
+  font-size: 12px;
+}
+.panel-sub.gov-examples-lede {
+  margin: 16px 0 10px;
+}
+ul.checks,
+.gov-tags,
+.gov-disputes {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.check-mark svg {
+  display: block;
+}
+.gov-examples .check-detail {
+  display: block;
+  font-size: 13px;
+}
+.gov-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 14px;
+}
+.panel-sub + .gov-tags {
+  margin-top: 0;
+}
+.gov-disputes {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.gov-dispute-head {
+  margin: 0;
+}
+.gov-dispute-head .check-detail {
+  display: block;
+}
+.gov-dispute-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.gov-dispute-meta .mono {
+  font-size: 12.5px;
+}
+.gov-empty {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+.gov-footnote {
+  margin: 20px 0 0;
+  font-size: 13.5px;
+  color: var(--muted);
+  max-width: 68ch;
+}
+
+.gov-setup-note {
+  margin-bottom: 18px;
+}
+.gov-fieldset {
+  border: 0;
+  padding: 0;
+  margin: 18px 0 0;
+  min-width: 0;
+}
+.gov-fieldset legend {
+  padding: 0;
+  margin-bottom: 8px;
+}
+.gov-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+}
+.gov-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.gov-option .mono {
+  font-size: 13px;
+}
+.gov-hint {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.gov-preview-title {
+  margin: 0;
+}
+.gov-preview-actions {
+  gap: 8px;
+}
+.gov-yaml {
+  margin: 14px 0 0;
+  padding: 14px;
+  font-size: 12.5px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow-x: auto;
+}
+@media (max-width: 640px) {
+  .gov-option {
+    min-height: 44px;
+  }
+}
+
 .timeline {
   position: relative;
   margin: 0;

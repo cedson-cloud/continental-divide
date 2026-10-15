@@ -51,6 +51,23 @@ def test_posthog_convention_drafts_validates_and_renders_snake_case(client):
     assert loaded["event_naming"]["convention"] == "snake_case_object_action"
 
 
+def test_hightouch_is_a_platform_choice(client):
+    response = client.post(
+        "/governance/draft", json=_answers(current_platform="hightouch")
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["valid"] is True
+    assert "current platform hightouch" in data["yaml"]
+
+
+def test_unknown_platform_is_rejected(client):
+    response = client.post(
+        "/governance/draft", json=_answers(current_platform="heap")
+    )
+    assert response.status_code == 422
+
+
 def test_unknown_convention_is_rejected(client):
     response = client.post(
         "/governance/draft", json=_answers(naming_convention="kebab_case")

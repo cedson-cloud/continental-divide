@@ -69,8 +69,8 @@ describe("catalogSummary", () => {
 });
 
 describe("propertyCount", () => {
-  it("says so when an event has no properties", () => {
-    expect(propertyCount(0, 0)).toBe("No properties");
+  it("says none are listed, not that none exist", () => {
+    expect(propertyCount(0, 0)).toBe("No properties listed");
   });
 
   it("uses the singular for one", () => {
