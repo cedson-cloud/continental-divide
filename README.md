@@ -107,8 +107,8 @@ plain-language request.
 The key is read server-side only and never reaches the browser or any API response.
 Without a key, `POST /requests` returns a 502 with a "could not draft a definition"
 message and records a `model_error` step in the audit log: the request is still
-persisted, and the rest of the app (queue, detail, approve/reject, the raw-definition
-demo path below) still runs.
+persisted, at the status "Couldn't draft" (`draft_failed`), and the rest of the app
+(queue, detail, approve/reject, the raw-definition demo path below) still runs.
 
 ## Demo walkthrough
 

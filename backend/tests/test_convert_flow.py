@@ -17,6 +17,7 @@ from app.catalog import DuplicateReview, ReviewFinding
 from app.interpreter import Interpretation
 from app.pipeline import (
     DECIDABLE_STATUSES,
+    IntakeModelError,
     InvalidTransition,
     NoMatchingFinding,
     RequestNotFound,
@@ -270,3 +271,20 @@ def test_convert_shares_the_intake_rate_limiter(client, storage, monkeypatch):
         f"/requests/{rid}/convert", json={"existing_event": TARGET_EVENT}
     )
     assert response.status_code == 429
+
+
+def test_an_unreadable_answer_leaves_the_original_draft_to_retry(storage):
+    rid = _draft(storage)
+    with pytest.raises(IntakeModelError):
+        convert_to_property_request(
+            rid,
+            TARGET_EVENT,
+            storage,
+            interpret_fn=lambda _raw, **_: Interpretation(
+                MODEL, None, "Sure!", "model output was not valid JSON: Expecting value"
+            ),
+            duplicate_fn=stub_no_findings,
+        )
+
+    assert storage.get_request(rid)["status"] == "draft"
+    assert "superseded_by" not in _steps(storage, rid)

@@ -57,6 +57,12 @@ describe("requestProgress", () => {
     expect(summary("rejected", log)).toEqual(["Draft:done", "Rejected:current"]);
   });
 
+  it("shows a failed drafting as its only step, because no draft ever existed", () => {
+    const log = [entry("model_error"), entry("routed", { routed_to_approval: false })];
+    expect(summary("draft_failed", log)).toEqual(["Couldn't draft:current"]);
+    expect(requestProgress("draft_failed", log).at(-1)?.tone).toBe("end");
+  });
+
   it("ends a withdrawn or superseded draft in a neutral tone", () => {
     expect(summary("withdrawn")).toEqual(["Draft:done", "Withdrawn:current"]);
     expect(summary("superseded")).toEqual(["Draft:done", "Superseded:current"]);

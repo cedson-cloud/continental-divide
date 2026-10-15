@@ -20,6 +20,7 @@ const STATUS_META: Record<string, StatusMeta> = {
   approved: { label: "Approved", tone: "approved" },
   published: { label: "Published", tone: "published" },
   rejected: { label: "Rejected", tone: "rejected" },
+  draft_failed: { label: "Couldn't draft", tone: "neutral" },
   superseded: { label: "Superseded", tone: "neutral" },
   withdrawn: { label: "Withdrawn", tone: "neutral" },
 };
@@ -32,7 +33,7 @@ const STEP_LABELS: Record<string, string> = {
   intake_received: "Request received",
   model_interpreted: "Model drafted the definition",
   definition_provided: "Definition supplied directly",
-  model_error: "Model call failed",
+  model_error: "Drafting failed",
   schema_parsed: "Definition read",
   schema_rejected: "Definition could not be read",
   rules_evaluated: "Rules checked",
