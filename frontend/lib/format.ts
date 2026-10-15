@@ -166,3 +166,44 @@ export function formatShortTimestamp(value: string): string {
   if (!parsed) return value;
   return parsed.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
+
+export function sourceHost(source: string): string {
+  try {
+    return new URL(source).hostname.replace(/^www\./, "");
+  } catch {
+    return source;
+  }
+}
+
+// Several sources often share a site, so the label names the page too.
+export function sourceLabel(url: string): string {
+  const host = sourceHost(url);
+  try {
+    const page = new URL(url).pathname.split("/").filter(Boolean).pop();
+    return page ? `${host}/…/${page}` : host;
+  } catch {
+    return host;
+  }
+}
+
+const MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+// A calendar date, read as written: new Date() would shift it by the viewer's zone.
+export function formatChecked(date: string): string {
+  const [year, month, day] = date.split("-").map(Number);
+  if (!year || !month || !day) return date;
+  return `${day} ${MONTHS[month - 1]} ${year}`;
+}

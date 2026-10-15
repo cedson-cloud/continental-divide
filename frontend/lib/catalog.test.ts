@@ -1,12 +1,19 @@
 import { describe, expect, it } from "vitest";
-import type { CatalogView, CatalogViewEvent } from "./api";
+import type { CatalogView, CatalogViewEvent, CommonField, PlatformLibrary } from "./api";
 import {
   catalogSummary,
+  defaultsSentence,
+  groupFields,
+  librariesLabel,
+  matchesField,
   matchesSearch,
   matchesSource,
   propertyCount,
+  propertySummary,
+  sharedSources,
   touchedByRequest,
 } from "./catalog";
+import { formatChecked, sourceLabel } from "./format";
 
 const counts = (overrides: Partial<CatalogView["counts"]>): CatalogView["counts"] => ({
   total: 28,
@@ -30,6 +37,11 @@ function event(overrides: Partial<CatalogViewEvent>): CatalogViewEvent {
     unresolved_target: false,
     sent_as: null,
     sent_by: null,
+    properties_listed: true,
+    default_on: {},
+    evidence: null,
+    note: null,
+    sources: [],
     ...overrides,
   };
 }
@@ -92,6 +104,8 @@ describe("matchesSearch", () => {
         source: "sample_plan",
         request_id: null,
         also_requested_by: [],
+        evidence: null,
+        note: null,
       },
     ],
   });
@@ -128,6 +142,8 @@ describe("touchedByRequest", () => {
           source: "sample_plan",
           request_id: null,
           also_requested_by: [6],
+          evidence: null,
+          note: null,
         },
       ],
     });
@@ -145,6 +161,8 @@ describe("matchesSource", () => {
         source: "approved_request",
         request_id: 8,
         also_requested_by: [],
+        evidence: null,
+        note: null,
       },
     ],
   });
@@ -162,5 +180,125 @@ describe("matchesSource", () => {
   it("matches system events by their source", () => {
     expect(matchesSource(event({ source: "system_event" }), "system_event")).toBe(true);
     expect(matchesSource(event({}), "system_event")).toBe(false);
+  });
+});
+
+const LIBRARIES: PlatformLibrary[] = [
+  { id: "analytics.js", name: "Analytics.js", surface: "browser", note: null },
+  { id: "analytics-swift", name: "Swift", surface: "mobile", note: null },
+  { id: "analytics-kotlin", name: "Kotlin", surface: "mobile", note: null },
+  { id: "analytics-react-native", name: "React Native", surface: "mobile", note: null },
+];
+
+function field(overrides: Partial<CommonField>): CommonField {
+  return {
+    path: "context.campaign.source",
+    plain_name: "Campaign source (utm_source)",
+    group: "Campaign",
+    type: null,
+    libraries: ["analytics.js"],
+    note: null,
+    evidence: "docs",
+    sources: ["https://www.twilio.com/docs/segment/connections/spec/common"],
+    ...overrides,
+  };
+}
+
+describe("defaultsSentence", () => {
+  it("says which libraries send it by default and which need it turned on", () => {
+    expect(
+      defaultsSentence(
+        { "analytics-swift": true, "analytics-kotlin": false, "analytics-react-native": false },
+        LIBRARIES,
+      ),
+    ).toBe("On by default in Swift. Off by default in Kotlin and React Native.");
+  });
+
+  it("says when no library's default is listed, rather than nothing", () => {
+    expect(defaultsSentence({}, LIBRARIES)).toBe(
+      "Which libraries send it by default isn't listed yet.",
+    );
+  });
+});
+
+describe("librariesLabel", () => {
+  it("names each library", () => {
+    expect(librariesLabel(["analytics-swift", "analytics-kotlin"], LIBRARIES)).toEqual([
+      "Swift",
+      "Kotlin",
+    ]);
+  });
+
+  it("says every library when all of them send it", () => {
+    expect(librariesLabel(LIBRARIES.map((l) => l.id), LIBRARIES)).toEqual([
+      "Every library",
+    ]);
+  });
+});
+
+describe("sourceLabel", () => {
+  it("names the site and the page", () => {
+    expect(sourceLabel("https://www.twilio.com/docs/segment/connections/spec/mobile")).toBe(
+      "twilio.com/…/mobile",
+    );
+    expect(sourceLabel("https://github.com/PostHog/posthog-js")).toBe(
+      "github.com/…/posthog-js",
+    );
+  });
+});
+
+describe("formatChecked", () => {
+  it("writes the date out without shifting it by time zone", () => {
+    expect(formatChecked("2026-10-15")).toBe("15 October 2026");
+  });
+});
+
+describe("matchesField", () => {
+  it("finds a field by its plain name or its key", () => {
+    expect(matchesField(field({}), "utm")).toBe(true);
+    expect(matchesField(field({}), "context.campaign")).toBe(true);
+    expect(matchesField(field({}), "coupon")).toBe(false);
+  });
+});
+
+describe("groupFields", () => {
+  it("keeps the file's order within and across groups", () => {
+    const groups = groupFields([
+      field({ path: "a", group: "Page" }),
+      field({ path: "b", group: "Campaign" }),
+      field({ path: "c", group: "Page" }),
+    ]);
+    expect(groups.map(([group, fields]) => [group, fields.map((f) => f.path)])).toEqual([
+      ["Page", ["a", "c"]],
+      ["Campaign", ["b"]],
+    ]);
+  });
+});
+
+describe("propertySummary", () => {
+  it("says a system event's properties aren't listed yet rather than none", () => {
+    const unlisted = event({ source: "system_event", properties_listed: false });
+    expect(propertySummary(unlisted, 0)).toBe("Properties not listed yet");
+  });
+
+  it("says a system event carries none of its own when its sources say so", () => {
+    expect(propertySummary(event({ source: "system_event" }), 0)).toBe(
+      "No properties of its own",
+    );
+  });
+
+  it("counts like any other event otherwise", () => {
+    expect(propertySummary(event({}), 0)).toBe(propertyCount(0, 0));
+  });
+});
+
+describe("sharedSources", () => {
+  it("returns the list when every row cites the same sources", () => {
+    expect(sharedSources([["a", "b"], ["a", "b"]])).toEqual(["a", "b"]);
+  });
+
+  it("returns null when any row differs, or there is only one row", () => {
+    expect(sharedSources([["a"], ["a", "b"]])).toBeNull();
+    expect(sharedSources([["a"]])).toBeNull();
   });
 });

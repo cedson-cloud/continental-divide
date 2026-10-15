@@ -1,18 +1,29 @@
 "use client";
 
 import Link from "next/link";
-import { useId, useMemo, useState } from "react";
-import { CatalogView, CatalogViewEvent, SharedShape } from "@/lib/api";
+import { Fragment, useId, useMemo, useState } from "react";
+import { CatalogPlatform, CatalogView, CatalogViewEvent, SharedShape } from "@/lib/api";
 import {
   SOURCE_FILTERS,
   SourceFilter,
   catalogSummary,
+  defaultsSentence,
+  hasCaveat,
+  matchesField,
+  matchesReserved,
   matchesSearch,
   matchesSource,
+  platformLabel,
   plural,
-  propertyCount,
+  propertySummary,
 } from "@/lib/catalog";
 import { Icon } from "./icons";
+import {
+  CommonFieldsPanel,
+  EvidenceTag,
+  ReservedNamesPanel,
+  SourceLinks,
+} from "./PlatformDetails";
 
 // Persistent and honest: the review's view of the catalog is narrower than this
 // page, and papering over that would misrepresent what the tool checks.
@@ -68,14 +79,38 @@ function ShapeRows({ name, shape }: { name: string; shape: SharedShape }) {
   );
 }
 
+// What the platform file says about a system event beyond its properties: which
+// libraries send it by default, any caveat, and where the claims come from.
+function SystemEventFacts({
+  event,
+  platform,
+}: {
+  event: CatalogViewEvent;
+  platform: CatalogPlatform | null;
+}) {
+  const defaults = platform ? defaultsSentence(event.default_on, platform.libraries) : null;
+  return (
+    <>
+      {defaults && <p className="catalog-event-meta">{defaults}</p>}
+      {hasCaveat(event) && (
+        <p className="catalog-event-meta catalog-fact">
+          <EvidenceTag evidence={event.evidence} /> {event.note}
+        </p>
+      )}
+    </>
+  );
+}
+
 function EventRow({
   event,
   shapes,
   collision,
+  platform,
 }: {
   event: CatalogViewEvent;
   shapes: Record<string, SharedShape>;
   collision: boolean;
+  platform: CatalogPlatform | null;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [openShape, setOpenShape] = useState<string | null>(null);
@@ -86,6 +121,8 @@ function EventRow({
   const mergedCount = event.properties.filter(
     (p) => p.source === "approved_request" && p.request_id !== event.request_id,
   ).length;
+  const system = event.source === "system_event";
+  const platformProps = event.properties.filter((p) => p.source === "system_event").length;
 
   const shapeProp = openShape
     ? event.properties.find((p) => p.name === openShape)
@@ -108,9 +145,9 @@ function EventRow({
         <SourceTag event={event} />
         <p className="catalog-event-meta">{event.description}</p>
         <span className="catalog-event-count">
-          {propertyCount(event.properties.length, mergedCount)}
+          {propertySummary(event, mergedCount)}
         </span>
-        {event.source === "system_event" && (
+        {system && (
           <p className="catalog-event-meta">
             Sent automatically as {event.sent_as} by {event.sent_by}.
           </p>
@@ -125,13 +162,21 @@ function EventRow({
       )}
       {expanded && (
         <div id={bodyId} className="catalog-event-body">
-          {event.properties.length === 0 ? (
+          {system && <SystemEventFacts event={event} platform={platform} />}
+          {system && !event.properties_listed && (
             <p className="catalog-event-meta">
-              {event.source === "system_event"
-                ? "The properties the SDK sends with this event aren't listed here yet."
-                : "No properties are listed for this event."}
+              The properties the SDK sends with this event aren&apos;t listed here yet.
             </p>
-          ) : (
+          )}
+          {system && event.properties_listed && platformProps === 0 && (
+            <p className="catalog-event-meta">
+              The sources list no properties of its own for this event.
+            </p>
+          )}
+          {!system && event.properties.length === 0 && (
+            <p className="catalog-event-meta">No properties are listed for this event.</p>
+          )}
+          {event.properties.length > 0 && (
             <table
               className="prop-table catalog-props"
               role="table"
@@ -153,9 +198,12 @@ function EventRow({
               <tbody role="rowgroup">
                 {event.properties.map((p) => (
                   <tr key={p.name} role="row">
-                    <td role="cell">{p.name}</td>
+                    <td role="cell">
+                      {p.name}
+                      {p.note && <span className="catalog-prop-note">{p.note}</span>}
+                    </td>
                     <td role="cell" className="catalog-prop-type">
-                      {p.type}
+                      {p.type ?? <span className="catalog-prop-unlisted">not listed yet</span>}
                       {p.shape && shapes[p.shape] && (
                         <button
                           type="button"
@@ -178,6 +226,13 @@ function EventRow({
                         >
                           #{p.request_id}
                         </Link>
+                      ) : p.source === "system_event" ? (
+                        <span className="catalog-prop-platform">
+                          <span className="muted">
+                            {platform ? platformLabel(platform.name) : "platform"}
+                          </span>
+                          <EvidenceTag evidence={p.evidence} />
+                        </span>
                       ) : (
                         <span className="muted">plan</span>
                       )}
@@ -196,6 +251,7 @@ function EventRow({
           {shapeProp?.shape && openShapeDef && (
             <ShapeRows name={shapeProp.shape} shape={openShapeDef} />
           )}
+          {system && <SourceLinks sources={event.sources} checked={platform?.checked} />}
         </div>
       )}
     </div>
@@ -207,6 +263,7 @@ function CategoryGroup({
   events,
   shapes,
   collidingNames,
+  platform,
   open,
   onToggle,
 }: {
@@ -214,6 +271,7 @@ function CategoryGroup({
   events: CatalogViewEvent[];
   shapes: Record<string, SharedShape>;
   collidingNames: Set<string>;
+  platform: CatalogPlatform | null;
   open: boolean;
   onToggle: () => void;
 }) {
@@ -243,6 +301,7 @@ function CategoryGroup({
               event={event}
               shapes={shapes}
               collision={collidingNames.has(event.name)}
+              platform={platform}
             />
           ))}
         </div>
@@ -308,6 +367,36 @@ export function CatalogBrowser({ catalog }: { catalog: CatalogView }) {
   let shown = 0;
   for (const events of byCategory.values()) shown += events.length;
 
+  // The platform's common fields and reserved names sit beside its system events,
+  // and a search reaches them too: asking for utm_source should find it already sent.
+  const { platform } = catalog;
+  const platformShown =
+    platform && (source === "all" || source === "system_event") ? platform : null;
+  const platformMatches = platformShown
+    ? platformShown.common_fields.filter((f) => matchesField(f, search)).length +
+      platformShown.reserved_names.filter((r) => matchesReserved(r, search)).length
+    : 0;
+  const platformPanels = platformShown && platformMatches > 0 && (
+    <>
+      <CommonFieldsPanel platform={platformShown} search={search} />
+      <ReservedNamesPanel platform={platformShown} search={search} />
+    </>
+  );
+  const systemCategory = catalog.events.find((e) => e.source === "system_event")?.category;
+
+  // A search can match only platform fields; saying "0 events" then would mislead.
+  const eventsShown = `${shown} of ${counts.total} events shown`;
+  const liveSummary =
+    search.trim() && platformMatches > 0
+      ? `${eventsShown}, plus ${plural(
+          platformMatches,
+          "match among the fields and names the platform sends",
+          "matches among the fields and names the platform sends",
+        )}`
+      : shown === counts.total
+        ? ""
+        : eventsShown;
+
   function showAll() {
     setSearch("");
     setSource("all");
@@ -357,11 +446,12 @@ export function CatalogBrowser({ catalog }: { catalog: CatalogView }) {
         )}
         <p className="catalog-note">{REVIEW_GAP_NOTICE}</p>
         <p className="visually-hidden" aria-live="polite">
-          {shown === counts.total ? "" : `${shown} of ${counts.total} events shown`}
+          {liveSummary}
         </p>
       </div>
 
       {byCategory.size === 0 &&
+        platformMatches === 0 &&
         (source === "requests" && !requested && !search.trim() ? (
           <section className="panel catalog-empty" aria-labelledby="catalog-empty-title">
             <h2 id="catalog-empty-title" className="panel-title">
@@ -394,16 +484,20 @@ export function CatalogBrowser({ catalog }: { catalog: CatalogView }) {
         ))}
 
       {[...byCategory.entries()].map(([category, events]) => (
-        <CategoryGroup
-          key={category}
-          category={category}
-          events={events}
-          shapes={catalog.shapes}
-          collidingNames={collidingNames}
-          open={!collapsed.has(category)}
-          onToggle={() => toggleCategory(category)}
-        />
+        <Fragment key={category}>
+          <CategoryGroup
+            category={category}
+            events={events}
+            shapes={catalog.shapes}
+            collidingNames={collidingNames}
+            platform={platform}
+            open={!collapsed.has(category)}
+            onToggle={() => toggleCategory(category)}
+          />
+          {category === systemCategory && platformPanels}
+        </Fragment>
       ))}
+      {!(systemCategory && byCategory.has(systemCategory)) && platformPanels}
     </>
   );
 }

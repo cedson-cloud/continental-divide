@@ -1015,6 +1015,152 @@ table.prop-table {
   text-decoration: none;
 }
 
+/* What the platform sends. Docs-backed claims go untagged; the two tags say how
+   far to trust the rest, and disputed uses the advisory violet. */
+.catalog-evidence {
+  display: inline-block;
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+  padding: 0 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.catalog-evidence-sdk_code {
+  color: var(--neutral-fg);
+  border: 1px solid var(--neutral-line);
+  background: var(--panel);
+}
+.catalog-evidence-disputed {
+  color: var(--flagged-fg);
+  border: 1px solid var(--flagged-line);
+  background: var(--flagged-bg);
+}
+.catalog-fact,
+.catalog-field-note {
+  max-width: 72ch;
+}
+.catalog-event-meta + .catalog-props {
+  margin-top: 10px;
+}
+.catalog-prop-note {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--sans);
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.catalog-prop-unlisted {
+  font-family: var(--sans);
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.catalog-prop-platform {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.catalog-sources {
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.catalog-field-note + .catalog-sources {
+  margin-top: 2px;
+}
+.catalog-platform-body {
+  padding: 0 24px 18px 46px;
+}
+.catalog-platform-lede,
+.catalog-platform-legend {
+  margin: 0 0 8px;
+  max-width: 72ch;
+  font-size: 14px;
+  color: var(--muted);
+}
+.catalog-platform-legend {
+  font-size: 13px;
+}
+.catalog-field-group {
+  margin-top: 20px;
+}
+.catalog-field-group-title {
+  margin: 0 0 6px;
+  font-size: 14.5px;
+  font-weight: 650;
+}
+.catalog-fields td:first-child {
+  width: 34%;
+  font-family: var(--sans);
+}
+.catalog-fields td:nth-child(2) {
+  width: 26%;
+}
+.catalog-field-name {
+  display: block;
+  font-weight: 600;
+}
+.catalog-field-path {
+  display: block;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.catalog-libs {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.catalog-lib {
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0 8px;
+  border-radius: 999px;
+  color: var(--neutral-fg);
+  background: var(--neutral-bg);
+  white-space: nowrap;
+}
+.catalog-field-note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.catalog-platform-list {
+  margin: 0;
+  padding-left: 18px;
+  max-width: 72ch;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+.catalog-platform-list li + li {
+  margin-top: 4px;
+}
+.catalog-reserved {
+  padding: 14px 0;
+  border-top: 1px solid var(--border);
+}
+.catalog-reserved:first-of-type {
+  margin-top: 12px;
+}
+.catalog-reserved .catalog-event-meta {
+  padding-left: 0;
+  margin-top: 2px;
+}
+.catalog-reserved-head {
+  font-size: inherit;
+  font-weight: inherit;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
 @media (max-width: 640px) {
   .catalog-filter {
     min-height: 44px;
@@ -1039,8 +1185,21 @@ table.prop-table {
   .catalog-warning {
     margin: 0 16px 12px;
   }
-  .catalog-event-body {
+  .catalog-event-body,
+  .catalog-platform-body {
     padding: 2px 16px 16px;
+  }
+  .catalog-fields td:first-child,
+  .catalog-fields td:nth-child(2) {
+    width: auto;
+  }
+  /* Several library tags would crush the field name beside them; stack instead. */
+  .catalog-props.catalog-fields tr {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .catalog-props.catalog-fields .catalog-prop-type {
+    text-align: left;
+    margin-top: 4px;
   }
   .catalog-props thead {
     position: absolute;

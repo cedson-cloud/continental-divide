@@ -1,16 +1,8 @@
 import Link from "next/link";
 import { Dispute, GovernanceProfileInfo } from "@/lib/api";
-import { ruleLabel, statusMeta } from "@/lib/format";
+import { ruleLabel, sourceHost, statusMeta } from "@/lib/format";
 import { DESTINATIONS, choiceLabel, conventionLabel } from "@/lib/governance";
 import { Icon } from "./icons";
-
-function sourceHost(source: string): string {
-  try {
-    return new URL(source).hostname.replace(/^www\./, "");
-  } catch {
-    return source;
-  }
-}
 
 // The identifier an engineer would search the profile's YAML for.
 function InProfile({ path, value }: { path: string; value: string }) {

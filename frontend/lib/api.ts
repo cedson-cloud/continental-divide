@@ -134,9 +134,14 @@ export type Dispute = {
   created_at: string;
 };
 
+// How a claim about a platform is known (docs/adr/0011): its docs, its SDK code, or
+// sources that disagree.
+export type Evidence = "docs" | "sdk_code" | "disputed";
+
 export type CatalogViewProperty = {
   name: string;
-  type: string;
+  // Null only on a system event's property whose sources give no type.
+  type: string | null;
   // For array properties, the shared shape its items follow. The shape itself
   // is returned once under CatalogView.shapes, never inlined per event.
   shape: string | null;
@@ -144,6 +149,9 @@ export type CatalogViewProperty = {
   request_id: number | null;
   // Requests that asked for this property when the event already carried it.
   also_requested_by: number[];
+  // For a property the platform sends: how it is known, and any caveat.
+  evidence: Evidence | null;
+  note: string | null;
 };
 
 export type CatalogViewEvent = {
@@ -159,6 +167,58 @@ export type CatalogViewEvent = {
   // For a system event: the name or call the SDK sends, and which SDK sends it.
   sent_as: string | null;
   sent_by: string | null;
+  // False when the platform's properties for this event aren't listed yet.
+  properties_listed: boolean;
+  // Library id to whether it sends the event without being configured to.
+  default_on: Record<string, boolean>;
+  evidence: Evidence | null;
+  note: string | null;
+  sources: string[];
+};
+
+export type PlatformLibrary = {
+  id: string;
+  name: string;
+  surface: "browser" | "mobile" | "server";
+  note: string | null;
+};
+
+export type PlatformProperty = {
+  name: string;
+  type: string | null;
+  note: string | null;
+  evidence: Evidence;
+};
+
+export type CommonField = {
+  path: string;
+  plain_name: string;
+  group: string;
+  type: string | null;
+  libraries: string[];
+  note: string | null;
+  evidence: Evidence;
+  sources: string[];
+};
+
+export type ReservedName = {
+  name: string;
+  records: string;
+  sent_by: string;
+  // Null: not listed yet. Empty: the sources say it carries none of its own.
+  properties: PlatformProperty[] | null;
+  note: string | null;
+  evidence: Evidence;
+  sources: string[];
+};
+
+export type CatalogPlatform = {
+  name: string;
+  checked: string;
+  libraries: PlatformLibrary[];
+  common_fields: CommonField[];
+  reserved_names: ReservedName[];
+  not_listed_yet: string[];
 };
 
 export type SharedShape = {
@@ -177,6 +237,7 @@ export type CatalogView = {
     unresolved_targets: number;
     system_events: number;
   };
+  platform: CatalogPlatform | null;
 };
 
 export type GovernanceExample = {
