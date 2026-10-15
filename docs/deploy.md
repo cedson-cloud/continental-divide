@@ -104,8 +104,10 @@ What to read in the result:
   reach the route at all: the call answers 403 instead.
 - `limiter_address` should be your own public address, the same as
   `ip_candidates["x-demo-client-ip"]`. If `x-demo-client-ip` is `null`, `limiter_address`
-  is an address of Vercel's: the middleware found no `x-real-ip`, and every visitor shares
-  one per-address limit.
+  reads `proxy-sent-no-address`: the middleware found no `x-real-ip`, and every visitor
+  shares one per-address limit.
+- `socket_address` proves nothing. On Render it is read from `x-forwarded-for`, which a
+  client can write, so the backend never keys a proxied request on it.
 - `cookie_names` should be empty on the first load and include `cd_echo` on the second.
   That shows cookies make the round trip.
 
@@ -141,5 +143,5 @@ DEMO_PROXY_SECRET=<the same local value>
 
 Leave `NEXT_PUBLIC_API_BASE` unset to go back to calling the backend directly on port 8000.
 That works only with `AUTH_MODE=local`: in demo mode the backend refuses any call that did
-not come through the proxy. If the local server sets no `x-real-ip`, per-address limits
-key on the local socket address.
+not come through the proxy. If the local server sets no `x-real-ip`, every request
+through the local proxy shares the one key `proxy-sent-no-address`.

@@ -45,8 +45,10 @@ and its history are discarded after 7 days. Those are the demo's terms. On a rea
   frontend host's proxy sends the address it received the request from in a header of its
   own, replacing any value the client sent, and the backend trusts that header only alongside
   the proxy secret. The header name is fixed in code, not configured, so it cannot be pointed
-  at one a client can write. If the proxy sends no address, the per-IP limit keys on the
-  proxy's own address and becomes a second global rate. It slows a script; the daily cap is
+  at one a client can write. If the proxy sends no address, every such request shares one
+  key, so the per-IP limit becomes a second global rate. The backend never falls back to its
+  socket address for a proxied request: behind Render that address is read from
+  `x-forwarded-for`, which a client can write. It slows a script; the daily cap is
   what stops one.
 - **Every authenticated route is rate limited per workspace cookie**, reads included, with
   its own settings (`GENERAL_RATE_LIMIT_MAX`, `GENERAL_RATE_LIMIT_WINDOW_SECONDS`). A caller
