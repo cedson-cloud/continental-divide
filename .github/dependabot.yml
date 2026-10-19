@@ -1,5 +1,5 @@
-# Version updates, once a month, one grouped PR per ecosystem. Nothing merges on
-# its own: every PR runs CI and waits for a person.
+# Version updates for GitHub Actions and npm, once a month, one grouped PR each.
+# Nothing merges on its own: every PR runs CI and waits for a person.
 version: 2
 updates:
   # Action majors are runtime bumps that CI exercises on the PR itself, so they
@@ -12,19 +12,16 @@ updates:
       actions:
         patterns: ["*"]
 
+  # requirements.txt sets minimums, so pip already installs the newest allowed
+  # release and a version update would only raise a floor. Dependabot also
+  # opened these one package per PR, ignoring the group. 0 turns version
+  # updates off for pip; security updates still come from the repository
+  # setting. anthropic stays below 1.0 through its own "<1".
   - package-ecosystem: pip
     directory: /backend
     schedule:
       interval: monthly
-    groups:
-      backend:
-        patterns: ["*"]
-        update-types: [minor, patch]
-    ignore:
-      # A major upgrade is its own task. anthropic stays below 1.0 until the
-      # TASKS.md item "Anthropic SDK 1.x" is done.
-      - dependency-name: "*"
-        update-types: ["version-update:semver-major"]
+    open-pull-requests-limit: 0
 
   - package-ecosystem: npm
     directory: /frontend
