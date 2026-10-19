@@ -1,7 +1,7 @@
 fastapi>=0.110
 uvicorn[standard]>=0.27
 pydantic>=2.6
-pydantic-settings>=2.2
+pydantic-settings>=2.16.0
 # 1.x drops the temperature argument the model calls pass; upgrading is its own task.
 anthropic>=0.40,<1
 notion-client>=2.0
