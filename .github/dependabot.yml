@@ -1,0 +1,40 @@
+# Version updates, once a month, one grouped PR per ecosystem. Nothing merges on
+# its own: every PR runs CI and waits for a person.
+version: 2
+updates:
+  # Action majors are runtime bumps that CI exercises on the PR itself, so they
+  # are not held back.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: pip
+    directory: /backend
+    schedule:
+      interval: monthly
+    groups:
+      backend:
+        patterns: ["*"]
+        update-types: [minor, patch]
+    ignore:
+      # A major upgrade is its own task. anthropic stays below 1.0 until the
+      # TASKS.md item "Anthropic SDK 1.x" is done.
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: monthly
+    groups:
+      frontend:
+        patterns: ["*"]
+        update-types: [minor, patch]
+    ignore:
+      # A major upgrade is its own task. next stays on 15.5.x.
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
